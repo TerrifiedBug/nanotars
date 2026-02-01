@@ -57,15 +57,40 @@ Key paths inside the container:
 
 ### Finding Available Groups
 
-Groups appear in the database when messages are received. Query the SQLite database:
+Available groups are provided in `/workspace/ipc/available_groups.json`:
+
+```json
+{
+  "groups": [
+    {
+      "jid": "120363336345536173@g.us",
+      "name": "Family Chat",
+      "lastActivity": "2026-01-31T12:00:00.000Z",
+      "isRegistered": false
+    }
+  ],
+  "lastSync": "2026-01-31T12:00:00.000Z"
+}
+```
+
+Groups are ordered by most recent activity. The list is synced from WhatsApp daily.
+
+If a group the user mentions isn't in the list, request a fresh sync:
+
+```bash
+echo '{"type": "refresh_groups"}' > /workspace/ipc/tasks/refresh_$(date +%s).json
+```
+
+Then wait a moment and re-read `available_groups.json`.
+
+**Fallback**: Query the SQLite database directly:
 
 ```bash
 sqlite3 /workspace/project/store/messages.db "
-  SELECT DISTINCT chat_jid, MAX(timestamp) as last_message
-  FROM messages
-  WHERE chat_jid LIKE '%@g.us'
-  GROUP BY chat_jid
-  ORDER BY last_message DESC
+  SELECT jid, name, last_message_time
+  FROM chats
+  WHERE jid LIKE '%@g.us' AND jid != '__group_sync__'
+  ORDER BY last_message_time DESC
   LIMIT 10;
 "
 ```
