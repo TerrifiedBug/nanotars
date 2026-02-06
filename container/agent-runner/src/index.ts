@@ -294,10 +294,14 @@ async function main(): Promise<void> {
       if (message.type === 'result') {
         if (message.subtype === 'success' && message.structured_output) {
           result = message.structured_output as AgentResponse;
+          if (result.outputType === 'message' && !result.userMessage) {
+            log('Warning: outputType is "message" but userMessage is missing, treating as "log"');
+            result = { outputType: 'log', internalLog: result.internalLog };
+          }
           log(`Agent result: outputType=${result.outputType}${result.internalLog ? `, log=${result.internalLog}` : ''}`);
-        } else if (message.subtype === 'error_max_structured_output_retries') {
-          // Agent couldn't produce valid structured output — fall back to text result
-          log('Agent failed to produce structured output, falling back to text');
+        } else if (message.subtype === 'success' || message.subtype === 'error_max_structured_output_retries') {
+          // Structured output missing or agent couldn't produce valid structured output — fall back to text
+          log(`Structured output unavailable (subtype=${message.subtype}), falling back to text`);
           const textResult = 'result' in message ? (message as { result?: string }).result : null;
           if (textResult) {
             result = { outputType: 'message', userMessage: textResult };
