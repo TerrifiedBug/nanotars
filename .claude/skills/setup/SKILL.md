@@ -375,10 +375,11 @@ Tell the user:
 > ```json
 > "containerConfig": {
 >   "additionalMounts": [
->     { "hostPath": "~/projects/my-app", "containerPath": "my-app", "readonly": false }
+>     { "hostPath": "~/projects/my-app" }
 >   ]
 > }
 > ```
+> The folder appears inside the container at `/workspace/extra/<folder-name>` (derived from the last segment of the path). Add `"readonly": false` for write access, or `"containerPath": "custom-name"` to override the default name.
 
 ## 8. Configure launchd Service
 

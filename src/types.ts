@@ -1,6 +1,6 @@
 export interface AdditionalMount {
   hostPath: string; // Absolute path on host (supports ~ for home)
-  containerPath: string; // Path inside container (under /workspace/extra/)
+  containerPath?: string; // Optional — defaults to basename of hostPath. Mounted at /workspace/extra/{value}
   readonly?: boolean; // Default: true for safety
 }
 
