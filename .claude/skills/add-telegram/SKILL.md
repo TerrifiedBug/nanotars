@@ -624,6 +624,14 @@ npm run dev
 launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
 ```
 
+## Agent Swarms (Teams)
+
+After completing the Telegram setup, ask the user:
+
+> Would you like to add Agent Swarm support? Without it, Agent Teams still work — they just operate behind the scenes. With Swarm support, each subagent appears as a different bot in the Telegram group so you can see who's saying what and have interactive team sessions.
+
+If they say yes, invoke the `/add-telegram-swarm` skill.
+
 ## Removal
 
 To remove Telegram integration:
