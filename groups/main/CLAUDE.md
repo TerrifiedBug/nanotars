@@ -41,13 +41,12 @@ The `conversations/` folder contains searchable history of past conversations. U
 When you learn something important:
 - Create files for structured data (e.g., `customers.md`, `preferences.md`)
 - Split files larger than 500 lines into folders
-- Add recurring context directly to this CLAUDE.md
-- Always index new memory files at the top of CLAUDE.md
+- Keep an index in your memory for the files you create
 
-## WhatsApp Formatting
+## WhatsApp Formatting (and other messaging apps)
 
 Do NOT use markdown headings (##) in WhatsApp messages. Only use:
-- *Bold* (asterisks)
+- *Bold* (single asterisks) (NEVER **double asterisks**)
 - _Italic_ (underscores)
 - • Bullets (bullet points)
 - ```Code blocks``` (triple backticks)
