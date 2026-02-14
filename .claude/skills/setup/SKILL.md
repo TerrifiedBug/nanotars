@@ -377,9 +377,7 @@ mkdir -p data
 
 Then write `data/registered_groups.json` with the correct JID, trigger, and timestamp.
 
-If the user chose a name other than `Andy`, also update:
-1. `groups/global/CLAUDE.md` - Change "# Andy" and "You are Andy" to the new name
-2. `groups/main/CLAUDE.md` - Same changes at the top
+The group CLAUDE.md files use the `$ASSISTANT_NAME` environment variable — no name replacement needed.
 
 Ensure the groups folder exists:
 ```bash
