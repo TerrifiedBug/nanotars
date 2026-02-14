@@ -6,6 +6,7 @@ import { EventEmitter } from 'events';
 // Mock config
 vi.mock('../config.js', () => ({
   STORE_DIR: '/tmp/nanoclaw-test-store',
+  BUSINESS_AUTH_DIR: '/tmp/nanoclaw-test-store/auth-business',
 }));
 
 // Mock logger
@@ -58,8 +59,14 @@ function createFakeSocket() {
     },
     sendMessage: vi.fn().mockResolvedValue(undefined),
     sendPresenceUpdate: vi.fn().mockResolvedValue(undefined),
+    readMessages: vi.fn().mockResolvedValue(undefined),
     groupFetchAllParticipating: vi.fn().mockResolvedValue({}),
     end: vi.fn(),
+    signalRepository: {
+      lidMapping: {
+        getPNForLID: vi.fn().mockResolvedValue(null),
+      },
+    },
     // Expose the event emitter for triggering events in tests
     _ev: ev,
   };
@@ -129,8 +136,8 @@ function triggerDisconnect(statusCode: number) {
 
 async function triggerMessages(messages: unknown[]) {
   fakeSocket._ev.emit('messages.upsert', { messages });
-  // Flush microtasks so the async messages.upsert handler completes
-  await new Promise((r) => setTimeout(r, 0));
+  // Wait for async event handlers (translateJid is async)
+  await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
 // --- Tests ---
@@ -178,6 +185,15 @@ describe('WhatsAppChannel', () => {
       // The channel should have mapped the LID from sock.user
       // We can verify by sending a message from a LID JID
       // and checking the translated JID in the callback
+    });
+
+    it('sends available presence on connect', async () => {
+      const opts = createTestOpts();
+      const channel = new WhatsAppChannel(opts);
+
+      await connectChannel(channel);
+
+      expect(fakeSocket.sendPresenceUpdate).toHaveBeenCalledWith('available');
     });
 
     it('flushes outgoing queue on reconnect', async () => {
