@@ -161,8 +161,21 @@ The script automatically handles error 515 (stream error after pairing) by recon
 
 ### Option A: QR Code in Browser (Recommended)
 
+Detect if headless or has a display:
+
+```bash
+[ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || echo "HEADLESS"
+```
+
 Clean any stale auth state and start auth in background:
 
+**Headless (server/VPS)** — use `--serve` to start an HTTP server:
+```bash
+rm -rf store/auth store/qr-data.txt store/auth-status.txt
+npx tsx src/whatsapp-auth.ts --serve
+```
+
+**macOS/desktop** — use the file-based approach:
 ```bash
 rm -rf store/auth store/qr-data.txt store/auth-status.txt
 npm run auth
@@ -178,7 +191,9 @@ for i in $(seq 1 15); do if [ -f store/qr-data.txt ]; then echo "qr_ready"; exit
 
 If `already_authenticated`, skip to the next step.
 
-If QR data is ready, generate the QR as SVG and inject it into the HTML template:
+**Headless:** Tell the user to open `http://SERVER_IP:8899` in their browser to see and scan the QR code.
+
+**macOS/desktop:** Generate the QR as SVG and inject it into the HTML template, then open it:
 
 ```bash
 node -e "
@@ -192,16 +207,11 @@ QR.toString(qrData, { type: 'svg' }, (err, svg) => {
   console.log('done');
 });
 "
-```
-
-Then open it:
-
-```bash
 open store/qr-auth.html
 ```
 
 Tell the user:
-> A browser window should have opened with the QR code. It expires in about 60 seconds.
+> The QR code is ready. It expires in about 60 seconds.
 >
 > Scan it with WhatsApp: **Settings → Linked Devices → Link a Device**
 

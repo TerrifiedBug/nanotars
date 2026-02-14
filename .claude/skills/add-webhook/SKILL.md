@@ -14,7 +14,7 @@ This skill adds an HTTP webhook endpoint to NanoClaw as a plugin. External servi
 ## Prerequisites
 
 - NanoClaw must be set up and running (`/setup`)
-- A main channel must be registered (personal DM or WhatsApp Business via `/add-whatsapp-biz`)
+- A main channel must be registered (via `/setup`)
 
 ## Step 1: Check Current State
 

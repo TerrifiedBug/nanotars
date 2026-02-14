@@ -6,7 +6,7 @@ vi.mock('./logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { parseManifest, collectContainerEnvVars, collectSkillPaths, mergeMcpConfigs } from './plugin-loader.js';
+import { parseManifest, collectContainerEnvVars, collectSkillPaths, mergeMcpConfigs, PluginRegistry } from './plugin-loader.js';
 
 describe('parseManifest', () => {
   it('parses a valid manifest-only plugin', () => {

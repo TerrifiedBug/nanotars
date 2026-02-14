@@ -15,7 +15,6 @@ const CORE_ENV_VARS = [
   'ANTHROPIC_API_KEY',
   'ASSISTANT_NAME',
   'CLAUDE_MODEL',
-  'BUSINESS_DM_TARGET_JID',
 ];
 
 /** Validate and normalize a raw plugin.json object */

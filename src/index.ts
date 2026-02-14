@@ -215,7 +215,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
         await pulseTyping();
-        await whatsapp.sendMessage(chatJid, `${ASSISTANT_NAME}: ${text}`);
+        await whatsapp.sendMessage(chatJid, text);
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -509,7 +509,7 @@ async function main(): Promise<void> {
     queue,
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
-      const text = formatOutbound(whatsapp, rawText);
+      const text = formatOutbound(rawText);
       if (text) await whatsapp.sendMessage(jid, text);
     },
     assistantName: ASSISTANT_NAME,

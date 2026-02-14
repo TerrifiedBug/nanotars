@@ -10,7 +10,7 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 
-import { BUSINESS_AUTH_DIR, GROUPS_DIR, STORE_DIR } from '../config.js';
+import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, GROUPS_DIR, STORE_DIR } from '../config.js';
 import {
   getLastGroupSync,
   setLastGroupSync,
@@ -29,7 +29,6 @@ export interface WhatsAppChannelOpts {
 
 export class WhatsAppChannel implements Channel {
   name = 'whatsapp';
-  prefixAssistantName = true;
 
   private sock!: WASocket;
   private connected = false;
@@ -51,10 +50,7 @@ export class WhatsAppChannel implements Channel {
   }
 
   private async connectInternal(onFirstOpen?: () => void): Promise<void> {
-    // Use business auth state if it exists, otherwise fall back to personal
-    const authDir = fs.existsSync(BUSINESS_AUTH_DIR)
-      ? BUSINESS_AUTH_DIR
-      : path.join(STORE_DIR, 'auth');
+    const authDir = path.join(STORE_DIR, 'auth');
     fs.mkdirSync(authDir, { recursive: true });
 
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -179,6 +175,15 @@ export class WhatsAppChannel implements Channel {
           const sender = msg.key.participant || msg.key.remoteJid || '';
           const senderName = msg.pushName || sender.split('@')[0];
 
+          const fromMe = msg.key.fromMe || false;
+          // Detect bot messages: with own number, fromMe is reliable
+          // since only the bot sends from that number.
+          // With shared number, bot messages carry the assistant name prefix
+          // (even in DMs/self-chat) so we check for that.
+          const isBotMessage = ASSISTANT_HAS_OWN_NUMBER
+            ? fromMe
+            : content.startsWith(`${ASSISTANT_NAME}:`);
+
           // Download media (images, videos, documents, audio) if present
           const hasMedia = msg.message?.imageMessage || msg.message?.videoMessage ||
             msg.message?.documentMessage || msg.message?.audioMessage;
@@ -217,7 +222,8 @@ export class WhatsAppChannel implements Channel {
             sender_name: senderName,
             content,
             timestamp,
-            is_from_me: msg.key.fromMe || false,
+            is_from_me: fromMe,
+            is_bot_message: isBotMessage,
             audioBuffer,
             mediaType,
             mediaPath,
@@ -233,17 +239,25 @@ export class WhatsAppChannel implements Channel {
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {
+    // Prefix bot messages with assistant name so users know who's speaking.
+    // On a shared number, prefix is also needed in DMs (including self-chat)
+    // to distinguish bot output from user messages.
+    // Skip only when the assistant has its own dedicated phone number.
+    const prefixed = ASSISTANT_HAS_OWN_NUMBER
+      ? text
+      : `${ASSISTANT_NAME}: ${text}`;
+
     if (!this.connected) {
-      this.outgoingQueue.push({ jid, text });
-      logger.info({ jid, length: text.length, queueSize: this.outgoingQueue.length }, 'WA disconnected, message queued');
+      this.outgoingQueue.push({ jid, text: prefixed });
+      logger.info({ jid, length: prefixed.length, queueSize: this.outgoingQueue.length }, 'WA disconnected, message queued');
       return;
     }
     try {
-      await this.sock.sendMessage(jid, { text });
-      logger.info({ jid, length: text.length }, 'Message sent');
+      await this.sock.sendMessage(jid, { text: prefixed });
+      logger.info({ jid, length: prefixed.length }, 'Message sent');
     } catch (err) {
       // If send fails, queue it for retry on reconnect
-      this.outgoingQueue.push({ jid, text });
+      this.outgoingQueue.push({ jid, text: prefixed });
       logger.warn({ jid, err, queueSize: this.outgoingQueue.length }, 'Failed to send, message queued');
     }
   }
@@ -389,7 +403,9 @@ export class WhatsAppChannel implements Channel {
       logger.info({ count: this.outgoingQueue.length }, 'Flushing outgoing message queue');
       while (this.outgoingQueue.length > 0) {
         const item = this.outgoingQueue.shift()!;
-        await this.sendMessage(item.jid, item.text);
+        // Send directly — queued items are already prefixed by sendMessage
+        await this.sock.sendMessage(item.jid, { text: item.text });
+        logger.info({ jid: item.jid, length: item.text.length }, 'Queued message sent');
       }
     } finally {
       this.flushing = false;
