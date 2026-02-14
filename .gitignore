@@ -9,7 +9,7 @@ store/
 data/
 logs/
 
-# Groups - only track base structure and specific CLAUDE.md files
+# Groups - only track base CLAUDE.md files (not personal memory/data)
 groups/*
 !groups/main/
 !groups/global/
@@ -21,12 +21,24 @@ groups/global/*
 # Secrets
 *.keys.json
 .env
+.transcription.config.json
 
 # OS
 .DS_Store
+socket:*
 
 # IDE
 .idea/
 .vscode/
 
 agents-sdk-docs
+
+# Plugins (personal config, created by skills)
+plugins/*
+!plugins/.gitkeep
+
+# Plans
+docs/plans/
+
+# One-off scripts
+src/cleanup-*.ts

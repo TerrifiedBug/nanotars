@@ -21,6 +21,10 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
 | `container/skills/agent-browser.md` | Browser automation tool (available to all agents via Bash) |
 
+## Security
+
+Agents run in containers with explicit mount boundaries. Before modifying files that handle mounts, paths, credentials, or IPC authorization, read [docs/SECURITY.md](docs/SECURITY.md) and consider the security implications.
+
 ## Skills
 
 | Skill | When to Use |
