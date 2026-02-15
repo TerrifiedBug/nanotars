@@ -344,6 +344,18 @@ Ask the user:
 
 Store their choice for use in the steps below.
 
+### 6a-ii. Set assistant name environment variable
+
+Write the chosen name to `.env` so the global config picks it up:
+
+```bash
+grep -q "^ASSISTANT_NAME=" .env 2>/dev/null && sed -i "s/^ASSISTANT_NAME=.*/ASSISTANT_NAME=CHOSEN_NAME/" .env || echo "ASSISTANT_NAME=CHOSEN_NAME" >> .env
+```
+
+Replace `CHOSEN_NAME` with the trigger word the user chose above (without the `@` prefix).
+
+> This sets the global assistant name used for bot message detection, log messages, and the default trigger pattern. The per-group trigger in `registered_groups` takes precedence for individual chats.
+
 ### 6b. Explain security model and ask about main channel type
 
 **Use the AskUserQuestion tool** to present this:
