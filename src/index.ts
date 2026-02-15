@@ -135,6 +135,11 @@ export function _setRegisteredGroups(groups: Record<string, RegisteredGroup>): v
   registeredGroups = groups;
 }
 
+/** @internal - exported for testing */
+export function _setChannels(ch: Channel[]): void {
+  channels = ch;
+}
+
 /**
  * Process all pending messages for a group.
  * Called by the GroupQueue when it's this group's turn.
