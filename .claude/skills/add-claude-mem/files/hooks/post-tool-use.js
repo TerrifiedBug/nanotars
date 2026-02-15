@@ -22,7 +22,7 @@ export function register(ctx) {
           body: JSON.stringify({
             text,
             title: `${input.tool_name} (${ctx.groupFolder})`,
-            project: 'nanoclaw-mem',
+            project: `nanoclaw-${ctx.groupFolder || 'main'}`,
           }),
         }).catch(() => {});
 

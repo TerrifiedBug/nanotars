@@ -8,7 +8,7 @@ allowed-tools: Bash(curl:*)
 
 You have a persistent memory database that survives across sessions. Requires `$CLAUDE_MEM_URL` environment variable. If not configured, run `/add-claude-mem` on the host to set it up.
 
-**Important:** Always use `project=nanoclaw-mem` in all API calls to keep memories isolated from other systems.
+**Important:** Always use `project=nanoclaw-$NANOCLAW_GROUP_FOLDER` in all API calls (e.g., `nanoclaw-main`, `nanoclaw-family`). This keeps memories scoped per group.
 
 ## What's Captured Automatically
 
@@ -47,7 +47,7 @@ curl -s -X POST "$CLAUDE_MEM_URL/api/memory/save" \
 ## Search Memory
 
 ```bash
-curl -s "$CLAUDE_MEM_URL/api/search?query=morning+routine+preferences&project=nanoclaw-mem" | jq -r '.content[0].text // .'
+curl -s "$CLAUDE_MEM_URL/api/search?query=morning+routine+preferences&project=nanoclaw-$NANOCLAW_GROUP_FOLDER" | jq -r '.content[0].text // .'
 ```
 
 Search returns an index with observation IDs and titles. If you need full details for specific results, fetch them by ID.
@@ -65,7 +65,7 @@ curl -s -X POST "$CLAUDE_MEM_URL/api/observations/batch" \
 See what happened around a specific observation:
 
 ```bash
-curl -s "$CLAUDE_MEM_URL/api/timeline?anchor=42&project=nanoclaw-mem"
+curl -s "$CLAUDE_MEM_URL/api/timeline?anchor=42&project=nanoclaw-$NANOCLAW_GROUP_FOLDER"
 ```
 
 ## Tips

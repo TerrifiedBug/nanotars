@@ -466,7 +466,7 @@ export function register(ctx) {
         fetch(`${url}/api/memory/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, project: 'nanoclaw-mem' }),
+          body: JSON.stringify({ text, project: `nanoclaw-${ctx.groupFolder || 'main'}` }),
         }).catch(() => {});
 
         return {};
