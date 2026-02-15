@@ -86,14 +86,15 @@ NanoClaw uses a **Channel abstraction** (`Channel` interface in `src/types.ts`).
 | File | Purpose |
 |------|---------|
 | `src/types.ts` | `Channel` interface definition |
-| `src/channels/whatsapp.ts` | `WhatsAppChannel` class (reference implementation) |
-| `src/router.ts` | `findChannel()`, `routeOutbound()`, `formatOutbound()` |
-| `src/index.ts` | Orchestrator: creates channels, wires callbacks, starts subsystems |
-| `src/ipc.ts` | IPC watcher (uses `sendMessage` dep for outbound) |
+| `plugins/whatsapp/index.js` | WhatsApp channel plugin (reference implementation) |
+| `src/router.ts` | `routeOutbound()`, `formatOutbound()` |
+| `src/index.ts` | Orchestrator: loads plugins, routes messages, starts subsystems |
+| `src/plugin-loader.ts` | Plugin discovery and registry |
 
 The Telegram channel follows the same pattern as WhatsApp:
-- Implements `Channel` interface (`connect`, `sendMessage`, `ownsJid`, `disconnect`, `setTyping`)
-- Delivers inbound messages via `onMessage` / `onChatMetadata` callbacks
+- Implements `Channel` interface (`connect`, `sendMessage`, `ownsJid`, `disconnect`)
+- Exports `onChannel(ctx, config)` that receives callbacks via `ChannelPluginConfig`
+- Delivers inbound messages via `config.onMessage` / `config.onChatMetadata` callbacks
 - The existing message loop in `src/index.ts` picks up stored messages automatically
 
 ## Implementation
@@ -111,7 +112,7 @@ These should be added near the top with other configuration exports.
 
 ### Step 2: Create Telegram Channel
 
-Create `src/channels/telegram.ts` implementing the `Channel` interface. Use `src/channels/whatsapp.ts` as a reference for the pattern.
+Create `plugins/telegram/index.js` implementing the `Channel` interface via `onChannel` export. Use `plugins/whatsapp/index.js` as a reference for the plugin pattern.
 
 ```typescript
 import { Bot } from "grammy";

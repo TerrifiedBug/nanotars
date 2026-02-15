@@ -126,7 +126,7 @@ WhatsApp (baileys) --> SQLite --> 轮询循环 --> 容器 (Claude Agent SDK) -->
 
 关键文件：
 - `src/index.ts` - 编排器：状态管理、消息循环、智能体调用
-- `src/channels/whatsapp.ts` - WhatsApp 连接、认证、收发消息
+- `plugins/whatsapp/index.js` - WhatsApp 频道插件（Baileys）
 - `src/ipc.ts` - IPC 监听与任务处理
 - `src/router.ts` - 消息格式化与出站路由
 - `src/group-queue.ts` - 每群组队列，带全局并发限制

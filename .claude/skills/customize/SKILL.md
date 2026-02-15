@@ -19,13 +19,13 @@ This skill helps users add capabilities or modify behavior. Use AskUserQuestion 
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Orchestrator: state, message loop, agent invocation |
-| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
+| `src/plugin-loader.ts` | Plugin discovery, loading, and registry |
 | `src/ipc.ts` | IPC watcher and task processing |
 | `src/router.ts` | Message formatting and outbound routing |
 | `src/types.ts` | TypeScript interfaces (includes Channel) |
 | `src/config.ts` | Assistant name, trigger pattern, directories |
 | `src/db.ts` | Database initialization and queries |
-| `src/whatsapp-auth.ts` | Standalone WhatsApp authentication script |
+| `plugins/whatsapp/index.js` | WhatsApp channel plugin (Baileys) |
 | `groups/CLAUDE.md` | Global memory/persona |
 
 ## Adding Skills to NanoClaw Agents
@@ -101,9 +101,9 @@ Questions to ask:
 - Should messages from this channel go to existing groups or new ones?
 
 Implementation pattern:
-1. Create `src/channels/{name}.ts` implementing the `Channel` interface from `src/types.ts` (see `src/channels/whatsapp.ts` for reference)
-2. Add the channel instance to `main()` in `src/index.ts` and wire callbacks (`onMessage`, `onChatMetadata`)
-3. Messages are stored via the `onMessage` callback; routing is automatic via `ownsJid()`
+1. Create `plugins/{name}/plugin.json` with `"channelPlugin": true` and `"hooks": ["onChannel"]`
+2. Create `plugins/{name}/index.js` exporting `onChannel(ctx, config)` that returns a `Channel` object (see `plugins/whatsapp/index.js` for reference)
+3. Messages are delivered via `config.onMessage` callback; routing is automatic via `ownsJid()`
 
 ### Adding a New MCP Integration
 
@@ -169,6 +169,6 @@ User: "Add Telegram as an input channel"
 
 1. Ask: "Should Telegram use the same @Andy trigger, or a different one?"
 2. Ask: "Should Telegram messages create separate conversation contexts, or share with WhatsApp groups?"
-3. Create `src/channels/telegram.ts` implementing the `Channel` interface (see `src/channels/whatsapp.ts`)
+3. Create `plugins/telegram/` with `plugin.json` and `index.js` exporting `onChannel` (see `plugins/whatsapp/` for reference)
 4. Add the channel to `main()` in `src/index.ts`
 5. Tell user how to authenticate and test

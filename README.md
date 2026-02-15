@@ -127,7 +127,7 @@ Single Node.js process. Agents execute in isolated Linux containers with mounted
 
 Key files:
 - `src/index.ts` - Orchestrator: state, message loop, agent invocation
-- `src/channels/whatsapp.ts` - WhatsApp connection, auth, send/receive
+- `plugins/whatsapp/index.js` - WhatsApp channel plugin (Baileys)
 - `src/ipc.ts` - IPC watcher and task processing
 - `src/router.ts` - Message formatting and outbound routing
 - `src/group-queue.ts` - Per-group queue with global concurrency limit

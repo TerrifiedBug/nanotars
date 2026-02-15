@@ -99,8 +99,7 @@ nanoclaw/
 │
 ├── src/
 │   ├── index.ts                   # Orchestrator: state, message loop, agent invocation
-│   ├── channels/
-│   │   └── whatsapp.ts            # WhatsApp connection, auth, send/receive
+│   ├── plugin-loader.ts           # Plugin discovery, loading, and registry
 │   ├── ipc.ts                     # IPC watcher and task processing
 │   ├── router.ts                  # Message formatting and outbound routing
 │   ├── config.ts                  # Configuration constants
@@ -109,9 +108,8 @@ nanoclaw/
 │   ├── db.ts                      # SQLite database initialization and queries
 │   ├── group-queue.ts             # Per-group queue with global concurrency limit
 │   ├── mount-security.ts          # Mount allowlist validation for containers
-│   ├── whatsapp-auth.ts           # Standalone WhatsApp authentication
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
-│   └── container-runner.ts        # Spawns agents in Apple Containers
+│   └── container-runner.ts        # Spawns agents in containers
 │
 ├── container/
 │   ├── Dockerfile                 # Container image (runs as 'node' user, includes Claude Code CLI)

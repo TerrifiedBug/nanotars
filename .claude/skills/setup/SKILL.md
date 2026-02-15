@@ -172,13 +172,13 @@ Clean any stale auth state and start auth in background:
 **Headless (server/VPS)** — use `--serve` to start an HTTP server:
 ```bash
 rm -rf store/auth store/qr-data.txt store/auth-status.txt
-npx tsx src/whatsapp-auth.ts --serve
+npx tsx plugins/whatsapp/auth.js --serve
 ```
 
 **macOS/desktop** — use the file-based approach:
 ```bash
 rm -rf store/auth store/qr-data.txt store/auth-status.txt
-npm run auth
+node plugins/whatsapp/auth.js
 ```
 
 Run this with `run_in_background: true`.
@@ -233,7 +233,7 @@ Clean any stale auth state and start:
 
 ```bash
 rm -rf store/auth store/qr-data.txt store/auth-status.txt
-npx tsx src/whatsapp-auth.ts --pairing-code --phone PHONE_NUMBER
+npx tsx plugins/whatsapp/auth.js --pairing-code --phone PHONE_NUMBER
 ```
 
 Run this with `run_in_background: true`.
@@ -269,7 +269,7 @@ Tell the user to run the auth command in another terminal window:
 
 > Open another terminal and run:
 > ```
-> cd PROJECT_PATH && npm run auth
+> cd PROJECT_PATH && node plugins/whatsapp/auth.js
 > ```
 > Scan the QR code that appears, then let me know when it says "Successfully authenticated".
 
@@ -626,12 +626,12 @@ The user should receive a response in WhatsApp.
 **Messages sent but not received by NanoClaw (DMs)**:
 - WhatsApp may use LID (Linked Identity) JIDs for DMs instead of phone numbers
 - Check logs for `Translated LID to phone JID` — if missing, the LID isn't being resolved
-- The `translateJid` method in `src/channels/whatsapp.ts` uses `sock.signalRepository.lidMapping.getPNForLID()` to resolve LIDs
+- The `translateJid` method in `plugins/whatsapp/index.js` uses `sock.signalRepository.lidMapping.getPNForLID()` to resolve LIDs
 - Verify the registered JID doesn't have a device suffix (should be `number@s.whatsapp.net`, not `number:0@s.whatsapp.net`)
 
 **WhatsApp disconnected**:
 - The service will show a macOS notification
-- Run `npm run auth` to re-authenticate
+- Run `node plugins/whatsapp/auth.js` to re-authenticate
 - Restart the service: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
 
 **Unload service**:
