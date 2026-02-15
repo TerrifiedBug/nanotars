@@ -101,8 +101,14 @@ Available groups are provided in `/workspace/ipc/available_groups.json`:
   "groups": [
     {
       "jid": "120363336345536173@g.us",
-      "name": "Family Chat",
+      "name": "Family Chat (WhatsApp)",
       "lastActivity": "2026-01-31T12:00:00.000Z",
+      "isRegistered": false
+    },
+    {
+      "jid": "dc:987654321",
+      "name": "Dev Team (Discord)",
+      "lastActivity": "2026-01-31T11:00:00.000Z",
       "isRegistered": false
     }
   ],
@@ -143,12 +149,18 @@ Groups are registered in `/workspace/project/data/registered_groups.json`:
     "folder": "family-chat",
     "trigger": "@AssistantName",
     "added_at": "2024-01-31T12:00:00.000Z"
+  },
+  "dc:987654321": {
+    "name": "Dev Team",
+    "folder": "dev-team",
+    "trigger": "@AssistantName",
+    "added_at": "2026-01-15T10:00:00.000Z"
   }
 }
 ```
 
 Fields:
-- **Key**: The JID (unique identifier for the chat)
+- **Key**: The JID (unique identifier for the chat — format depends on channel, e.g. `@g.us` for WhatsApp, `dc:` prefix for Discord)
 - **name**: Display name for the group
 - **folder**: Folder name under `groups/` for this group's files and memory
 - **trigger**: The trigger word (usually same as global, but could differ)
@@ -223,6 +235,6 @@ You can read and write to `/workspace/project/groups/global/CLAUDE.md` for facts
 ## Scheduling for Other Groups
 
 When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from `registered_groups.json`:
-- `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")`
+- `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")` (JID format depends on channel)
 
 The task will run in that group's context with access to their files and memory.
