@@ -38,4 +38,3 @@ plugins/*
 
 # Skill-created artifacts (added by plugin setup, not base config)
 .transcription.config.json
-docs/plans/
