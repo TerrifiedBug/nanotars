@@ -106,6 +106,66 @@ describe('collectContainerHookPaths', () => {
   });
 });
 
+describe('parseManifest channel plugin fields', () => {
+  it('parses channelPlugin and authSkill', () => {
+    const manifest = parseManifest({
+      name: 'whatsapp',
+      channelPlugin: true,
+      authSkill: 'setup-whatsapp',
+      hooks: ['onChannel'],
+    });
+    expect(manifest.channelPlugin).toBe(true);
+    expect(manifest.authSkill).toBe('setup-whatsapp');
+  });
+
+  it('parses channels and groups scope arrays', () => {
+    const manifest = parseManifest({
+      name: 'wa-voice',
+      channels: ['whatsapp'],
+      groups: ['main', 'family'],
+    });
+    expect(manifest.channels).toEqual(['whatsapp']);
+    expect(manifest.groups).toEqual(['main', 'family']);
+  });
+
+  it('defaults channelPlugin to false', () => {
+    const manifest = parseManifest({ name: 'test' });
+    expect(manifest.channelPlugin).toBe(false);
+  });
+});
+
+describe('PluginRegistry.getPluginsForGroup', () => {
+  it('returns all plugins when no scope specified', () => {
+    const registry = new PluginRegistry();
+    registry.add({ manifest: { name: 'a' } as any, dir: '', hooks: {} });
+    registry.add({ manifest: { name: 'b' } as any, dir: '', hooks: {} });
+    expect(registry.getPluginsForGroup()).toHaveLength(2);
+  });
+
+  it('filters by channel', () => {
+    const registry = new PluginRegistry();
+    registry.add({ manifest: { name: 'wa-only', channels: ['whatsapp'] } as any, dir: '', hooks: {} });
+    registry.add({ manifest: { name: 'all-channels' } as any, dir: '', hooks: {} });
+    expect(registry.getPluginsForGroup('whatsapp')).toHaveLength(2);
+    expect(registry.getPluginsForGroup('telegram')).toHaveLength(1);
+    expect(registry.getPluginsForGroup('telegram')[0].manifest.name).toBe('all-channels');
+  });
+
+  it('filters by group folder', () => {
+    const registry = new PluginRegistry();
+    registry.add({ manifest: { name: 'main-only', groups: ['main'] } as any, dir: '', hooks: {} });
+    registry.add({ manifest: { name: 'everywhere' } as any, dir: '', hooks: {} });
+    expect(registry.getPluginsForGroup(undefined, 'main')).toHaveLength(2);
+    expect(registry.getPluginsForGroup(undefined, 'family')).toHaveLength(1);
+  });
+
+  it('wildcard scope matches all', () => {
+    const registry = new PluginRegistry();
+    registry.add({ manifest: { name: 'wildcard', channels: ['*'], groups: ['*'] } as any, dir: '', hooks: {} });
+    expect(registry.getPluginsForGroup('telegram', 'family')).toHaveLength(1);
+  });
+});
+
 describe('mergeMcpConfigs', () => {
   it('merges multiple mcp.json fragments', () => {
     const fragment1 = { mcpServers: { ha: { command: 'ha-server' } } };
