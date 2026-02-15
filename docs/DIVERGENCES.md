@@ -67,7 +67,7 @@ This document tracks all divergences between our fork's `main` branch and `upstr
 | `groups/main/CLAUDE.md` | Modified | SECURITY, BUGFIX | Anti-prompt-injection rules, `$ASSISTANT_NAME`, generic example triggers |
 | `docs/DIVERGENCES.md` | **New** | OTHER | This file |
 | `docs/PLUGINS.md` | **New** | PLUGIN | Plugin system architecture, hook lifecycle, security model, source code changes |
-| `package-lock.json` | Modified | OTHER | Platform-specific (Linux vs macOS optional deps) |
+| `package-lock.json` | Modified | OTHER | Permanent platform divergence — npm resolves different optional deps on Linux vs macOS. Will always diverge unless upstream adds CI to generate the lockfile on Linux. Regenerate with `npm install` after upstream syncs |
 
 ## Skills (`.claude/skills/`)
 
