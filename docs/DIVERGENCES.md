@@ -65,6 +65,7 @@ This document tracks all divergences between our fork's `main` branch and `upstr
 | `groups/global/CLAUDE.md` | Modified | BUGFIX | `$ASSISTANT_NAME` env var (upstream hardcodes "Andy" despite PR #235 making it configurable) |
 | `groups/main/CLAUDE.md` | Modified | SECURITY, BUGFIX | Anti-prompt-injection rules, `$ASSISTANT_NAME`, generic example triggers |
 | `docs/DIVERGENCES.md` | **New** | OTHER | This file |
+| `docs/PLUGINS.md` | **New** | PLUGIN | Plugin system architecture, hook lifecycle, security model, source code changes |
 | `package-lock.json` | Modified | OTHER | Platform-specific (Linux vs macOS optional deps) |
 
 ## Skills (`.claude/skills/`)
@@ -98,7 +99,7 @@ This document tracks all divergences between our fork's `main` branch and `upstr
 | `set-model` | Change Claude model for containers |
 | `update-nanoclaw` | Upstream sync management |
 
-### Unchanged from upstream (6)
+### Unchanged from upstream (7)
 
 `add-gmail`, `add-parallel`, `add-telegram-swarm`, `add-telegram`, `convert-to-docker`, `debug`, `x-integration`
 
