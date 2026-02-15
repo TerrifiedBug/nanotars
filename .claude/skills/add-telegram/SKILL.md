@@ -17,10 +17,10 @@ This skill adds Telegram support to NanoClaw. Users can choose to:
 ### 1. Install Grammy
 
 ```bash
-npm install grammy
+cd plugins/channels/telegram && npm install && cd -
 ```
 
-Grammy is a modern, TypeScript-first Telegram bot framework.
+Grammy is installed as a per-plugin dependency in the Telegram plugin's own `package.json`. Dependencies are isolated from the core.
 
 ### 2. Create Telegram Bot
 
@@ -643,15 +643,27 @@ After completing the Telegram setup, ask the user:
 
 If they say yes, invoke the `/add-telegram-swarm` skill.
 
-## Removal
+## Uninstall
 
-To remove Telegram integration:
+To remove the Telegram channel:
 
-1. Delete `src/channels/telegram.ts`
-2. Remove `TelegramChannel` import and creation from `src/index.ts`
-3. Remove `channels` array and revert to using `whatsapp` directly in `processGroupMessages`, scheduler deps, and IPC deps
-4. Revert `getAvailableGroups()` filter to only include `@g.us` chats
-5. Remove Telegram config (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ONLY`) from `src/config.ts`
-6. Remove Telegram registrations from SQLite: `sqlite3 store/messages.db "DELETE FROM registered_groups WHERE jid LIKE 'tg:%'"`
-7. Uninstall: `npm uninstall grammy`
-8. Rebuild: `npm run build && launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
+1. **Stop NanoClaw**
+
+2. **Cancel affected tasks** (if any scheduled tasks target Telegram groups):
+   ```bash
+   sqlite3 store/messages.db "UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (SELECT jid FROM registered_groups WHERE channel = 'telegram');"
+   ```
+
+3. **Remove group registrations:**
+   ```bash
+   sqlite3 store/messages.db "DELETE FROM registered_groups WHERE jid LIKE 'tg:%';"
+   ```
+
+4. **Remove the plugin directory:**
+   ```bash
+   rm -rf plugins/channels/telegram/
+   ```
+
+5. **Remove `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ONLY` from `.env`**
+
+6. **Restart NanoClaw** — group folders and message history are preserved.
