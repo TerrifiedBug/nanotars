@@ -19,6 +19,8 @@ plugins/{name}/
 
 Only `plugin.json` is required. Everything else is optional depending on what the plugin does.
 
+**Note:** All skills — including core skills like `agent-browser` — are delivered as plugins. There is no separate `container/skills/` path; the plugin system is the single mechanism for making skills available to agents.
+
 ## Plugin Manifest (`plugin.json`)
 
 | Field | Type | Required | Description |

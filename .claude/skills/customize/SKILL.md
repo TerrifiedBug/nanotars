@@ -33,7 +33,6 @@ This skill helps users add capabilities or modify behavior. Use AskUserQuestion 
 **Important distinction:**
 - `.claude/skills/` in the project root → for Claude Code in this terminal (setup, debug, customize)
 - `plugins/{name}/container-skills/SKILL.md` → agent instructions, auto-mounted into containers by the plugin loader
-- `container/skills/` → core-only agent skills shipped with upstream (e.g., `agent-browser`)
 
 ### How agent skills work
 

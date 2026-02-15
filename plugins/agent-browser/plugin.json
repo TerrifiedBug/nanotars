@@ -1,0 +1,5 @@
+{
+  "name": "agent-browser",
+  "description": "Browser automation with agent-browser CLI (Playwright-based)",
+  "hooks": []
+}

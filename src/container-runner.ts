@@ -207,28 +207,13 @@ function buildVolumeMounts(
     }, null, 2) + '\n');
   }
 
-  // Sync skills from container/skills/ into each group's .claude/skills/
-  const skillsSrc = path.join(process.cwd(), 'container', 'skills');
+  // Clean stale skills from session directory — all skills are now
+  // delivered via plugin bind-mounts at /workspace/.claude/skills/
   const skillsDst = path.join(groupSessionsDir, 'skills');
-  if (fs.existsSync(skillsSrc)) {
-    const copyDirRecursive = (src: string, dst: string) => {
-      fs.mkdirSync(dst, { recursive: true });
-      for (const entry of fs.readdirSync(src)) {
-        const srcPath = path.join(src, entry);
-        const dstPath = path.join(dst, entry);
-        if (fs.statSync(srcPath).isDirectory()) {
-          copyDirRecursive(srcPath, dstPath);
-        } else {
-          fs.copyFileSync(srcPath, dstPath);
-        }
-      }
-    };
-    for (const skillDir of fs.readdirSync(skillsSrc)) {
-      const srcDir = path.join(skillsSrc, skillDir);
-      if (!fs.statSync(srcDir).isDirectory()) continue;
-      copyDirRecursive(srcDir, path.join(skillsDst, skillDir));
-    }
+  if (fs.existsSync(skillsDst)) {
+    fs.rmSync(skillsDst, { recursive: true });
   }
+
   // Sync host credentials for automatic OAuth token refresh
   // Claude Code SDK reads ~/.claude/.credentials.json natively and handles refresh
   const hostCredsFile = path.join(getHomeDir(), '.claude', '.credentials.json');
