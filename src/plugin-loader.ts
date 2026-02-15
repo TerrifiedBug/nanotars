@@ -57,13 +57,13 @@ export function collectContainerEnvVars(plugins: LoadedPlugin[]): string[] {
   return [...vars];
 }
 
-/** Collect skill directories from plugins that have a skills/ subdirectory */
+/** Collect skill directories from plugins that have a container-skills/ subdirectory */
 export function collectSkillPaths(
   plugins: LoadedPlugin[],
 ): Array<{ hostPath: string; name: string }> {
   const paths: Array<{ hostPath: string; name: string }> = [];
   for (const plugin of plugins) {
-    const skillsDir = path.join(plugin.dir, 'skills');
+    const skillsDir = path.join(plugin.dir, 'container-skills');
     if (fs.existsSync(skillsDir)) {
       paths.push({ hostPath: skillsDir, name: plugin.manifest.name });
     }

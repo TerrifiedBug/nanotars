@@ -92,7 +92,7 @@ function buildVolumeMounts(
     }
   }
 
-  // Plugin skill directories — each plugin's skills/ mounted individually
+  // Plugin skill directories — each plugin's container-skills/ mounted individually
   if (pluginRegistry) {
     for (const sp of pluginRegistry.getSkillPaths()) {
       const containerSkillPath = `/workspace/.claude/skills/${sp.name}`;

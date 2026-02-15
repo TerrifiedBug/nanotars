@@ -68,16 +68,16 @@ describe('collectContainerEnvVars', () => {
 });
 
 describe('collectSkillPaths', () => {
-  it('returns skill directories that exist', () => {
+  it('returns container-skills directories that exist', () => {
     vi.spyOn(fs, 'existsSync').mockImplementation((p: fs.PathLike) =>
-      String(p).includes('brave-search/skills'));
+      String(p).includes('brave-search/container-skills'));
     const plugins = [
       { manifest: { name: 'brave-search' }, dir: '/plugins/brave-search', hooks: {} },
       { manifest: { name: 'github' }, dir: '/plugins/github', hooks: {} },
     ];
     const result = collectSkillPaths(plugins as any);
     expect(result).toHaveLength(1);
-    expect(result[0].hostPath).toContain('brave-search/skills');
+    expect(result[0].hostPath).toContain('brave-search/container-skills');
     vi.restoreAllMocks();
   });
 });
