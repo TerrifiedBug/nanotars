@@ -546,6 +546,7 @@ export function getRegisteredGroup(
         added_at: string;
         container_config: string | null;
         requires_trigger: number | null;
+        channel: string | null;
       }
     | undefined;
   if (!row) return undefined;
@@ -555,6 +556,7 @@ export function getRegisteredGroup(
     folder: row.folder,
     trigger: row.trigger_pattern,
     added_at: row.added_at,
+    channel: row.channel || undefined,
     containerConfig: row.container_config
       ? JSON.parse(row.container_config)
       : undefined,
@@ -593,6 +595,7 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     added_at: string;
     container_config: string | null;
     requires_trigger: number | null;
+    channel: string | null;
   }>;
   const result: Record<string, RegisteredGroup> = {};
   for (const row of rows) {
@@ -601,6 +604,7 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
       folder: row.folder,
       trigger: row.trigger_pattern,
       added_at: row.added_at,
+      channel: row.channel || undefined,
       containerConfig: row.container_config
         ? JSON.parse(row.container_config)
         : undefined,

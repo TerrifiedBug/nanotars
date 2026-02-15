@@ -204,23 +204,36 @@ export class PluginRegistry {
     }
   }
 
-  getContainerEnvVars(): string[] {
-    return collectContainerEnvVars(this.plugins);
+  /** Filter plugins by channel and group scope */
+  getPluginsForGroup(channel?: string, groupFolder?: string): LoadedPlugin[] {
+    return this.plugins.filter(p => {
+      // Channel filter: undefined or ["*"] means all channels
+      const ch = p.manifest.channels;
+      if (ch && !ch.includes('*') && channel && !ch.includes(channel)) return false;
+      // Group filter: undefined or ["*"] means all groups
+      const gr = p.manifest.groups;
+      if (gr && !gr.includes('*') && groupFolder && !gr.includes(groupFolder)) return false;
+      return true;
+    });
   }
 
-  getSkillPaths(): Array<{ hostPath: string; name: string }> {
-    return collectSkillPaths(this.plugins);
+  getContainerEnvVars(channel?: string, groupFolder?: string): string[] {
+    return collectContainerEnvVars(this.getPluginsForGroup(channel, groupFolder));
   }
 
-  getContainerHookPaths(): Array<{ hostPath: string; name: string }> {
-    return collectContainerHookPaths(this.plugins);
+  getSkillPaths(channel?: string, groupFolder?: string): Array<{ hostPath: string; name: string }> {
+    return collectSkillPaths(this.getPluginsForGroup(channel, groupFolder));
   }
 
-  getContainerMounts(): Array<{ hostPath: string; containerPath: string }> {
-    return collectContainerMounts(this.plugins);
+  getContainerHookPaths(channel?: string, groupFolder?: string): Array<{ hostPath: string; name: string }> {
+    return collectContainerHookPaths(this.getPluginsForGroup(channel, groupFolder));
   }
 
-  getMergedMcpConfig(rootMcpPath?: string): { mcpServers: Record<string, any> } {
+  getContainerMounts(channel?: string, groupFolder?: string): Array<{ hostPath: string; containerPath: string }> {
+    return collectContainerMounts(this.getPluginsForGroup(channel, groupFolder));
+  }
+
+  getMergedMcpConfig(rootMcpPath?: string, channel?: string, groupFolder?: string): { mcpServers: Record<string, any> } {
     const fragments: Array<Record<string, any>> = [];
 
     // Include root .mcp.json if it exists
@@ -232,8 +245,8 @@ export class PluginRegistry {
       }
     }
 
-    // Include each plugin's mcp.json
-    for (const plugin of this.plugins) {
+    // Include each scoped plugin's mcp.json
+    for (const plugin of this.getPluginsForGroup(channel, groupFolder)) {
       const mcpFile = path.join(plugin.dir, 'mcp.json');
       if (fs.existsSync(mcpFile)) {
         try {

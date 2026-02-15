@@ -93,8 +93,11 @@ function buildVolumeMounts(
   }
 
   // Plugin skill directories — each plugin's container-skills/ mounted individually
+  // Scoped by channel and group so plugins only inject into matching containers
+  const scopeChannel = group.channel;
+  const scopeGroup = group.folder;
   if (pluginRegistry) {
-    for (const sp of pluginRegistry.getSkillPaths()) {
+    for (const sp of pluginRegistry.getSkillPaths(scopeChannel, scopeGroup)) {
       const containerSkillPath = `/workspace/.claude/skills/${sp.name}`;
       mounts.push({
         hostPath: sp.hostPath,
@@ -106,7 +109,7 @@ function buildVolumeMounts(
 
   // Plugin container hooks — JS files loaded by agent-runner at startup
   if (pluginRegistry) {
-    for (const hp of pluginRegistry.getContainerHookPaths()) {
+    for (const hp of pluginRegistry.getContainerHookPaths(scopeChannel, scopeGroup)) {
       mounts.push({
         hostPath: hp.hostPath,
         containerPath: `/workspace/plugin-hooks/${hp.name}`,
@@ -117,7 +120,7 @@ function buildVolumeMounts(
 
   // Plugin-declared container mounts (read-only)
   if (pluginRegistry) {
-    for (const pm of pluginRegistry.getContainerMounts()) {
+    for (const pm of pluginRegistry.getContainerMounts(scopeChannel, scopeGroup)) {
       mounts.push({
         hostPath: pm.hostPath,
         containerPath: pm.containerPath,
@@ -129,7 +132,7 @@ function buildVolumeMounts(
   // MCP server config — merge root .mcp.json with plugin mcp.json fragments
   const mcpJsonFile = path.join(projectRoot, '.mcp.json');
   if (pluginRegistry) {
-    const mergedMcp = pluginRegistry.getMergedMcpConfig(mcpJsonFile);
+    const mergedMcp = pluginRegistry.getMergedMcpConfig(mcpJsonFile, scopeChannel, scopeGroup);
     if (Object.keys(mergedMcp.mcpServers).length > 0) {
       const mergedMcpPath = path.join(DATA_DIR, 'merged-mcp.json');
       fs.writeFileSync(mergedMcpPath, JSON.stringify(mergedMcp, null, 2));
@@ -248,7 +251,7 @@ function buildVolumeMounts(
   if (fs.existsSync(envFile)) {
     const envContent = fs.readFileSync(envFile, 'utf-8');
     const allowedVars = pluginRegistry
-      ? pluginRegistry.getContainerEnvVars()
+      ? pluginRegistry.getContainerEnvVars(group.channel, group.folder)
       : ['ANTHROPIC_API_KEY', 'ASSISTANT_NAME', 'CLAUDE_MODEL'];
     const filteredLines = envContent.split('\n').filter((line) => {
       const trimmed = line.trim();
