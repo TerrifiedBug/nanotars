@@ -45,26 +45,52 @@ If NO channel plugins are found:
 
 > "No channel plugins are installed. Use `/create-channel-plugin` to create one, or `/add-telegram` to install Telegram."
 
-### Step 2: Determine Group Type
+### Step 2: Determine Group Type (Smart Defaults)
 
-Ask the user what kind of group they want to add:
+Before asking the user, check the current state to pick smart defaults:
 
-> "What kind of group do you want to add?"
+```bash
+# Does a main group exist?
+sqlite3 store/messages.db "SELECT folder, channel FROM registered_groups WHERE folder = 'main'" 2>/dev/null
+# How many groups does the selected channel already have?
+sqlite3 store/messages.db "SELECT COUNT(*) FROM registered_groups WHERE channel = '{channel}'" 2>/dev/null
+```
 
-Options:
-1. **Admin channel (main)** — The primary chat where you interact with the assistant. Gets elevated privileges (scheduled task output, system notifications, no trigger required).
-2. **Regular group** — A standard group chat. Requires @mention or trigger word to activate the assistant.
-3. **Solo/DM chat** — A private conversation (1:1 with the bot).
+**Apply these rules in order:**
 
-**Important checks:**
+1. **No main group exists at all** → This is the first group being registered. Default to admin/main. Tell the user:
+   > "This will be your admin (main) channel — it gets elevated privileges and responds to all messages. I'll set it up as your primary control channel."
 
-- If `main` folder already exists in `registered_groups`, warn the user:
-  > "You already have a main (admin) group registered: `{name}` on `{channel}`. Registering a new main group will replace it. Do you want to continue?"
+   Skip the group type question entirely. Use folder `main`, `requiresTrigger: false`.
 
-- If the user picks "Regular group" or "Solo/DM", ask for a folder name:
-  > "What should I call this group's folder? This is used for isolated storage. Examples: `family`, `work-team`, `fitness-club`"
+2. **Main exists, but this is the first group on a NEW channel** → Default to a personal DM, but offer the option to move admin here. Ask with `AskUserQuestion`:
+   > "You already have a main (admin) channel on {other_channel}. How should I set up this {channel} chat?"
 
-  Suggest a name based on the chat name if known.
+   Options:
+   1. **Personal chat** (Recommended) — Responds to all your messages, isolated memory, no admin privileges. Auto-named `{channel}-dm`.
+   2. **Move admin here** — This becomes the new main channel, replacing `{other_channel}`. Your old main keeps its memory but loses admin privileges.
+   3. **Group chat** — Register a group channel. Requires @mention or trigger word.
+
+   For "Personal chat": use folder `{channel}-dm`, `requiresTrigger: false`.
+   For "Move admin here": use folder `main` (replace existing registration), `requiresTrigger: false`. Warn before proceeding.
+   For "Group chat": ask for folder name, default `requiresTrigger: true`.
+
+3. **Channel already has groups registered** → This is an additional group. NOW ask the full question:
+
+   > "You already have groups on {channel}. What kind of group do you want to add?"
+
+   Options:
+   1. **Regular group** — A group chat. Requires @mention or trigger word to activate the assistant.
+   2. **Solo/DM chat** — A private conversation for someone else (1:1 with the bot).
+   3. **Admin channel (main)** — Replace your current main group with this one.
+
+   If they pick "Admin channel (main)", warn:
+   > "You already have a main group: `{name}` on `{channel}`. Registering a new one will replace it. Continue?"
+
+   For "Regular group" or "Solo/DM", ask for a folder name:
+   > "What should I call this group's folder? This is used for isolated storage. Examples: `family`, `work-team`, `friend-alice`"
+
+   Suggest a name based on the chat name if known.
 
 ### Step 3: Get the Chat JID
 
