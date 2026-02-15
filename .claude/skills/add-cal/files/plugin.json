@@ -1,6 +1,9 @@
 {
   "name": "calendar",
-  "description": "Google Calendar (gog) and CalDAV calendar access",
+  "description": "Calendar access via gog CLI and CalDAV",
   "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
+  "containerMounts": [
+    {"hostPath": "data/gogcli", "containerPath": "/home/node/.config/gogcli"}
+  ],
   "hooks": []
 }

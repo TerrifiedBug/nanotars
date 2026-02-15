@@ -34,10 +34,7 @@ Install gog on the host if needed:
 which gog && echo "GOG_INSTALLED" || curl -sL "https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin gog
 ```
 
-Add gog to the container image if not already present:
-```bash
-grep -q "gogcli" container/Dockerfile && echo "ALREADY_IN_DOCKERFILE" || sed -i '/^# Install agent-browser/i # Install gog CLI (Google Calendar, Gmail)\nRUN curl -sL "https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin gog\n' container/Dockerfile
-```
+gogcli is installed automatically when the container image is built (via `plugins/calendar/Dockerfile.partial`). No manual Dockerfile changes needed.
 
 Import OAuth credentials (user provides their client_secret.json path):
 ```bash
@@ -105,62 +102,19 @@ cp .claude/skills/add-cal/files/plugin.json plugins/calendar/
 cp .claude/skills/add-cal/files/container-skills/SKILL.md plugins/calendar/container-skills/
 ```
 
-For CalDAV (`cal` CLI), also copy and install the CLI tool:
-```bash
-cp -r .claude/skills/add-cal/files/src plugins/calendar/
-cp .claude/skills/add-cal/files/package.json plugins/calendar/
-cp .claude/skills/add-cal/files/tsconfig.json plugins/calendar/
-cp .claude/skills/add-cal/files/package-lock.json plugins/calendar/
-cd plugins/calendar && npm install && npm run build
-```
-
 ### Step 5: Configure Container Mounts
 
-The plugin.json needs `containerMounts` with absolute paths so the container can access gog config and/or the cal CLI. Write the correct plugin.json based on which providers were configured:
+The only mount needed is the gogcli config directory so the container can access Google OAuth tokens:
 
-**Google Calendar only:**
 ```bash
 NANOCLAW_DIR=$(pwd)
 cat > plugins/calendar/plugin.json << EOF
 {
   "name": "calendar",
-  "description": "Google Calendar (gog) and CalDAV calendar access",
+  "description": "Calendar access via gog CLI and CalDAV",
   "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
   "containerMounts": [
-    {"hostPath": "${NANOCLAW_DIR}/data/gogcli", "containerPath": "/home/node/.config/gogcli"}
-  ],
-  "hooks": []
-}
-EOF
-```
-
-**CalDAV only:**
-```bash
-NANOCLAW_DIR=$(pwd)
-cat > plugins/calendar/plugin.json << EOF
-{
-  "name": "calendar",
-  "description": "Google Calendar (gog) and CalDAV calendar access",
-  "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
-  "containerMounts": [
-    {"hostPath": "${NANOCLAW_DIR}/plugins/calendar", "containerPath": "/opt/cal-cli"}
-  ],
-  "hooks": []
-}
-EOF
-```
-
-**Both Google Calendar and CalDAV:**
-```bash
-NANOCLAW_DIR=$(pwd)
-cat > plugins/calendar/plugin.json << EOF
-{
-  "name": "calendar",
-  "description": "Google Calendar (gog) and CalDAV calendar access",
-  "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
-  "containerMounts": [
-    {"hostPath": "${NANOCLAW_DIR}/data/gogcli", "containerPath": "/home/node/.config/gogcli"},
-    {"hostPath": "${NANOCLAW_DIR}/plugins/calendar", "containerPath": "/opt/cal-cli"}
+    {"hostPath": "data/gogcli", "containerPath": "/home/node/.config/gogcli"}
   ],
   "hooks": []
 }
@@ -169,9 +123,8 @@ EOF
 
 Rebuild and restart:
 ```bash
-npm run build
 ./container/build.sh
-systemctl restart nanoclaw  # or launchctl on macOS
+systemctl restart nanoclaw 2>/dev/null || launchctl kickstart -k gui/$(id -u)/com.nanoclaw 2>/dev/null || echo "Restart the NanoClaw service manually"
 ```
 
 ## Verify
@@ -197,9 +150,9 @@ Tell the user:
    sed -i '/^CALDAV_ACCOUNTS=/d' .env
    ```
 3. `rm -rf data/gogcli`
-4. Remove gog from the container image (if no other plugins need it):
+4. Remove the plugin directory and rebuild the container image:
    ```bash
-   sed -i '/Install gog CLI/d; /gogcli.*tar.gz/d' container/Dockerfile
+   ./container/build.sh
    ```
-5. Rebuild and restart.
+5. Restart the service.
 6. Revoke app-specific passwords in provider security settings.
