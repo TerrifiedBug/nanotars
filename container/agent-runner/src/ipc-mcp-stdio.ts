@@ -44,7 +44,7 @@ server.tool(
   "Send a message to the user or group immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times. Note: when running as a scheduled task, your final output is NOT sent to the user — use this tool if you need to communicate with the user or group.",
   {
     text: z.string().describe('The message text to send'),
-    sender: z.string().optional().describe('Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.'),
+    sender: z.string().optional().describe('Your role/identity name (e.g. "Researcher"). Some channels display this as a separate bot identity.'),
   },
   async (args) => {
     const data: Record<string, string | undefined> = {
@@ -246,11 +246,11 @@ server.tool(
 
 server.tool(
   'register_group',
-  `Register a new WhatsApp group so the agent can respond to messages there. Main group only.
+  `Register a new group so the agent can respond to messages there. Main group only.
 
 Use available_groups.json to find the JID for a group. The folder name should be lowercase with hyphens (e.g., "family-chat").`,
   {
-    jid: z.string().describe('The WhatsApp JID (e.g., "120363336345536173@g.us")'),
+    jid: z.string().describe('The group JID identifier (e.g., "120363336345536173@g.us" for WhatsApp, "dc:123456789" for Discord)'),
     name: z.string().describe('Display name for the group'),
     folder: z.string().describe('Folder name for group files (lowercase, hyphens, e.g., "family-chat")'),
     trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
