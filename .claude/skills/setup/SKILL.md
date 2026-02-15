@@ -359,7 +359,37 @@ Show only the **10 most recent** group names to the user and ask them to pick on
 sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE name LIKE '%GROUP_NAME%' AND jid LIKE '%@g.us'"
 ```
 
-### 6d. Write the configuration
+### 6d. Configure Timezone
+
+Ask the user:
+> What timezone are you in? This ensures scheduled tasks (reminders, digests) know the correct day and time.
+
+Detect the system timezone as a suggested default:
+
+```bash
+timedatectl show --property=Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo "UTC"
+```
+
+Present common options using `AskUserQuestion`:
+- Use detected system timezone (show what was detected)
+- Europe/London
+- America/New_York
+- America/Los_Angeles
+- Other (let me type it)
+
+Validate their choice is a real IANA timezone:
+
+```bash
+TZ="THEIR_CHOICE" date "+%Z" 2>/dev/null && echo "valid" || echo "invalid"
+```
+
+Add it to `.env`:
+
+```bash
+echo "TZ=THEIR_CHOICE" >> .env
+```
+
+### 6e. Write the configuration
 
 Once you have the JID, configure it. Use the assistant name from step 6a.
 
