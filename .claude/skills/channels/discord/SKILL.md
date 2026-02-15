@@ -2,7 +2,7 @@
 name: channel-discord
 description: >
   Discord channel plugin — setup and installation. Adds Discord as a channel.
-  Can run alongside WhatsApp or other channels. Requires `npm install discord.js`.
+  Can run alongside WhatsApp or other channels.
   Triggers on "add discord", "discord setup", "discord channel".
 ---
 
@@ -12,13 +12,7 @@ Adds Discord as a messaging channel to NanoClaw.
 
 ## Prerequisites
 
-### 1. Install discord.js
-
-```bash
-npm install discord.js
-```
-
-### 2. Create a Discord Bot
+### 1. Create a Discord Bot
 
 Tell the user:
 
@@ -38,7 +32,7 @@ Tell the user:
 
 Wait for the user to provide the bot token.
 
-### 3. Get Channel ID
+### 2. Get Channel ID
 
 The easiest way to find a channel ID is to let the bot discover it:
 

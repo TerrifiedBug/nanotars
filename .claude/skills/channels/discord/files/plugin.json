@@ -3,5 +3,6 @@
   "description": "Discord channel via discord.js",
   "hooks": ["onChannel"],
   "channelPlugin": true,
-  "containerEnvVars": ["DISCORD_BOT_TOKEN"]
+  "containerEnvVars": ["DISCORD_BOT_TOKEN"],
+  "dependencies": true
 }
