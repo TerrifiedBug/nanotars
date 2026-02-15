@@ -33,6 +33,21 @@ export interface ChannelPluginConfig {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  /** Project paths and config values channels may need */
+  paths: {
+    storeDir: string;
+    groupsDir: string;
+    channelsDir: string;
+  };
+  /** Config values */
+  assistantName: string;
+  assistantHasOwnNumber: boolean;
+  /** DB helpers for group metadata sync */
+  db: {
+    getLastGroupSync(): string | null;
+    setLastGroupSync(): void;
+    updateChatName(jid: string, name: string): void;
+  };
 }
 
 /** API surface available to plugins */
