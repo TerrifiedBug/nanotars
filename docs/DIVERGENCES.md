@@ -16,10 +16,10 @@ This document tracks all legitimate divergences between our fork's `main` branch
 | DOCKER | Docker/Linux support (runtime abstraction, mount permissions, headless) |
 | BUGFIX | Bug fixes not yet upstreamed |
 | SECURITY | Security hardening (secret isolation, prompt injection, path blocking) |
-| ASSISTANT_NAME | Configurable assistant name via `$ASSISTANT_NAME` env var |
+| ASSISTANT_NAME | Configurable assistant name via `$ASSISTANT_NAME` env var (**pending upstream: PR #235**) |
 | TASK | Scheduled task improvements (model selection, error notifications) |
 | MEDIA | Media download pipeline (image/video/audio/document) |
-| OTHER | Minor improvements (read receipts, DRY refactors, badge cleanup) |
+| OTHER | Minor improvements (read receipts, DRY refactors) |
 
 ## Source Code
 
@@ -69,10 +69,10 @@ This document tracks all legitimate divergences between our fork's `main` branch
 | `.gitignore` | Modified | PLUGIN | `plugins/*` and `!plugins/.gitkeep` |
 | `plugins/.gitkeep` | **New** | PLUGIN | Tracks empty plugins directory |
 | `CLAUDE.md` | Modified | SECURITY | Added security section referencing `docs/SECURITY.md` |
-| `README.md` | Modified | OTHER | Removed broken `repo-tokens/` badge link |
+| `README.md` | **In sync** | — | Synced after upstream added repo-tokens badge |
 | `groups/global/CLAUDE.md` | Modified | ASSISTANT_NAME | `Andy` -> `$ASSISTANT_NAME` env var |
 | `groups/main/CLAUDE.md` | Modified | ASSISTANT_NAME, SECURITY | `$ASSISTANT_NAME` + anti-prompt-injection security rules |
-| `docs/DIVERGENCES.md` | **New** | OTHER | This file -- fork divergence tracking |
+| `docs/DIVERGENCES.md` | **New** | OTHER | This file — fork divergence tracking |
 | `package-lock.json` | Modified | OTHER | Platform-specific (Linux vs macOS optional deps) |
 
 ## Skills (`.claude/skills/`)
@@ -112,8 +112,63 @@ This document tracks all legitimate divergences between our fork's `main` branch
 
 ## Not in Fork (upstream-only, intentionally excluded)
 
-| Path | Reason |
-|------|--------|
-| `.github/workflows/test.yml` | Upstream CI -- we don't use GitHub Actions |
-| `.github/workflows/update-tokens.yml` | Upstream badge generator |
-| `repo-tokens/` (4 files) | Upstream token-counting badge system |
+None — all upstream files are now synced.
+
+*Previously excluded: `repo-tokens/`, `update-tokens.yml`, `.github/workflows/test.yml` — all synced as of 2026-02-15.*
+
+## Pending Upstream Changes
+
+### Our PRs (submitted 2026-02-15)
+
+| PR | Title | Type | Files | Status |
+|----|-------|------|-------|--------|
+| [#245](https://github.com/qwibitai/nanoclaw/pull/245) | `>=` timestamp fix + dedup guard | Fix | `src/db.ts`, `src/index.ts` | Open |
+| [#246](https://github.com/qwibitai/nanoclaw/pull/246) | Exclude test files from agent-runner build | Simplification | `container/agent-runner/tsconfig.json` | Open |
+| [#247](https://github.com/qwibitai/nanoclaw/pull/247) | Consecutive error tracking | Fix | `src/index.ts` | Open |
+| [#248](https://github.com/qwibitai/nanoclaw/pull/248) | Duplicate task prevention guidance | Fix | `container/agent-runner/src/ipc-mcp-stdio.ts` | Open |
+
+When these merge and we sync, the following divergences collapse:
+
+| PR | Divergences Resolved |
+|----|---------------------|
+| #245 | `src/db.ts` `>=` fix (BUGFIX), `src/index.ts` message dedup (BUGFIX) |
+| #246 | `container/agent-runner/tsconfig.json` (OTHER) |
+| #247 | `src/index.ts` consecutive error tracking (BUGFIX) |
+| #248 | `container/agent-runner/src/ipc-mcp-stdio.ts` task warning (BUGFIX) |
+
+### Upstream PR #235 (testing for maintainer)
+
+[qwibitai/nanoclaw#235](https://github.com/qwibitai/nanoclaw/pull/235) — `feat: add is_bot_message column and support dedicated phone numbers`
+
+When this merges and we sync, the following divergences collapse:
+
+| Current Divergence | Why It Collapses |
+|--------------------|------------------|
+| `src/env.ts` (SECURITY) | PR adds upstream `.env` reader (uses `dotenv`) |
+| `src/db.ts` `is_bot_message` (BUGFIX) | PR adds same column + migration |
+| `src/config.ts` `ASSISTANT_HAS_OWN_NUMBER` (ASSISTANT_NAME) | PR adds this env var upstream |
+| `src/router.ts` prefix removal (ASSISTANT_NAME) | PR moves prefix to WhatsApp channel |
+| `src/ipc.ts` prefix removal (ASSISTANT_NAME) | PR removes manual prefix upstream |
+| `src/channels/whatsapp.ts` bot detection (BUGFIX) | PR adds bot detection via `is_bot_message` |
+| `src/channels/whatsapp.ts` prefix + queue flush (ASSISTANT_NAME, BUGFIX) | PR centralizes prefix in channel + fixes flush |
+| `src/types.ts` `is_bot_message` (BUGFIX) | PR adds this field upstream |
+| `groups/global/CLAUDE.md` name (ASSISTANT_NAME) | PR makes name configurable |
+
+### After all pending PRs merge
+
+**What remains ours:** PLUGIN, DOCKER, MEDIA, TASK (model selection, error notifications), SECURITY (hooks), and fork-only BUGFIX items (env file quoting — only exists in our env mount code).
+
+### Assessed but not PR-able
+
+| Divergence | Why Not |
+|------------|---------|
+| Plugin system | Feature — upstream uses skills-only architecture |
+| Docker runtime abstraction | Compatibility — `convert-to-docker` skill exists upstream |
+| Media download pipeline | Capability — could become a skill |
+| Task model selection | Enhancement |
+| Task error notifications | Enhancement |
+| Heartbeat typing indicator | Enhancement |
+| Read receipts | Enhancement |
+| Security hooks (`security-hooks.ts`) | New capability (complementary to upstream's trust model) |
+| Env file quoting | Only applies to our fork's env mount mechanism |
+| Queue flush fix | Already part of PR #235 (authored by maintainer) |
