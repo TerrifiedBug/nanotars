@@ -1,7 +1,7 @@
 ---
 name: calendar
 description: Read and manage calendars. Use for scheduling, checking availability, creating events, or any calendar-related request. Supports Google Calendar (gog) and CalDAV (iCloud, Nextcloud, Fastmail).
-allowed-tools: Bash(gog:*,cal:*,curl:*)
+allowed-tools: Bash(gog:*,node:*,curl:*)
 ---
 
 # Calendar Access
@@ -30,16 +30,16 @@ gog calendar create --title "Meeting" --start "2025-01-15T10:00:00" --end "2025-
 
 ## CalDAV Calendars (iCloud, Nextcloud, Fastmail)
 
-The `cal` CLI reads CALDAV_ACCOUNTS from the environment.
+The cal CLI is mounted at `/opt/cal-cli/` and reads CALDAV_ACCOUNTS from the environment.
 
 List calendars:
 ```bash
-cal calendars
+node /opt/cal-cli/dist/index.js calendars
 ```
 
 List events:
 ```bash
-cal events --from today --to "+7d"
+node /opt/cal-cli/dist/index.js events --from today --to "+7d"
 ```
 
 ## Tips

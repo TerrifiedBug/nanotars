@@ -114,6 +114,59 @@ cp .claude/skills/add-cal/files/package-lock.json plugins/calendar/
 cd plugins/calendar && npm install && npm run build
 ```
 
+### Step 5: Configure Container Mounts
+
+The plugin.json needs `containerMounts` with absolute paths so the container can access gog config and/or the cal CLI. Write the correct plugin.json based on which providers were configured:
+
+**Google Calendar only:**
+```bash
+NANOCLAW_DIR=$(pwd)
+cat > plugins/calendar/plugin.json << EOF
+{
+  "name": "calendar",
+  "description": "Google Calendar (gog) and CalDAV calendar access",
+  "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
+  "containerMounts": [
+    {"hostPath": "${NANOCLAW_DIR}/data/gogcli", "containerPath": "/home/node/.config/gogcli"}
+  ],
+  "hooks": []
+}
+EOF
+```
+
+**CalDAV only:**
+```bash
+NANOCLAW_DIR=$(pwd)
+cat > plugins/calendar/plugin.json << EOF
+{
+  "name": "calendar",
+  "description": "Google Calendar (gog) and CalDAV calendar access",
+  "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
+  "containerMounts": [
+    {"hostPath": "${NANOCLAW_DIR}/plugins/calendar", "containerPath": "/opt/cal-cli"}
+  ],
+  "hooks": []
+}
+EOF
+```
+
+**Both Google Calendar and CalDAV:**
+```bash
+NANOCLAW_DIR=$(pwd)
+cat > plugins/calendar/plugin.json << EOF
+{
+  "name": "calendar",
+  "description": "Google Calendar (gog) and CalDAV calendar access",
+  "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
+  "containerMounts": [
+    {"hostPath": "${NANOCLAW_DIR}/data/gogcli", "containerPath": "/home/node/.config/gogcli"},
+    {"hostPath": "${NANOCLAW_DIR}/plugins/calendar", "containerPath": "/opt/cal-cli"}
+  ],
+  "hooks": []
+}
+EOF
+```
+
 Rebuild and restart:
 ```bash
 npm run build

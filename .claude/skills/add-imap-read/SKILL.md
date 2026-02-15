@@ -80,9 +80,7 @@ Read-only email access for agent containers via IMAP. Supports multiple provider
 
 5. Copy plugin files:
    ```bash
-   mkdir -p plugins/imap-read/container-skills
-   cp .claude/skills/add-imap-read/files/plugin.json plugins/imap-read/
-   cp .claude/skills/add-imap-read/files/container-skills/SKILL.md plugins/imap-read/container-skills/
+   cp -r .claude/skills/add-imap-read/files/ plugins/imap-read/
    ```
 
 6. Rebuild and restart:
