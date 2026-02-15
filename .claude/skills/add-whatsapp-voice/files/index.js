@@ -34,36 +34,41 @@ async function transcribeWithOpenAI(audioPath, config) {
 }
 
 /**
- * onInboundMessage hook -- transcribe voice notes.
- * The WhatsApp channel saves audio files to mediaPath. This hook reads the
- * saved file and transcribes it. Voice notes have mediaType 'audio' and
- * content containing '[audio: /workspace/group/media/...]'.
+ * onInboundMessage hook — transcribe voice notes.
+ * The WhatsApp channel sets mediaType='audio' and mediaHostPath for audio messages.
  */
 export async function onInboundMessage(msg, channel) {
-  // Only process audio messages that have a saved media file
-  if (msg.mediaType !== 'audio' || !msg.mediaPath) return msg;
-
-  // Resolve the host path from the container-relative path
-  // mediaPath is like /workspace/group/media/xyz.ogg — map to groups/<folder>/media/xyz.ogg
-  const hostPath = msg.mediaPath.replace(/^\/workspace\/group\//, path.join(process.cwd(), 'groups', msg.chat_jid.replace(/@.*$/, ''), ''));
-  if (!fs.existsSync(hostPath)) return msg;
+  if (msg.mediaType !== 'audio' || !msg.mediaHostPath) return msg;
+  if (!fs.existsSync(msg.mediaHostPath)) return msg;
 
   const config = loadConfig();
-  if (!config.enabled) return msg;
+  if (!config.enabled) {
+    msg.content = msg.content
+      ? `${msg.content}\n${config.fallbackMessage}`
+      : config.fallbackMessage;
+    return msg;
+  }
 
   try {
     let transcript = null;
     if (config.provider === 'openai') {
-      transcript = await transcribeWithOpenAI(hostPath, config);
+      transcript = await transcribeWithOpenAI(msg.mediaHostPath, config);
     }
 
     if (transcript) {
       const trimmed = transcript.trim();
       // Replace the [audio: path] annotation with the transcription
       msg.content = msg.content.replace(/\[audio: [^\]]+\]/, `[Voice: ${trimmed}]`);
+    } else {
+      msg.content = msg.content
+        ? `${msg.content}\n${config.fallbackMessage}`
+        : config.fallbackMessage;
     }
   } catch (err) {
     console.error('Transcription plugin error:', err);
+    msg.content = msg.content
+      ? `${msg.content}\n[Voice Message - transcription failed]`
+      : '[Voice Message - transcription failed]';
   }
 
   return msg;

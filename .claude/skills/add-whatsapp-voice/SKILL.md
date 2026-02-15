@@ -1,11 +1,11 @@
 ---
-name: add-voice-transcription
-description: Add voice message transcription to NanoClaw using OpenAI's Whisper API. Automatically transcribes WhatsApp voice notes so the agent can read and respond to them.
+name: add-whatsapp-voice
+description: Add WhatsApp voice message transcription to NanoClaw using OpenAI's Whisper API. Automatically transcribes voice notes so the agent can read and respond to them. Triggers on "add whatsapp voice", "voice transcription", "whisper", "transcribe voice".
 ---
 
-# Add Voice Message Transcription
+# Add WhatsApp Voice Transcription
 
-Automatic voice message transcription via OpenAI's Whisper API. When users send voice notes in WhatsApp, the `onInboundMessage` hook transcribes them before the agent sees the message.
+Automatic voice message transcription via OpenAI's Whisper API. When users send voice notes in WhatsApp, the transcription hook converts them to text before the agent sees the message.
 
 ## Prerequisites
 
@@ -55,7 +55,7 @@ Wait for user to confirm they have an API key before continuing.
 
 2. Copy plugin files:
    ```bash
-   cp -r .claude/skills/add-voice-transcription/files/ plugins/transcription/
+   cp -r .claude/skills/add-whatsapp-voice/files/ plugins/transcription/
    ```
 
 3. Install dependencies (use `--legacy-peer-deps` due to Zod v3/v4 conflict):

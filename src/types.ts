@@ -52,8 +52,10 @@ export interface NewMessage {
   is_bot_message?: boolean;
   /** Media type hint: 'image', 'video', 'audio', 'document' */
   mediaType?: string;
-  /** Host path where media file was saved */
+  /** Container-relative path for media (e.g., /workspace/group/media/xyz.ogg) */
   mediaPath?: string;
+  /** Absolute host path where media file was saved (for host-side hooks) */
+  mediaHostPath?: string;
 }
 
 export interface ScheduledTask {

@@ -189,11 +189,13 @@ export class WhatsAppChannel implements Channel {
             msg.message?.documentMessage || msg.message?.audioMessage;
           let mediaType: string | undefined;
           let mediaPath: string | undefined;
+          let mediaHostPath: string | undefined;
           if (hasMedia) {
             const media = await this.downloadMedia(msg, groups[chatJid].folder);
             if (media) {
               mediaType = media.type;
               mediaPath = media.path;
+              mediaHostPath = media.hostPath;
               content = content
                 ? `${content}\n[${media.type}: ${media.path}]`
                 : `[${media.type}: ${media.path}]`;
@@ -211,6 +213,7 @@ export class WhatsAppChannel implements Channel {
             is_bot_message: isBotMessage,
             mediaType,
             mediaPath,
+            mediaHostPath,
           });
         }
 
@@ -261,7 +264,7 @@ export class WhatsAppChannel implements Channel {
   private async downloadMedia(
     msg: Parameters<typeof downloadMediaMessage>[0],
     groupFolder: string,
-  ): Promise<{ path: string; type: string } | null> {
+  ): Promise<{ path: string; hostPath: string; type: string } | null> {
     const mediaTypes: Array<{ key: string; type: string; ext: string }> = [
       { key: 'imageMessage', type: 'image', ext: 'jpg' },
       { key: 'videoMessage', type: 'video', ext: 'mp4' },
@@ -283,7 +286,7 @@ export class WhatsAppChannel implements Channel {
         fs.writeFileSync(filePath, buffer);
 
         logger.info({ groupFolder, type: mt.type, filename }, 'Media downloaded');
-        return { path: `/workspace/group/media/${filename}`, type: mt.type };
+        return { path: `/workspace/group/media/${filename}`, hostPath: filePath, type: mt.type };
       } catch (err) {
         logger.warn({ err, msgId: msg.key.id, type: mt.type }, 'Failed to download media');
       }
