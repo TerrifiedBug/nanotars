@@ -29,9 +29,14 @@ Calendar integration for NanoClaw agent containers. Two tools are available:
 
 ### Step 3A: Google Calendar (gog CLI)
 
-Install gog if needed:
+Install gog on the host if needed:
 ```bash
 which gog && echo "GOG_INSTALLED" || curl -sL "https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin gog
+```
+
+Add gog to the container image if not already present:
+```bash
+grep -q "gogcli" container/Dockerfile && echo "ALREADY_IN_DOCKERFILE" || sed -i '/^# Install agent-browser/i # Install gog CLI (Google Calendar, Gmail)\nRUN curl -sL "https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin gog\n' container/Dockerfile
 ```
 
 Import OAuth credentials (user provides their client_secret.json path):
@@ -95,9 +100,9 @@ echo 'CALDAV_ACCOUNTS=[{"name":"iCloud","serverUrl":"https://caldav.icloud.com",
 
 Copy plugin files:
 ```bash
-mkdir -p plugins/calendar/skills
+mkdir -p plugins/calendar/container-skills
 cp .claude/skills/add-cal/files/plugin.json plugins/calendar/
-cp .claude/skills/add-cal/files/container-skills/SKILL.md plugins/calendar/skills/
+cp .claude/skills/add-cal/files/container-skills/SKILL.md plugins/calendar/container-skills/
 ```
 
 For CalDAV (`cal` CLI), also copy and install the CLI tool:
@@ -139,5 +144,9 @@ Tell the user:
    sed -i '/^CALDAV_ACCOUNTS=/d' .env
    ```
 3. `rm -rf data/gogcli`
-4. Rebuild and restart.
-5. Revoke app-specific passwords in provider security settings.
+4. Remove gog from the container image (if no other plugins need it):
+   ```bash
+   sed -i '/Install gog CLI/d; /gogcli.*tar.gz/d' container/Dockerfile
+   ```
+5. Rebuild and restart.
+6. Revoke app-specific passwords in provider security settings.

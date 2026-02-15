@@ -129,10 +129,10 @@ The claude-mem worker daemon runs on the host (port 37777) and stores observatio
 
 10. Copy plugin files:
     ```bash
-    mkdir -p plugins/claude-mem/skills plugins/claude-mem/hooks
+    mkdir -p plugins/claude-mem/container-skills plugins/claude-mem/hooks
     cp .claude/skills/add-claude-mem/files/plugin.json plugins/claude-mem/
     cp .claude/skills/add-claude-mem/files/hooks/post-tool-use.js plugins/claude-mem/hooks/
-    cp .claude/skills/add-claude-mem/files/container-skills/SKILL.md plugins/claude-mem/skills/
+    cp .claude/skills/add-claude-mem/files/container-skills/SKILL.md plugins/claude-mem/container-skills/
     ```
 
 11. Rebuild and restart:

@@ -32,12 +32,12 @@ This skill helps users add capabilities or modify behavior. Use AskUserQuestion 
 
 **Important distinction:**
 - `.claude/skills/` in the project root → for Claude Code in this terminal (setup, debug, customize)
-- `plugins/{name}/skills/SKILL.md` → agent instructions, auto-mounted into containers by the plugin loader
+- `plugins/{name}/container-skills/SKILL.md` → agent instructions, auto-mounted into containers by the plugin loader
 - `container/skills/` → core-only agent skills shipped with upstream (e.g., `agent-browser`)
 
 ### How agent skills work
 
-The plugin loader discovers `plugins/*/skills/` directories and mounts them read-only into containers at `/workspace/.claude/skills/{name}/`. Claude Code's walk-up discovery finds them automatically — no rebuild needed.
+The plugin loader discovers `plugins/*/container-skills/` directories and mounts them read-only into containers at `/workspace/.claude/skills/{name}/`. Claude Code's walk-up discovery finds them automatically — no rebuild needed.
 
 The agent also loads knowledge from:
 1. **`groups/global/CLAUDE.md`** — shared across ALL groups
@@ -48,7 +48,7 @@ The agent also loads knowledge from:
 Create a plugin directory with a manifest and skill file:
 
 ```bash
-mkdir -p plugins/my-skill/skills
+mkdir -p plugins/my-skill/container-skills
 ```
 
 Write `plugins/my-skill/plugin.json`:
@@ -61,7 +61,7 @@ Write `plugins/my-skill/plugin.json`:
 }
 ```
 
-Write `plugins/my-skill/skills/SKILL.md` with standard Claude Code skill frontmatter:
+Write `plugins/my-skill/container-skills/SKILL.md` with standard Claude Code skill frontmatter:
 
 ```markdown
 ---
@@ -84,9 +84,9 @@ Add a section to that group's `groups/{folder}/CLAUDE.md`.
 ### Importing skills from OpenClaw or external sources
 
 1. Fetch the skill content (e.g., from `https://github.com/openclaw/openclaw/blob/main/skills/{name}/SKILL.md`)
-2. Create a plugin: `mkdir -p plugins/{name}/skills`
+2. Create a plugin: `mkdir -p plugins/{name}/container-skills`
 3. Write a `plugin.json` manifest (see above)
-4. Save the skill as `plugins/{name}/skills/SKILL.md` (keep the frontmatter — the agent uses it)
+4. Save the skill as `plugins/{name}/container-skills/SKILL.md` (keep the frontmatter — the agent uses it)
 5. If the skill requires system packages (e.g., `ffmpeg`) not in the container, add them to `container/Dockerfile` and rebuild with `./container/build.sh`
 6. If the skill requires npm packages, install them in `container/agent-runner/` and rebuild
 7. Restart NanoClaw
@@ -114,10 +114,10 @@ Questions to ask:
 - Which groups should have access?
 
 Implementation:
-1. Create a plugin directory: `mkdir -p plugins/{name}/skills`
+1. Create a plugin directory: `mkdir -p plugins/{name}/container-skills`
 2. Write `plugin.json` with any needed `containerEnvVars`
 3. Add an `mcp.json` fragment in the plugin directory with the MCP server config (the plugin loader merges it with the root `.mcp.json`)
-4. Write `skills/SKILL.md` documenting the available tools for the agent
+4. Write `container-skills/SKILL.md` documenting the available tools for the agent
 5. Add env var values to `.env` and restart
 
 ### Changing Assistant Behavior
