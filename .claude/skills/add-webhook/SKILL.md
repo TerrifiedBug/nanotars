@@ -136,7 +136,7 @@ export async function onStartup(ctx) {
       }
 
       const messageId = `wh-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-      ctx.insertMessage(mainJid, messageId, source, text);
+      ctx.insertMessage(mainJid, messageId, `webhook:${source}`, source, text);
 
       ctx.logger.info({ source, messageId, length: text.length }, 'Webhook message injected');
       res.writeHead(200, { 'Content-Type': 'application/json' });
