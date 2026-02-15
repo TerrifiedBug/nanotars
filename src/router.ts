@@ -1,3 +1,4 @@
+import { logger } from './logger.js';
 import { Channel, NewMessage } from './types.js';
 
 export function escapeXml(s: string): string {
@@ -25,14 +26,18 @@ export function formatOutbound(rawText: string): string {
   return text;
 }
 
-export function routeOutbound(
+export async function routeOutbound(
   channels: Channel[],
   jid: string,
   text: string,
-): Promise<void> {
+): Promise<boolean> {
   const channel = channels.find((c) => c.ownsJid(jid) && c.isConnected());
-  if (!channel) throw new Error(`No channel for JID: ${jid}`);
-  return channel.sendMessage(jid, text);
+  if (!channel) {
+    logger.warn({ jid }, 'No connected channel for JID, message dropped');
+    return false;
+  }
+  await channel.sendMessage(jid, text);
+  return true;
 }
 
 export function findChannel(

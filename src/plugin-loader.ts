@@ -3,6 +3,7 @@ import path from 'path';
 
 import { logger } from './logger.js';
 import type {
+  ChannelPluginConfig,
   InboundMessage,
   LoadedPlugin,
   PluginContext,
@@ -43,6 +44,14 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
         )
       : [],
     dependencies: raw.dependencies === true,
+    channelPlugin: raw.channelPlugin === true,
+    authSkill: typeof raw.authSkill === 'string' ? raw.authSkill : undefined,
+    channels: Array.isArray(raw.channels)
+      ? raw.channels.filter((v): v is string => typeof v === 'string')
+      : undefined,
+    groups: Array.isArray(raw.groups)
+      ? raw.groups.filter((v): v is string => typeof v === 'string')
+      : undefined,
   };
 }
 
@@ -156,14 +165,25 @@ export class PluginRegistry {
     return current;
   }
 
-  /** Call onStartup on all plugins, collect channels from onChannel hooks */
+  /** Get plugins that declare channelPlugin: true */
+  getChannelPlugins(): LoadedPlugin[] {
+    return this.plugins.filter(p => p.manifest.channelPlugin);
+  }
+
+  /** Initialize a single channel plugin — call before startup() */
+  async initChannel(plugin: LoadedPlugin, ctx: PluginContext, config: ChannelPluginConfig): Promise<Channel> {
+    if (!plugin.hooks.onChannel) {
+      throw new Error(`Plugin ${plugin.manifest.name} does not export onChannel`);
+    }
+    const channel = await plugin.hooks.onChannel(ctx, config);
+    this._channels.push(channel);
+    logger.info({ plugin: plugin.manifest.name, channel: channel.name }, 'Plugin channel registered');
+    return channel;
+  }
+
+  /** Call onStartup on all non-channel plugins */
   async startup(ctx: PluginContext): Promise<void> {
     for (const plugin of this.plugins) {
-      if (plugin.hooks.onChannel) {
-        const channel = await plugin.hooks.onChannel(ctx);
-        this._channels.push(channel);
-        logger.info({ plugin: plugin.manifest.name, channel: channel.name }, 'Plugin channel registered');
-      }
       if (plugin.hooks.onStartup) {
         await plugin.hooks.onStartup(ctx);
         logger.info({ plugin: plugin.manifest.name }, 'Plugin started');

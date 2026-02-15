@@ -1,5 +1,5 @@
 import type { Logger } from 'pino';
-import type { Channel, NewMessage, RegisteredGroup } from './types.js';
+import type { Channel, NewMessage, OnInboundMessage, OnChatMetadata, RegisteredGroup } from './types.js';
 
 /** Plugin manifest (plugin.json) */
 export interface PluginManifest {
@@ -15,10 +15,25 @@ export interface PluginManifest {
   containerMounts?: Array<{ hostPath: string; containerPath: string }>;
   /** Whether this plugin has its own package.json/node_modules */
   dependencies?: boolean;
+  /** True if this plugin provides a channel (WhatsApp, Telegram, etc.) */
+  channelPlugin?: boolean;
+  /** Skill name for interactive auth setup (e.g. "setup-whatsapp") */
+  authSkill?: string;
+  /** Which channel types this plugin applies to. Default: ["*"] (all) */
+  channels?: string[];
+  /** Which group folders get this plugin's container injection. Default: ["*"] (all) */
+  groups?: string[];
 }
 
 /** Message passed through onInboundMessage hooks */
 export type InboundMessage = NewMessage;
+
+/** Config passed to channel plugins so they can feed messages into core */
+export interface ChannelPluginConfig {
+  onMessage: OnInboundMessage;
+  onChatMetadata: OnChatMetadata;
+  registeredGroups: () => Record<string, RegisteredGroup>;
+}
 
 /** API surface available to plugins */
 export interface PluginContext {
@@ -34,7 +49,7 @@ export interface PluginHooks {
   onStartup?(ctx: PluginContext): Promise<void>;
   onShutdown?(): Promise<void>;
   onInboundMessage?(msg: InboundMessage, channel: string): Promise<InboundMessage>;
-  onChannel?(ctx: PluginContext): Promise<Channel>;
+  onChannel?(ctx: PluginContext, config: ChannelPluginConfig): Promise<Channel>;
 }
 
 /** A loaded plugin instance */

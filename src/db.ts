@@ -105,6 +105,19 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* column already exists */
   }
+
+  // Add channel column to registered_groups (identifies which channel plugin owns this group)
+  try {
+    database.exec(
+      `ALTER TABLE registered_groups ADD COLUMN channel TEXT`,
+    );
+    // Backfill: all existing groups are WhatsApp
+    database.exec(
+      `UPDATE registered_groups SET channel = 'whatsapp' WHERE channel IS NULL`,
+    );
+  } catch {
+    /* column already exists */
+  }
 }
 
 export function initDatabase(): void {
@@ -552,10 +565,11 @@ export function getRegisteredGroup(
 export function setRegisteredGroup(
   jid: string,
   group: RegisteredGroup,
+  channel?: string,
 ): void {
   db.prepare(
-    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, channel)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     jid,
     group.name,
@@ -564,6 +578,7 @@ export function setRegisteredGroup(
     group.added_at,
     group.containerConfig ? JSON.stringify(group.containerConfig) : null,
     group.requiresTrigger === undefined ? 1 : group.requiresTrigger ? 1 : 0,
+    channel || null,
   );
 }
 
