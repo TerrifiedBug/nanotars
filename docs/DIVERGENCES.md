@@ -46,15 +46,15 @@ This document tracks all divergences between our fork's `main` branch and `upstr
 | File | Status | Categories | Summary |
 |------|--------|------------|---------|
 | `container/skills/` | **Removed** | PLUGIN | Core skills (agent-browser) moved to `plugins/agent-browser/` — all skills now delivered via plugin system |
-| `container/Dockerfile` | Modified | PLUGIN | Added `jq`, skills directory, env-dir sourcing in entrypoint |
+| `container/Dockerfile` | Modified | PLUGIN | Added `jq`, skills directory, env-dir sourcing in entrypoint, `npm prune --omit=dev` to remove vitest from image |
 | `container/build.sh` | Modified | DOCKER | Auto-detects Docker vs Apple Container runtime |
 | `container/agent-runner/src/index.ts` | Modified | PLUGIN, SECURITY, TASK, BUGFIX | Plugin hooks, secret scrubbing, model selection, SDK error detection, hardcoded name fix |
 | `container/agent-runner/src/ipc-mcp-stdio.ts` | Modified | BUGFIX, TASK | Duplicate task warning, model parameter |
 | `container/agent-runner/src/security-hooks.ts` | **New** | SECURITY | Bash sanitization, `/proc/*/environ` blocking, `/tmp/input.json` blocking |
 | `container/agent-runner/src/security-hooks.test.ts` | **New** | SECURITY | Tests for security hooks |
-| `container/agent-runner/tsconfig.json` | Modified | BUGFIX | Exclude test files from production build |
-| `container/agent-runner/package.json` | Modified | SECURITY | Added vitest for testing |
-| `container/agent-runner/package-lock.json` | Modified | OTHER | Vitest dependency tree |
+| `container/agent-runner/tsconfig.json` | Modified | BUGFIX | Exclude `.test.ts` files — container entrypoint recompiles at runtime and fails if test imports (vitest) are included |
+| `container/agent-runner/package.json` | Modified | SECURITY | Added vitest devDependency + test script for `security-hooks.test.ts`; pruned from container image via `npm prune --omit=dev` |
+| `container/agent-runner/package-lock.json` | Modified | OTHER | Vitest dependency tree (devDependency only, pruned from container image) |
 
 ## Config / Docs
 
