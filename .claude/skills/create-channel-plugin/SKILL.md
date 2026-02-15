@@ -62,11 +62,11 @@ Ask about specifics, one at a time:
 Before generating:
 
 1. **Summarize** what will be created:
-   > "I'll create a `discord` channel plugin at `plugins/channels/discord/` with:
+   > "I'll create a `{name}` channel plugin with:
    > - `plugin.json` — manifest with `channelPlugin: true`
-   > - `index.js` — Discord bot using discord.js, implements Channel interface
+   > - `index.js` — {Platform} bot using {library}, implements Channel interface
    > - `auth.js` — standalone auth script (if applicable)
-   > - An `add-discord` installation skill at `.claude/skills/add-discord/`"
+   > - `/add-{name}` skill — so you can run `/add-{name}` to install it anytime"
 
 2. **List prerequisites** (npm packages, API setup)
 
@@ -74,7 +74,17 @@ Before generating:
 
 4. **Generate all files**
 
-5. **Offer to install**: "Want me to install this channel plugin now?"
+5. **Next step — make this prominent and unmissable:**
+
+   > **Your `{name}` channel plugin is ready! To install it, run `/add-{name}`.**
+
+   Then immediately ask with `AskUserQuestion`:
+   > "Want me to install it now, or would you prefer to run `/add-{name}` later?"
+   >
+   > Options: ["Install now", "I'll run /add-{name} later"]
+
+   - If **"Install now"**: Follow the generated `add-{name}` SKILL.md installation steps inline — install npm dependencies, copy plugin files into `plugins/channels/{name}/`, collect credentials from the user and add to `.env`, run `auth.js` if applicable, rebuild and restart. Do not tell the user to go read the SKILL.md — just execute the steps yourself.
+   - If **"I'll run /add-{name} later"**: Confirm with: "Sounds good. When you're ready, just say `/add-{name}` and I'll walk you through it."
 
 ### User-Facing Language
 
@@ -119,25 +129,37 @@ Before generating:
 
 ## Output Structure
 
-Everything goes under `.claude/skills/channels/{name}/`. The `files/` subdirectory holds the actual channel plugin code — it gets copied to `plugins/channels/{name}/` when the channel is installed. This location is important: `/setup` scans `.claude/skills/channels/` to discover available (but not yet installed) channels.
+You MUST create files in **two** locations:
+
+### 1. Channel plugin files: `.claude/skills/channels/{name}/`
+
+The `files/` subdirectory holds the actual channel plugin code — it gets copied to `plugins/channels/{name}/` when installed. `/setup` scans this directory to discover available (but not yet installed) channels.
 
 ```
 .claude/skills/channels/{name}/
-├── SKILL.md                        # Channel skill (auth, setup, installation instructions)
+├── SKILL.md                        # Channel reference (auth, setup details)
 └── files/                          # Template channel plugin (copied on install)
     ├── plugin.json                 # Manifest (always present)
     ├── index.js                    # Channel implementation (always present)
     └── auth.js                     # Auth setup script (if interactive auth needed)
 ```
 
-The generated SKILL.md must include a step that copies files into place:
+### 2. Discoverable install skill: `.claude/skills/add-{name}/`
 
-```bash
-mkdir -p plugins/channels/{name}
-cp -r .claude/skills/channels/{name}/files/ plugins/channels/{name}/
+This is the **user-facing entry point** — it shows up as `/add-{name}` in the skills list. Without this, users have no way to discover or invoke the installation.
+
+```
+.claude/skills/add-{name}/
+└── SKILL.md                        # Installation skill (name: add-{name})
 ```
 
-**Why `.claude/skills/channels/`?** The `/setup` skill scans this directory to show users which channels are available. Installed channels live at `plugins/channels/{name}/`; available-but-not-installed channels live at `.claude/skills/channels/{name}/`. This separation means `/setup` can offer to install a channel on demand.
+The `add-{name}` SKILL.md must:
+- Have frontmatter with `name: add-{name}` (e.g., `name: add-discord`)
+- Include the full installation flow: npm install, copy plugin files, collect credentials, restart
+- Reference the channel files with: `cp -r .claude/skills/channels/{name}/files/* plugins/channels/{name}/`
+- Include registration and verification steps
+
+**Why two locations?** The `channels/{name}/` directory holds the plugin source code and is scanned by `/setup` for channel discovery. The `add-{name}/` skill is the user-invocable command that appears in the skills list. Both are needed — without `add-{name}/`, users can't find the installer; without `channels/{name}/`, `/setup` can't discover available channels.
 
 ## Channel Plugin Templates
 
