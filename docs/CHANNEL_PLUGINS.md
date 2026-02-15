@@ -457,7 +457,7 @@ The built-in WhatsApp plugin at `plugins/channels/whatsapp/` is the reference im
 
 ### Key Implementation Details
 
-**Dependencies:** Uses `@whiskeysockets/baileys` from the main `package.json` (not a separate `node_modules`).
+**Dependencies:** Uses `@whiskeysockets/baileys` from its own `package.json` (`dependencies: true` in manifest).
 
 **JID ownership:** Claims `@g.us` (groups) and `@s.whatsapp.net` (DMs).
 
@@ -484,6 +484,33 @@ The built-in WhatsApp plugin at `plugins/channels/whatsapp/` is the reference im
 | `--pairing-code --phone NUMBER` | Numeric pairing code instead of QR |
 
 All modes write status to `data/channels/whatsapp/auth-status.txt` and handle 515 stream errors by auto-reconnecting.
+
+---
+
+## Removing a Channel Plugin
+
+To uninstall a channel plugin:
+
+1. **Stop NanoClaw** — the channel must not be connected during removal.
+
+2. **Cancel affected tasks** — cancel scheduled tasks targeting groups on this channel before removing their registrations:
+   ```bash
+   sqlite3 store/messages.db "UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (SELECT jid FROM registered_groups WHERE channel = 'telegram');"
+   ```
+
+3. **Remove group registrations** — delete entries for groups on this channel:
+   ```bash
+   sqlite3 store/messages.db "DELETE FROM registered_groups WHERE channel = 'telegram';"
+   ```
+
+4. **Remove the plugin directory:**
+   ```bash
+   rm -rf plugins/channels/telegram/
+   ```
+
+5. **Group folders are preserved** — the `groups/{folder}/` directories and their conversation history remain. Delete manually if not needed.
+
+6. **Restart NanoClaw** — it will start without the removed channel.
 
 ---
 
@@ -549,13 +576,22 @@ Add an exception so the plugin is tracked:
 
 ### 7. Add dependencies
 
-If your channel SDK isn't already in the main `package.json`, add it:
+Create a `package.json` in your plugin directory and set `"dependencies": true` in `plugin.json`:
 
-```bash
-npm install grammy  # or whatever SDK
+```json
+{
+  "name": "nanoclaw-channel-telegram",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "grammy": "^1.0.0"
+  }
+}
 ```
 
-Channel plugins share the host's `node_modules` (unless `"dependencies": true` in the manifest).
+Run `npm install` in your plugin directory. The plugin-loader runs `npm install` automatically when `dependencies: true` is set, but it's good practice to install once during development.
+
+Each channel plugin manages its own `node_modules`, keeping the core installation lightweight.
 
 ### 8. Test
 
