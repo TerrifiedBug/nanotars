@@ -33,7 +33,6 @@ This document tracks all legitimate divergences between our fork's `main` branch
 | `src/ipc.ts` | Modified | TASK | Model field |
 | `src/plugin-loader.ts` | **New** | PLUGIN | Plugin discovery, manifest parsing, env var collection, MCP merging, hook lifecycle |
 | `src/plugin-types.ts` | **New** | PLUGIN | TypeScript interfaces for plugin system |
-| `src/router.ts` | **In sync** | — | Prefix logic now matches upstream (moved to channel layer by PR #235) |
 | `src/task-scheduler.ts` | Modified | TASK, BUGFIX | `claimTask()`, shorter idle timeout, model selection, error notifications |
 | `src/types.ts` | Modified | MEDIA, TASK, PLUGIN | Media fields, model, async `OnInboundMessage` |
 | `src/channels/whatsapp.ts` | Modified | MEDIA, OTHER | Media download, read receipts |
@@ -68,7 +67,6 @@ This document tracks all legitimate divergences between our fork's `main` branch
 | `.gitignore` | Modified | PLUGIN | `plugins/*` and `!plugins/.gitkeep` |
 | `plugins/.gitkeep` | **New** | PLUGIN | Tracks empty plugins directory |
 | `CLAUDE.md` | Modified | SECURITY | Added security section referencing `docs/SECURITY.md` |
-| `README.md` | **In sync** | — | Synced after upstream added repo-tokens badge |
 | `groups/global/CLAUDE.md` | Modified | OTHER | References `$ASSISTANT_NAME` env var (upstream still hardcodes "Andy") |
 | `groups/main/CLAUDE.md` | Modified | SECURITY, OTHER | Anti-prompt-injection rules, `$ASSISTANT_NAME` env var, generic example triggers |
 | `docs/DIVERGENCES.md` | **New** | OTHER | This file — fork divergence tracking |
