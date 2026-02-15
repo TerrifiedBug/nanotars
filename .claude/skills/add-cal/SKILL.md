@@ -100,6 +100,7 @@ Copy plugin files:
 mkdir -p plugins/calendar/container-skills
 cp .claude/skills/add-cal/files/plugin.json plugins/calendar/
 cp .claude/skills/add-cal/files/container-skills/SKILL.md plugins/calendar/container-skills/
+cp .claude/skills/add-cal/files/Dockerfile.partial plugins/calendar/
 ```
 
 ### Step 5: Configure Container Mounts
