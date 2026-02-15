@@ -11,6 +11,7 @@ plugins/{name}/
   plugin.json              # Required — manifest declaring capabilities
   index.js                 # Host-side hook implementations (if hooks declared)
   mcp.json                 # MCP server config fragment (merged into container)
+  Dockerfile.partial       # Dockerfile commands merged at image build time
   container-skills/        # Agent skill files mounted into containers
     SKILL.md               # Claude Code skill (instructions + allowed-tools)
   hooks/                   # SDK hook scripts run inside containers
@@ -89,7 +90,7 @@ Plugin with additional container mounts:
   "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT", "CALDAV_ACCOUNTS"],
   "containerMounts": [
     {
-      "hostPath": "/data/nanoclaw/data/gogcli",
+      "hostPath": "data/gogcli",
       "containerPath": "/home/node/.config/gogcli"
     }
   ],
@@ -143,7 +144,7 @@ During shutdown:
 
 ## Container Integration
 
-Plugins affect agent containers through five mechanisms, all managed by the `PluginRegistry` and applied by `container-runner.ts` when spawning containers.
+Plugins affect agent containers through six mechanisms, all managed by the `PluginRegistry` and applied by `container-runner.ts` when spawning containers.
 
 ### Environment Variables
 
@@ -192,6 +193,35 @@ These are SDK hook scripts (e.g., `post-tool-use.js`) that the agent-runner load
 ### Container Mounts (`containerMounts`)
 
 Additional host directories declared in `containerMounts` are mounted read-only into the container at the specified `containerPath`. Paths that do not exist on the host are skipped with a warning.
+
+### Container Build Steps (`Dockerfile.partial`)
+
+Plugins that need system-level tools or compiled dependencies baked into the container image can include a `Dockerfile.partial` file. During `./container/build.sh`, all plugin partials are merged into the base Dockerfile before the `USER node` line.
+
+Example `plugins/calendar/Dockerfile.partial`:
+
+```dockerfile
+# Install gog CLI for Google Calendar
+RUN curl -sL "https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin gog
+
+# Build cal-cli for CalDAV support
+COPY plugins/calendar/cal-cli/ /opt/cal-cli/
+RUN cd /opt/cal-cli && npm install --omit=dev && npm run build && rm -rf src/ tsconfig.json
+```
+
+**When to use:**
+- Installing system binaries (CLI tools, native libraries)
+- Building TypeScript/compiled tools that run inside containers
+- Any dependency that should persist across container spawns (baked into the image)
+
+**When NOT to use:**
+- Runtime data that changes (use `containerMounts` instead)
+- Environment variables (use `containerEnvVars`)
+- Node.js packages available via npm (install in the plugin's own `package.json`)
+
+**Build context:** The build context is the project root, so `COPY` paths are relative to the NanoClaw directory. After adding or modifying a `Dockerfile.partial`, rebuild the container image with `./container/build.sh`.
+
+**Ordering:** Plugin partials are inserted in filesystem order (alphabetical by plugin path), after all base image setup but before the `USER node` line that switches to the non-root user.
 
 ## How Skills Create Plugins
 
