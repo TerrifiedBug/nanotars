@@ -1,11 +1,11 @@
 ---
 name: setup
-description: Run initial NanoClaw setup. Use when user wants to install dependencies, authenticate WhatsApp, register their main channel, or start the background services. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
+description: Run initial NanoClaw setup. Use when user wants to install dependencies, authenticate a channel, register their main channel, or start the background services. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
 ---
 
 # NanoClaw Setup
 
-Run all commands automatically. Only pause when user action is required (WhatsApp authentication, configuration choices).
+Run all commands automatically. Only pause when user action is required (channel authentication, configuration choices).
 
 **UX Note:** When asking the user questions, prefer using the `AskUserQuestion` tool instead of just outputting text. This integrates with Claude's built-in question/answer system for a better experience.
 
@@ -137,9 +137,72 @@ else
 fi
 ```
 
-## 5. WhatsApp Authentication
+## 5. Authenticate Channel
 
 **USER ACTION REQUIRED**
+
+NanoClaw uses channel plugins to connect to messaging platforms. Discover what's available.
+
+### 5a. Discover channels
+
+First, find **installed** channel plugins (already in `plugins/channels/`):
+
+```bash
+echo "=== INSTALLED ==="
+for f in plugins/channels/*/plugin.json; do
+  [ -f "$f" ] || continue
+  DIR=$(dirname "$f")
+  NAME=$(python3 -c "import json; print(json.load(open('$f'))['name'])" 2>/dev/null || basename "$DIR")
+  DESC=$(python3 -c "import json; print(json.load(open('$f')).get('description',''))" 2>/dev/null || echo "")
+  echo "$NAME|$DESC|$DIR"
+done
+
+echo "=== AVAILABLE (not yet installed) ==="
+for s in .claude/skills/channels/*/SKILL.md; do
+  [ -f "$s" ] || continue
+  CHANNEL_NAME=$(basename "$(dirname "$s")")
+  # Skip if already installed
+  [ -d "plugins/channels/$CHANNEL_NAME" ] && continue
+  echo "$CHANNEL_NAME|$(dirname "$s")"
+done
+```
+
+### 5b. Select channel
+
+Present both installed and available channels to the user. Mark which are installed and which need installation.
+
+**If only one channel plugin is installed and none available** (default: WhatsApp ships with NanoClaw): Skip selection and proceed with that channel.
+
+**If multiple channels available (installed or not)**: Ask the user which channel to set up as their main:
+
+> I found these channels:
+>
+> **Installed (ready to use):**
+> - **whatsapp** — WhatsApp channel via Baileys
+>
+> **Available (not yet installed):**
+> - **telegram** — Not part of the core plugin set. I can install it for you.
+>
+> Which channel do you want to use for your main (admin) channel?
+
+**If user picks an uninstalled channel**: Read the channel skill at `.claude/skills/channels/{name}/SKILL.md` and follow its installation instructions. This typically involves:
+1. Installing npm dependencies (e.g., `npm install grammy` for Telegram)
+2. Copying plugin files to `plugins/channels/{name}/` (if the skill has a `files/` directory)
+3. Collecting credentials (bot tokens, API keys) and adding them to `.env`
+
+After installation, continue with authentication below.
+
+**If no channels found at all** (neither installed nor available): Tell the user:
+
+> No channel plugins are installed or available. Use `/create-channel-plugin` to build one from scratch.
+
+Store the chosen channel name — it will be used in later steps (registration, troubleshooting).
+
+### 5b. Channel-specific authentication
+
+Based on the chosen channel, follow the appropriate auth flow below.
+
+#### WhatsApp Authentication
 
 The auth script supports two methods: QR code scanning and pairing code (phone number). Ask the user which they prefer.
 
@@ -151,7 +214,7 @@ The auth script writes status to `data/channels/whatsapp/auth-status.txt`:
 
 The script automatically handles error 515 (stream error after pairing) by reconnecting — this is normal and expected during pairing code auth.
 
-### Ask the user which method to use
+##### Ask the user which method to use
 
 > How would you like to authenticate WhatsApp?
 >
@@ -159,7 +222,7 @@ The script automatically handles error 515 (stream error after pairing) by recon
 > 2. **Pairing code** — Enter a numeric code on your phone, no camera needed
 > 3. **QR code in terminal** — Run the auth command yourself in another terminal
 
-### Option A: QR Code in Browser (Recommended)
+##### Option A: QR Code in Browser (Recommended)
 
 Detect if headless or has a display:
 
@@ -225,7 +288,7 @@ for i in $(seq 1 60); do STATUS=$(cat data/channels/whatsapp/auth-status.txt 2>/
 - If `failed:qr_timeout`, offer to retry (re-run the auth and regenerate the HTML page).
 - If `failed:logged_out`, delete `data/channels/whatsapp/auth/` and retry.
 
-### Option B: Pairing Code
+##### Option B: Pairing Code
 
 Ask the user for their phone number (with country code, no + or spaces, e.g. `14155551234`).
 
@@ -263,7 +326,7 @@ for i in $(seq 1 60); do STATUS=$(cat data/channels/whatsapp/auth-status.txt 2>/
 - If `failed:logged_out`, delete `data/channels/whatsapp/auth/` and retry.
 - If `failed:515` or timeout, the 515 reconnect should handle this automatically. If it persists, the user may need to temporarily stop other WhatsApp-connected apps on the same device.
 
-### Option C: QR Code in Terminal
+##### Option C: QR Code in Terminal
 
 Tell the user to run the auth command in another terminal window:
 
@@ -276,6 +339,30 @@ Tell the user to run the auth command in another terminal window:
 Replace `PROJECT_PATH` with the actual project path (use `pwd`).
 
 Wait for the user to confirm authentication succeeded, then continue to the next step.
+
+#### Other Channel Authentication
+
+For channels other than WhatsApp, check if the channel plugin has an `auth.js` script:
+
+```bash
+CHANNEL_DIR="plugins/channels/CHANNEL_NAME"
+[ -f "$CHANNEL_DIR/auth.js" ] && echo "HAS_AUTH_SCRIPT" || echo "NO_AUTH_SCRIPT"
+```
+
+**If it has `auth.js`:** Run it and follow its instructions:
+```bash
+node plugins/channels/CHANNEL_NAME/auth.js
+```
+
+**If no `auth.js`:** Check the plugin's `plugin.json` for `containerEnvVars` — these are credentials the channel needs. Ask the user for each credential and add them to `.env`. Common patterns:
+- Telegram: `TELEGRAM_BOT_TOKEN` — get from @BotFather
+- Discord: `DISCORD_BOT_TOKEN` — get from Discord Developer Portal
+- Slack: `SLACK_BOT_TOKEN` — get from Slack API console
+
+Check for existing auth state:
+```bash
+ls data/channels/CHANNEL_NAME/auth/ 2>/dev/null && echo "ALREADY_AUTHENTICATED" || echo "NEEDS_AUTH"
+```
 
 ## 6. Configure Assistant Name and Main Channel
 
@@ -303,17 +390,16 @@ Store their choice for use in the steps below.
 > - Can write to global memory that all groups can read
 > - Has read-write access to the entire NanoClaw project
 >
-> **Recommendation:** Use your personal "Message Yourself" chat or a solo WhatsApp group as your main channel. This ensures only you have admin control.
+> **Recommendation:** Use a private/DM chat (just you and the bot) as your main channel. This ensures only you have admin control.
 >
 > **Question:** Which setup will you use for your main channel?
 >
 > Options:
-> 1. Personal chat (Message Yourself) - Recommended
-> 2. DM with a specific phone number (e.g. your other phone)
-> 3. Solo WhatsApp group (just me)
-> 4. Group with other people (I understand the security implications)
+> 1. Private/DM chat (just you and the bot) - Recommended
+> 2. Solo group chat (just me)
+> 3. Group chat with other people (I understand the security implications)
 
-If they choose option 4, ask a follow-up:
+If they choose option 3, ask a follow-up:
 
 > You've chosen a group with other people. This means everyone in that group will have admin privileges over NanoClaw.
 >
@@ -324,11 +410,11 @@ If they choose option 4, ask a follow-up:
 >
 > Options:
 > 1. Yes, I understand and want to proceed
-> 2. No, let me use a personal chat or solo group instead
+> 2. No, let me use a private chat instead
 
 ### 6c. Register the main channel
 
-First build, then start the app briefly to connect to WhatsApp and sync group metadata. Use the Bash tool's timeout parameter (15000ms) — do NOT use the `timeout` shell command (it's not available on macOS). The app will be killed when the timeout fires, which is expected.
+First build, then start the app briefly to connect to the channel and sync metadata. Use the Bash tool's timeout parameter (15000ms) — do NOT use the `timeout` shell command (it's not available on macOS). The app will be killed when the timeout fires, which is expected.
 
 ```bash
 npm run build
@@ -339,15 +425,17 @@ Then run briefly (set Bash tool timeout to 15000ms):
 npm run dev
 ```
 
-**For personal chat** (they chose option 1):
+Now get the chat identifier (JID) for the main channel. The process depends on the channel chosen in step 5.
 
-Personal chats are NOT synced to the database on startup — only groups are. The JID for "Message Yourself" is the bot's own number. Use the number from the WhatsApp auth step and construct the JID as `{number}@s.whatsapp.net`.
+#### WhatsApp: Get JID
 
-**For DM with a specific number** (they chose option 2):
+**For private/DM chat** (they chose option 1):
 
-Ask the user for the phone number (with country code, no + or spaces, e.g. `14155551234`), then construct the JID as `{number}@s.whatsapp.net`.
+Personal chats are NOT synced to the database on startup — only groups are. The JID for a personal chat is the phone number with `@s.whatsapp.net`. Use the number from the WhatsApp auth step and construct the JID as `{number}@s.whatsapp.net`.
 
-**For group** (they chose option 3 or 4):
+Ask the user for the phone number if not already known (country code, no + or spaces, e.g. `14155551234`).
+
+**For group** (they chose option 2 or 3):
 
 Groups are synced on startup via `groupFetchAllParticipating`. Query the database for recent groups:
 ```bash
@@ -358,6 +446,17 @@ Show only the **10 most recent** group names to the user and ask them to pick on
 ```bash
 sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE name LIKE '%GROUP_NAME%' AND jid LIKE '%@g.us'"
 ```
+
+#### Telegram: Get JID
+
+Tell the user:
+> Send `/chatid` to the bot in the chat you want to use as your main channel. The bot will reply with the chat ID.
+
+The JID format is `tg:{chat_id}` — for example `tg:123456789` for a DM or `tg:-1001234567890` for a group.
+
+#### Other Channels: Get JID
+
+For other channels, check if the channel has a `listAvailableGroups()` method by looking at its implementation. If not, ask the user to provide the chat identifier directly. Each channel has its own ID format — refer to the channel plugin's documentation or `docs/CHANNEL_PLUGINS.md` for JID format conventions.
 
 ### 6d. Configure Timezone
 
@@ -391,9 +490,9 @@ echo "TZ=THEIR_CHOICE" >> .env
 
 ### 6e. Write the configuration
 
-Once you have the JID, configure it. Use the assistant name from step 6a.
+Once you have the JID, configure it. Use the assistant name from step 6a and the channel name from step 5.
 
-For personal chats (solo, no prefix needed), set `requiresTrigger` to `false`:
+For private/DM chats (solo, no prefix needed), set `requiresTrigger` to `false`:
 
 ```json
 {
@@ -402,12 +501,15 @@ For personal chats (solo, no prefix needed), set `requiresTrigger` to `false`:
     "folder": "main",
     "trigger": "@ASSISTANT_NAME",
     "added_at": "CURRENT_ISO_TIMESTAMP",
-    "requiresTrigger": false
+    "requiresTrigger": false,
+    "channel": "CHANNEL_NAME"
   }
 }
 ```
 
 For groups, keep `requiresTrigger` as `true` (default).
+
+**Important:** Always include the `channel` field with the channel plugin name (e.g., `"whatsapp"`, `"telegram"`, `"discord"`). This is stored in the `registered_groups` table and used for plugin scoping.
 
 Write to the database directly by creating a temporary registration script, or write `data/registered_groups.json` which will be auto-migrated on first run:
 
@@ -415,7 +517,7 @@ Write to the database directly by creating a temporary registration script, or w
 mkdir -p data
 ```
 
-Then write `data/registered_groups.json` with the correct JID, trigger, and timestamp.
+Then write `data/registered_groups.json` with the correct JID, trigger, channel, and timestamp.
 
 The group CLAUDE.md files use the `$ASSISTANT_NAME` environment variable — no name replacement needed.
 
@@ -471,7 +573,7 @@ For each directory they provide, ask:
 ### 7b. Configure Non-Main Group Access
 
 Ask the user:
-> Should **non-main groups** (other WhatsApp chats you add later) be restricted to **read-only** access even if read-write is allowed for the directory?
+> Should **non-main groups** (other registered chats you add later) be restricted to **read-only** access even if read-write is allowed for the directory?
 >
 > Recommended: **Yes** - this prevents other groups from modifying files even if you grant them access to a directory.
 
@@ -604,9 +706,11 @@ Check the logs:
 tail -f logs/nanoclaw.log
 ```
 
-The user should receive a response in WhatsApp.
+The user should receive a response in their registered channel.
 
 ## Troubleshooting
+
+### General
 
 **Service not starting**: Check `logs/nanoclaw.error.log`
 
@@ -623,6 +727,13 @@ The user should receive a response in WhatsApp.
 - Check that the chat JID is in the database: `sqlite3 store/messages.db "SELECT * FROM registered_groups"`
 - Check `logs/nanoclaw.log` for errors
 
+**Unload service**:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+```
+
+### WhatsApp-Specific
+
 **Messages sent but not received by NanoClaw (DMs)**:
 - WhatsApp may use LID (Linked Identity) JIDs for DMs instead of phone numbers
 - Check logs for `Translated LID to phone JID` — if missing, the LID isn't being resolved
@@ -634,7 +745,9 @@ The user should receive a response in WhatsApp.
 - Run `node plugins/channels/whatsapp/auth.js` to re-authenticate
 - Restart the service: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
 
-**Unload service**:
-```bash
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-```
+### Other Channels
+
+For channel-specific troubleshooting, check the channel plugin's documentation or `auth.js` script. Common issues:
+- **Token expired**: Re-run the channel's auth flow or update the token in `.env`
+- **Bot not receiving messages**: Verify the bot has the right permissions in the platform
+- **Chat not registered**: Check `sqlite3 store/messages.db "SELECT * FROM registered_groups WHERE channel = 'CHANNEL_NAME'"`

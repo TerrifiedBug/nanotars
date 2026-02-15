@@ -2,6 +2,5 @@
   "name": "whatsapp",
   "description": "WhatsApp channel via Baileys",
   "hooks": ["onChannel"],
-  "channelPlugin": true,
-  "authSkill": "setup-whatsapp"
+  "channelPlugin": true
 }

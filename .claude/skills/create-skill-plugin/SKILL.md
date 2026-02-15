@@ -1,9 +1,9 @@
 ---
-name: create-plugin
+name: create-skill-plugin
 description: >
-  Create a new NanoClaw plugin from an idea. Guides through design choices and
-  generates a complete add-* installation skill. Triggers on "create plugin",
-  "new plugin", "make a plugin", "build a plugin".
+  Create a new NanoClaw skill plugin from an idea. Guides through design choices and
+  generates a complete add-* installation skill. Triggers on "create skill plugin",
+  "create plugin", "new plugin", "make a plugin", "build a plugin".
 ---
 
 # Create Plugin
