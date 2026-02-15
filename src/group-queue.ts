@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
+import * as containerRuntime from './container-runtime.js';
 import { logger } from './logger.js';
 
 interface QueuedTask {
@@ -281,22 +282,38 @@ export class GroupQueue {
     }
   }
 
-  async shutdown(_gracePeriodMs: number): Promise<void> {
+  async shutdown(gracePeriodMs: number): Promise<void> {
     this.shuttingDown = true;
 
-    // Count active containers but don't kill them — they'll finish on their own
-    // via idle timeout or container timeout. The --rm flag cleans them up on exit.
-    // This prevents channel reconnection restarts from killing working agents.
-    const activeContainers: string[] = [];
-    for (const [jid, state] of this.groups) {
+    // Stop all active containers so restarts get a clean slate.
+    // Containers run with --rm so they self-remove after stopping.
+    const stopPromises: Promise<void>[] = [];
+    for (const [_jid, state] of this.groups) {
       if (state.process && !state.process.killed && state.containerName) {
-        activeContainers.push(state.containerName);
+        const name = state.containerName;
+        stopPromises.push(
+          new Promise<void>((resolve) => {
+            containerRuntime.stop(name, (err) => {
+              if (err) {
+                logger.warn({ container: name, err: err.message }, 'Failed to stop container');
+              } else {
+                logger.info({ container: name }, 'Container stopped');
+              }
+              resolve();
+            });
+          }),
+        );
       }
     }
 
-    logger.info(
-      { activeCount: this.activeCount, detachedContainers: activeContainers },
-      'GroupQueue shutting down (containers detached, not killed)',
-    );
+    if (stopPromises.length > 0) {
+      logger.info({ count: stopPromises.length }, 'Stopping active containers');
+      await Promise.race([
+        Promise.all(stopPromises),
+        new Promise((resolve) => setTimeout(resolve, gracePeriodMs)),
+      ]);
+    }
+
+    logger.info({ activeCount: this.activeCount }, 'GroupQueue shutdown complete');
   }
 }

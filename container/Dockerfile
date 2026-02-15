@@ -30,6 +30,15 @@ RUN apt-get update && apt-get install -y \
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
+# Wrap crashpad handler to supply the missing --database flag.
+# Chromium's crashpad subprocess fails with "chrome_crashpad_handler: --database
+# is required" inside containers, causing SIGTRAP. This wrapper creates the db
+# directory and passes --database to the real handler so it stays alive.
+RUN mv /usr/lib/chromium/chrome_crashpad_handler /usr/lib/chromium/chrome_crashpad_handler.real \
+    && printf '#!/bin/sh\nmkdir -p /tmp/crashpad-db 2>/dev/null\nexec /usr/lib/chromium/chrome_crashpad_handler.real --database=/tmp/crashpad-db "$@"\n' \
+       > /usr/lib/chromium/chrome_crashpad_handler \
+    && chmod +x /usr/lib/chromium/chrome_crashpad_handler
+
 # Install agent-browser and claude-code globally
 RUN npm install -g agent-browser @anthropic-ai/claude-code
 
