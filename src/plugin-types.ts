@@ -23,6 +23,10 @@ export interface PluginManifest {
   channels?: string[];
   /** Which group folders get this plugin's container injection. Default: ["*"] (all) */
   groups?: string[];
+  /** Plugin version (semver, e.g. "1.0.0") */
+  version?: string;
+  /** Minimum NanoClaw core version required (semver, e.g. "1.0.0") */
+  minCoreVersion?: string;
 }
 
 /** Message passed through onInboundMessage hooks */

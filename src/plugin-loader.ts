@@ -52,6 +52,8 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
     groups: Array.isArray(raw.groups)
       ? raw.groups.filter((v): v is string => typeof v === 'string')
       : undefined,
+    version: typeof raw.version === 'string' ? raw.version : undefined,
+    minCoreVersion: typeof raw.minCoreVersion === 'string' ? raw.minCoreVersion : undefined,
   };
 }
 

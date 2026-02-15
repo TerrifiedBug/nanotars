@@ -39,6 +39,22 @@ describe('parseManifest', () => {
     });
     expect(manifest.containerHooks).toEqual(['hooks/post-tool-use.js']);
   });
+
+  it('parses version and minCoreVersion fields', () => {
+    const manifest = parseManifest({
+      name: 'test-plugin',
+      version: '1.2.3',
+      minCoreVersion: '1.0.0',
+    });
+    expect(manifest.version).toBe('1.2.3');
+    expect(manifest.minCoreVersion).toBe('1.0.0');
+  });
+
+  it('defaults version fields to undefined', () => {
+    const manifest = parseManifest({ name: 'test' });
+    expect(manifest.version).toBeUndefined();
+    expect(manifest.minCoreVersion).toBeUndefined();
+  });
 });
 
 describe('collectContainerEnvVars', () => {
