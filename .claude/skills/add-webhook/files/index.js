@@ -12,6 +12,7 @@ export async function onStartup(ctx) {
   }
 
   const port = parseInt(process.env.WEBHOOK_PORT || '3457', 10);
+  const host = process.env.WEBHOOK_HOST || '127.0.0.1';
 
   server = http.createServer((req, res) => {
     const ip = req.socket.remoteAddress;
@@ -77,8 +78,8 @@ export async function onStartup(ctx) {
     });
   });
 
-  server.listen(port, () => {
-    ctx.logger.info({ port }, 'Webhook server listening');
+  server.listen(port, host, () => {
+    ctx.logger.info({ port, host }, 'Webhook server listening');
   });
 }
 
