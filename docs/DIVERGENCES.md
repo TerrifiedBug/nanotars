@@ -81,7 +81,7 @@ This document tracks all legitimate divergences between our fork's `main` branch
 
 | Skill | Categories | Summary |
 |-------|------------|---------|
-| `setup/SKILL.md` | DOCKER | Headless/Linux QR auth support |
+| `setup/SKILL.md` | DOCKER, OTHER | Headless/Linux QR auth support, timezone configuration step |
 | `customize/SKILL.md` | PLUGIN, DOCKER | Plugin architecture docs, Linux service management |
 | `add-voice-transcription/SKILL.md` | PLUGIN | Rewritten for plugin architecture (no core mods) |
 
