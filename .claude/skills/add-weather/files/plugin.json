@@ -1,0 +1,6 @@
+{
+  "name": "weather",
+  "description": "Weather forecasts and current conditions",
+  "containerEnvVars": [],
+  "hooks": []
+}

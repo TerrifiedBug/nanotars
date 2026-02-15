@@ -1,0 +1,6 @@
+{
+  "name": "github",
+  "description": "GitHub API access for repo monitoring",
+  "containerEnvVars": ["GH_TOKEN"],
+  "hooks": []
+}
