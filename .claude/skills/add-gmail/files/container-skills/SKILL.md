@@ -63,10 +63,22 @@ gog gmail search --help
 gog gmail labels --help
 ```
 
+## Multiple Accounts
+
+If multiple Google accounts are configured, gog uses `$GOG_ACCOUNT` as the default. To target a specific account, pass `--account`:
+```bash
+gog gmail search 'newer_than:7d' --account user@gmail.com
+```
+
+List all available accounts:
+```bash
+gog auth list
+```
+
 ## Tips
 
 - Always confirm with the user before sending emails
 - Default to 7-day search range unless the user specifies otherwise
 - Use `--output json` for structured data when processing results
-- If gog reports "invalid_grant", the OAuth token has expired -- tell user to refresh via `/add-cal`
+- If gog reports "invalid_grant", the OAuth token has expired -- tell user to refresh via `/add-gmail`
 - **If the imap-read skill is also available:** Use `gog gmail` for accounts configured in gog. imap-read is a separate read-only tool with its own accounts -- don't mix them up
