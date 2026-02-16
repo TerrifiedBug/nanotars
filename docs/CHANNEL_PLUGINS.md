@@ -116,7 +116,8 @@ The order matters: channels connect before other plugins start, so plugins like 
 | `src/plugin-loader.ts` | Discovery, loading, `PluginRegistry` with scoping methods |
 | `src/router.ts` | `routeOutbound()` — dispatches to correct channel by JID, forwards optional `sender` |
 | `src/index.ts` | Orchestrator: channel init loop (lines ~490–520), message polling |
-| `src/container-runner.ts` | Scoped plugin injection per channel/group |
+| `src/container-mounts.ts` | Scoped plugin injection per channel/group |
+| `src/container-runner.ts` | Container lifecycle (spawn, I/O, timeout) |
 | `src/db.ts` | `channel` column migration on `registered_groups` |
 | `src/config.ts` | `CHANNELS_DIR` path constant |
 

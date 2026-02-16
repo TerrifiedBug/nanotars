@@ -2,8 +2,7 @@
 
 This document describes all changes made in this fork compared to the upstream [qwibitai/nanoclaw](https://github.com/qwibitai/nanoclaw) repository. It's intended to give the upstream maintainer a clear picture of what this fork does differently, why, and which changes might be worth upstreaming.
 
-**Stats:** 198 non-merge commits, 148 files changed, ~16,800 insertions, ~6,000 deletions
-**Code only (excluding docs, lock files, skills, assets):** 43 files changed, +2,393 / -1,537 lines
+**Source diff vs upstream:** 26 files changed, +2,113 / -1,967 lines (`src/` + `container/agent-runner/src/` only)
 
 ---
 
@@ -16,9 +15,10 @@ This document describes all changes made in this fork compared to the upstream [
 5. [Media Pipeline](#5-media-pipeline) — Image/video/audio/document downloads
 6. [Task Scheduler Improvements](#6-task-scheduler-improvements) — Model selection, error notifications
 7. [Bug Fixes](#7-bug-fixes) — Submitted as PRs
-8. [New Skills](#8-new-skills) — 20+ integration skills
-9. [Documentation](#9-documentation) — Plugin guides, divergence tracking
-10. [Minor Improvements](#10-minor-improvements) — Typing indicators, read receipts, DRY refactors
+8. [New Skills](#8-new-skills) — 25+ integration skills
+9. [Documentation](#9-documentation) — Plugin guides, channel plugin architecture
+10. [Code Quality & Refactoring](#10-code-quality--refactoring) — Module decomposition, dead code removal
+11. [Minor Improvements](#11-minor-improvements) — Typing indicators, read receipts
 
 ---
 
@@ -65,7 +65,9 @@ The plugin loader:
 | File | Changes |
 |------|---------|
 | `src/index.ts` | Plugin lifecycle (load → init → start → shutdown), per-group trigger patterns, plugin hook calls on message events |
-| `src/container-runner.ts` | Plugin mount injection, env var collection, MCP config merging, Dockerfile.partial support |
+| `src/container-runner.ts` | Container lifecycle (spawn, I/O, timeout). Plugin mount injection delegated to `container-mounts.ts` |
+| `src/container-mounts.ts` | **New** — Extracted from container-runner: volume mount construction, env file building, secrets, plugin mount collection |
+| `src/snapshots.ts` | **New** — Extracted from container-runner: task/group snapshot utilities for IPC |
 | `src/config.ts` | `createTriggerPattern()` for per-group custom triggers, `SCHEDULED_TASK_IDLE_TIMEOUT` |
 | `src/db.ts` | `insertExternalMessage()` for plugins to inject messages, `channel` column (no backfill) |
 | `src/types.ts` | `OnInboundMessage` is now async, added `channel` field |
@@ -153,7 +155,7 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 
 | File | What |
 |------|------|
-| `src/container-runner.ts` | Uses runtime abstraction instead of hardcoded `container` CLI; `chown -R 1000:1000` on writable mounts (Docker bind mounts preserve host ownership) |
+| `src/container-runner.ts` + `src/container-mounts.ts` | Uses runtime abstraction instead of hardcoded `container` CLI; `chown -R 1000:1000` on writable mounts (Docker bind mounts preserve host ownership) |
 | `src/group-queue.ts` | `docker stop` in shutdown handler for clean restarts |
 | `src/index.ts` | `docker info` / `docker ps` / `docker rm` at startup for orphan cleanup |
 | `container/build.sh` | Auto-detects Docker vs Apple Container; supports both runtimes |
@@ -188,7 +190,7 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 | File | What |
 |------|------|
 | `container/agent-runner/src/index.ts` | Secret scrubbing from agent output, security hook loading |
-| `src/container-runner.ts` | Secrets passed via SDK `env` option (not written to files in container), OAuth token sync |
+| `src/container-runner.ts` + `src/container-mounts.ts` | Secrets passed via stdin JSON (not written to files in container), OAuth token sync |
 | `CLAUDE.md` | Added security section referencing SECURITY.md |
 | `groups/main/CLAUDE.md` | Anti-prompt-injection rules |
 
@@ -249,7 +251,7 @@ Upstream only handles text messages. This fork adds media download and processin
 
 | File | What |
 |------|------|
-| `src/ipc.ts` | Model field in IPC messages |
+| `src/ipc.ts` | Model field in IPC messages, `authorizedTaskAction` helper for DRY task auth |
 | `src/db.ts` | `claimTask()` method, model column in tasks table |
 | `src/config.ts` | `SCHEDULED_TASK_IDLE_TIMEOUT` constant |
 | `container/agent-runner/src/index.ts` | Model selection when creating SDK client |
@@ -276,11 +278,11 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 
 ---
 
-## 8. New Skills (20)
+## 8. New Skills (25)
 
-These are Claude Code skills (`.claude/skills/`) that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
+Claude Code skills (`.claude/skills/`) that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
 
-### Integration skills
+### Integration skills (17)
 
 | Skill | What it adds |
 |-------|-------------|
@@ -291,40 +293,47 @@ These are Claude Code skills (`.claude/skills/`) that guide the AI through insta
 | `add-commute` | Travel times via Waze API |
 | `add-freshrss` | Self-hosted RSS feed reader |
 | `add-github` | GitHub API access (PRs, issues, commits) |
+| `add-gmail` | Gmail access via gog CLI (search, read, send) |
 | `add-homeassistant` | Home Assistant smart home control via MCP |
 | `add-imap-read` | Read-only IMAP email access |
 | `add-n8n` | n8n workflow automation |
 | `add-norish` | Recipe import by URL |
 | `add-notion` | Notion API for notes/project management |
+| `add-parallel` | Parallel AI web research via MCP servers |
 | `add-trains` | UK National Rail departures (includes Python script) |
+| `add-transcription` | Voice message transcription via OpenAI Whisper (channel-agnostic) |
 | `add-weather` | Weather via wttr.in / Open-Meteo (no API key needed) |
 | `add-webhook` | HTTP webhook endpoint for push events (Home Assistant, uptime monitors, etc.) |
 
-### Channel skills
+### Channel skills (5)
 
 | Skill | What it adds |
 |-------|-------------|
 | `add-whatsapp` | Install WhatsApp as a channel plugin |
 | `add-discord` | Install Discord as a channel plugin |
+| `add-telegram` | Install Telegram as a channel plugin |
+| `add-telegram-swarm` | Agent Teams support for Telegram (pool bot identities) |
 | `add-channel` | Generic skill to register a group on any installed channel |
 
-### Meta skills
+### Meta skills (6)
 
 | Skill | What it does |
 |-------|-------------|
+| `nanoclaw-setup` | First-time installation, auth, service configuration |
+| `nanoclaw-customize` | Adding integrations, changing behavior |
+| `nanoclaw-debug` | Container issues, logs, troubleshooting |
+| `nanoclaw-set-model` | Change Claude model used by containers |
 | `create-skill-plugin` | Guided creation of new skill plugins from an idea |
 | `create-channel-plugin` | Guided creation of new channel plugins |
-| `set-model` | Change Claude model used by containers |
 | `update-nanoclaw` | Manage upstream sync with selective cherry-pick |
-| `add-transcription` | Voice message transcription via OpenAI Whisper (renamed from `add-whatsapp-voice`, now channel-agnostic) |
 
-### Modified upstream skills
+### Rewritten upstream skills
 
 | Skill | What changed |
 |-------|-------------|
-| `setup/SKILL.md` | Major rewrite: channel-agnostic plugin flow, headless/Linux QR auth, systemd service support, `ASSISTANT_NAME` env var step. Upstream's PR #258 replaced this with numbered shell scripts that hardcode WhatsApp. |
-| `customize/SKILL.md` | Plugin architecture docs, Linux service management references |
-| `add-telegram/SKILL.md` | Updated deps and uninstall steps for plugin architecture |
+| `nanoclaw-setup` | Major rewrite: channel-agnostic plugin flow, headless/Linux QR auth, systemd service support. Upstream's PR #258 replaced theirs with numbered shell scripts that hardcode WhatsApp. |
+| `nanoclaw-customize` | Plugin architecture docs, Linux service management references |
+| `nanoclaw-debug` | Channel-agnostic, plugin-aware (upstream version is WhatsApp-specific) |
 
 ---
 
@@ -336,7 +345,7 @@ These are Claude Code skills (`.claude/skills/`) that guide the AI through insta
 |------|----------|
 | `docs/PLUGINS.md` | Complete plugin system architecture — manifests, hooks, mounts, Dockerfile.partial, env vars, MCP merging, source code changes |
 | `docs/CHANNEL_PLUGINS.md` | Channel plugin development guide — interface, auth, registration, testing |
-| `docs/DIVERGENCES.md` | Exhaustive tracking of every file that differs from upstream, categorized and annotated |
+| `docs/CHANGES.md` | This file — comprehensive fork changelog |
 
 ### Modified docs
 
@@ -348,7 +357,39 @@ These are Claude Code skills (`.claude/skills/`) that guide the AI through insta
 
 ---
 
-## 10. Minor Improvements
+## 10. Code Quality & Refactoring
+
+### Module decomposition
+
+`container-runner.ts` was 835 lines handling mounts, env files, secrets, snapshots, and container lifecycle. Decomposed into focused modules:
+
+| Module | Responsibility |
+|--------|---------------|
+| `src/container-mounts.ts` (313 lines) | Volume mount construction, env file building, secret reading, plugin mount collection |
+| `src/snapshots.ts` (84 lines) | Task/group snapshot utilities for IPC |
+| `src/container-runner.ts` (467 lines) | Container lifecycle only (spawn, I/O, timeout, logging) |
+
+Re-exports preserve backward compatibility — no consumer import changes needed.
+
+### Dead code removal
+
+| Removed | File | Reason |
+|---------|------|--------|
+| `storeMessageDirect()` | `src/db.ts` | Zero callers — leftover from earlier iteration |
+| `formatOutbound()` | `src/router.ts` | Trivial wrapper around `stripInternalTags()` |
+| `findChannel()` | `src/router.ts` | Zero callers — replaced by `routeOutbound()` |
+
+### DRY patterns
+
+| Pattern | File | What |
+|---------|------|------|
+| `mapRegisteredGroupRow()` | `src/db.ts` | Extracted duplicated row→object mapping from `getRegisteredGroup` and `getAllRegisteredGroups` |
+| `authorizedTaskAction()` | `src/ipc.ts` | Consolidated identical auth+action pattern across pause/resume/cancel task handlers |
+| Shared logger | `src/mount-security.ts` | Replaced duplicate pino instance with shared `logger` import |
+
+---
+
+## 11. Minor Improvements
 
 | Feature | Files | What |
 |---------|-------|------|

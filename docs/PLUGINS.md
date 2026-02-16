@@ -337,12 +337,14 @@ The plugin system adds two new files and modifies five existing files. Total foo
 - Run `registry.runInboundHooks(msg, channel)` on every inbound message before queueing
 - Register plugin channels alongside WhatsApp
 
-**`src/container-runner.ts`** — Container spawn configuration:
+**`src/container-mounts.ts`** — Container mount construction (extracted from container-runner):
 - Query `pluginRegistry.getContainerEnvVars()` to build the env var filter list
 - Query `pluginRegistry.getSkillPaths()` and mount each plugin's `container-skills/` read-only at `/workspace/.claude/skills/{name}`
 - Query `pluginRegistry.getContainerHookPaths()` and mount hook JS files at `/workspace/plugin-hooks/{name}`
 - Query `pluginRegistry.getContainerMounts()` for additional read-only mounts
 - Call `pluginRegistry.getMergedMcpConfig()` to write a unified MCP config into the container
+
+**`src/container-runner.ts`** — Container lifecycle (spawn, I/O, timeout, logging)
 
 **`src/types.ts`** — Type changes:
 - `OnInboundMessage` callback made `async` (returns `Promise`) to support async plugin hooks
