@@ -227,24 +227,24 @@ Upstream passes secrets via environment variables, which are visible to `env` an
 
 ## 5. Media Pipeline
 
-Upstream only handles text messages. This fork adds media download and processing.
+Upstream only handles text messages. This fork adds core support for media in the message flow.
 
-### Changes
+### Core changes
 
 | File | What |
 |------|------|
-| `src/types.ts` | Added `mediaType`, `mediaPath`, `mediaHostPath` fields |
-| `src/channels/whatsapp.ts` → `plugins/channels/whatsapp/index.js` | Downloads images, videos, audio, documents from WhatsApp; saves to temp dir; passes `hostPath` for plugin hooks |
-| `container/agent-runner/src/index.ts` | Media files mounted into container, agent can read/analyze them |
+| `src/types.ts` | Added `mediaType`, `mediaPath`, `mediaHostPath` fields to `NewMessage` |
+| `container/agent-runner/src/index.ts` | Media files bind-mounted into container so agents can read/analyze them |
 
 ### How it works
 
 1. Channel plugin downloads media to host temp directory
-2. `mediaHostPath` is set on the message (host-side path for plugin hooks like voice transcription)
+2. `mediaHostPath` is set on the message (host-side path for plugin hooks)
 3. `mediaPath` is set to the container-side path
 4. Media file is bind-mounted into the container
 5. Agent can read the file (images are displayed, documents are parsed)
-6. Plugins like `add-transcription` can hook into the media pipeline via `mediaHostPath`
+
+Channel plugins implement the download logic. Host-side plugin hooks (`onInboundMessage`) can transform media before it reaches the agent (e.g., transcription).
 
 ---
 
