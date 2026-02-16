@@ -545,7 +545,7 @@ async function main(): Promise<void> {
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text) => routeOutbound(channels, jid, text).then(() => {}),
+    sendMessage: (jid, text, sender) => routeOutbound(channels, jid, text, sender).then(() => {}),
     registeredGroups: () => registeredGroups,
     registerGroup,
     syncGroupMetadata: async (_force) => {

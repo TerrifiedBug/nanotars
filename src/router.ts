@@ -30,13 +30,14 @@ export async function routeOutbound(
   channels: Channel[],
   jid: string,
   text: string,
+  sender?: string,
 ): Promise<boolean> {
   const channel = channels.find((c) => c.ownsJid(jid) && c.isConnected());
   if (!channel) {
     logger.warn({ jid }, 'No connected channel for JID, message dropped');
     return false;
   }
-  await channel.sendMessage(jid, text);
+  await channel.sendMessage(jid, text, sender);
   return true;
 }
 
