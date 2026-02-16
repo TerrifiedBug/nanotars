@@ -16,7 +16,17 @@ This skill adds Agent Teams (Swarm) support to an existing Telegram channel. Eac
 - When a subagent calls `send_message` with a `sender` parameter, the host assigns a pool bot and renames it to match the sender's role
 - Messages appear in Telegram from different bot identities
 
-The swarm pool is built into the Telegram plugin — no code changes needed. Configuration only.
+The swarm pool is a separate module (`pool.js`) that gets installed alongside the Telegram plugin. The base plugin dynamically loads it when `TELEGRAM_BOT_POOL` is set.
+
+## Step 0: Install Pool Module
+
+Copy `pool.js` into the Telegram plugin directory:
+
+```bash
+cp .claude/skills/add-telegram-swarm/files/pool.js plugins/channels/telegram/pool.js
+```
+
+If `plugins/channels/telegram/` does not exist, the user needs to run `/add-telegram` first.
 
 ## Step 1: Create Pool Bots
 
@@ -132,7 +142,8 @@ Check the group's `CLAUDE.md` has the Agent Teams instructions. The lead agent r
 
 To remove Agent Swarm support while keeping basic Telegram:
 
-1. Remove `TELEGRAM_BOT_POOL` from `.env`
-2. Sync: `cp .env data/env/env`
-3. Remove Agent Teams section from group CLAUDE.md files
-4. Restart NanoClaw
+1. Remove `pool.js`: `rm plugins/channels/telegram/pool.js`
+2. Remove `TELEGRAM_BOT_POOL` from `.env`
+3. Sync: `cp .env data/env/env`
+4. Remove Agent Teams section from group CLAUDE.md files
+5. Restart NanoClaw

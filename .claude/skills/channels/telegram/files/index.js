@@ -1,16 +1,7 @@
-import { Api, Bot } from 'grammy';
+import { Bot } from 'grammy';
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Sanitize a sender name for use as a Telegram bot display name. */
-function sanitizeBotName(name) {
-  // Strip control characters and zero-width chars
-  let clean = name.replace(/[\x00-\x1f\x7f\u200b-\u200f\u2028-\u202f\ufeff]/g, '').trim();
-  // Telegram bot names max 64 chars
-  if (clean.length > 64) clean = clean.slice(0, 64).trim();
-  return clean || 'Agent';
 }
 
 class TelegramChannel {
@@ -22,14 +13,8 @@ class TelegramChannel {
   config;
   /** @private */
   logger;
-
-  // Swarm pool: send-only Api instances (no polling)
-  /** @private */
-  poolApis = [];
-  /** @private - maps "{groupFolder}:{senderName}" → pool Api index */
-  senderBotMap = new Map();
-  /** @private */
-  nextPoolIndex = 0;
+  /** @private - swarm bot pool, loaded dynamically from pool.js if present */
+  pool = null;
 
   constructor(config, logger) {
     this.config = config;
@@ -183,27 +168,18 @@ class TelegramChannel {
       this.logger.error({ err: err.message }, 'Telegram bot error');
     });
 
-    // Initialize swarm pool bots (send-only, no polling)
-    const poolTokens = (process.env.TELEGRAM_BOT_POOL || '')
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
-
-    for (const poolToken of poolTokens) {
+    // Load swarm bot pool if pool.js is present and TELEGRAM_BOT_POOL is set
+    if (process.env.TELEGRAM_BOT_POOL) {
       try {
-        const api = new Api(poolToken);
-        const me = await api.getMe();
-        this.poolApis.push(api);
-        this.logger.info(
-          { username: me.username, id: me.id, poolSize: this.poolApis.length },
-          'Pool bot initialized',
-        );
+        const { createPool } = await import('./pool.js');
+        this.pool = await createPool(process.env.TELEGRAM_BOT_POOL, this.logger);
       } catch (err) {
-        this.logger.error({ err }, 'Failed to initialize pool bot');
+        if (err.code === 'ERR_MODULE_NOT_FOUND') {
+          this.logger.warn('TELEGRAM_BOT_POOL is set but pool.js not found — run /add-telegram-swarm to install');
+        } else {
+          this.logger.error({ err: err.message }, 'Failed to initialize bot pool');
+        }
       }
-    }
-    if (this.poolApis.length > 0) {
-      this.logger.info({ count: this.poolApis.length }, 'Telegram bot pool ready');
     }
 
     // Start polling — returns a Promise that resolves when started
@@ -227,8 +203,8 @@ class TelegramChannel {
     }
 
     // Route through pool bot when sender is provided and pool is available
-    if (sender && this.poolApis.length > 0) {
-      await this.sendPoolMessage(jid, text, sender);
+    if (sender && this.pool) {
+      await this.pool.sendMessage(jid, text, sender);
       return;
     }
 
@@ -263,47 +239,6 @@ class TelegramChannel {
       this.bot.stop();
       this.bot = null;
       this.logger.info('Telegram bot stopped');
-    }
-  }
-
-  /**
-   * Send a message via a pool bot assigned to the given sender name.
-   * Assigns bots round-robin on first use; subsequent messages from the
-   * same sender always use the same bot.
-   * On first assignment, renames the bot to match the sender's role.
-   * @private
-   */
-  async sendPoolMessage(jid, text, sender) {
-    const key = sender;
-    let idx = this.senderBotMap.get(key);
-    if (idx === undefined) {
-      idx = this.nextPoolIndex % this.poolApis.length;
-      this.nextPoolIndex++;
-      this.senderBotMap.set(key, idx);
-      // Rename the bot to match the sender's role, then wait for Telegram to propagate
-      try {
-        await this.poolApis[idx].setMyName(sanitizeBotName(sender));
-        await new Promise((r) => setTimeout(r, 2000));
-        this.logger.info({ sender, poolIndex: idx }, 'Assigned and renamed pool bot');
-      } catch (err) {
-        this.logger.warn({ sender, err }, 'Failed to rename pool bot (sending anyway)');
-      }
-    }
-
-    const api = this.poolApis[idx];
-    try {
-      const numericId = jid.replace(/^tg:/, '');
-      const MAX_LENGTH = 4096;
-      if (text.length <= MAX_LENGTH) {
-        await api.sendMessage(numericId, text);
-      } else {
-        for (let i = 0; i < text.length; i += MAX_LENGTH) {
-          await api.sendMessage(numericId, text.slice(i, i + MAX_LENGTH));
-        }
-      }
-      this.logger.info({ jid, sender, poolIndex: idx, length: text.length }, 'Pool message sent');
-    } catch (err) {
-      this.logger.error({ jid, sender, err }, 'Failed to send pool message');
     }
   }
 }

@@ -3,6 +3,6 @@
   "description": "Telegram channel via Grammy",
   "hooks": ["onChannel"],
   "channelPlugin": true,
-  "containerEnvVars": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_POOL"],
+  "containerEnvVars": ["TELEGRAM_BOT_TOKEN"],
   "dependencies": true
 }
