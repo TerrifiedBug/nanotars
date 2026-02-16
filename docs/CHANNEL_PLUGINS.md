@@ -41,16 +41,16 @@ Regular plugins add tools, container hooks, or env vars. Channel plugins are dif
 ### Directory Layout
 
 ```
-.claude/skills/channels/
-  whatsapp/                    # channel skill (version-controlled templates)
-    SKILL.md                   # auth docs, troubleshooting
+.claude/skills/
+  add-channel-whatsapp/        # channel skill (version-controlled templates)
+    CHANNEL.md                 # auth docs, troubleshooting
     files/                     # template files (copied on install)
       plugin.json
       index.js
       auth.js
       package.json
-  telegram/                    # same pattern for each channel
-    SKILL.md
+  add-channel-telegram/        # same pattern for each channel
+    CHANNEL.md
     files/
       plugin.json
       index.js
@@ -62,7 +62,7 @@ plugins/
       plugin.json              # manifest: channelPlugin: true
       index.js                 # exports onChannel hook
       auth.js                  # standalone auth helper script
-    telegram/                  # installed from templates by /add-telegram
+    telegram/                  # installed from templates by /add-channel-telegram
       plugin.json
       index.js
 
@@ -75,7 +75,7 @@ data/
     telegram/                  # each channel gets its own data dir
 ```
 
-Channel plugin **templates** live under `.claude/skills/channels/{name}/files/`. When a user runs `/add-{name}`, the skill copies templates into `plugins/channels/{name}/` and runs `npm install`. The entire `plugins/channels/` directory is gitignored — only the skill templates are version-controlled. Runtime data (auth credentials, caches) lives under `data/channels/{name}/`.
+Channel plugin **templates** live under `.claude/skills/add-channel-{name}/files/`. When a user runs `/add-channel-{name}`, the skill copies templates into `plugins/channels/{name}/` and runs `npm install`. The entire `plugins/channels/` directory is gitignored — only the skill templates are version-controlled. Runtime data (auth credentials, caches) lives under `data/channels/{name}/`.
 
 ### Plugin Discovery
 
@@ -574,7 +574,7 @@ plugins/channels/telegram/
 
 ### 5. Create a setup skill (optional but recommended)
 
-Create `.claude/skills/add-telegram/SKILL.md` that guides users through:
+Create `.claude/skills/add-channel-telegram/CHANNEL.md` that guides users through:
 - Bot token creation (BotFather)
 - Running the auth script
 - Registering their first Telegram group

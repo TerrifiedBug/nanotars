@@ -127,15 +127,14 @@ nanoclaw/
 │
 ├── .claude/
 │   └── skills/
-│       ├── setup/SKILL.md              # /setup - First-time installation
-│       ├── customize/SKILL.md          # /customize - Add capabilities
-│       ├── debug/SKILL.md              # /debug - Container debugging
-│       ├── add-telegram/SKILL.md       # /add-telegram - Telegram channel
-│       ├── add-gmail/SKILL.md          # /add-gmail - Gmail integration
-│       ├── add-voice-transcription/    # /add-voice-transcription - Whisper
-│       ├── x-integration/SKILL.md      # /x-integration - X/Twitter
-│       ├── convert-to-docker/SKILL.md  # /convert-to-docker - Docker runtime
-│       └── add-parallel/SKILL.md       # /add-parallel - Parallel agents
+│       ├── nanoclaw-setup/SKILL.md             # /nanoclaw-setup - First-time installation
+│       ├── nanoclaw-customize/SKILL.md        # /nanoclaw-customize - Add capabilities
+│       ├── nanoclaw-debug/SKILL.md            # /nanoclaw-debug - Container debugging
+│       ├── add-channel-telegram/CHANNEL.md    # /add-channel-telegram - Telegram channel
+│       ├── add-skill-gmail/SKILL.md           # /add-skill-gmail - Gmail integration
+│       ├── add-skill-transcription/SKILL.md   # /add-skill-transcription - Whisper
+│       ├── add-skill-parallel/SKILL.md        # /add-skill-parallel - Parallel agents
+│       └── nanoclaw-add-group/SKILL.md        # /nanoclaw-add-group - Register groups
 │
 ├── groups/
 │   ├── CLAUDE.md                  # Global memory (all groups read this)

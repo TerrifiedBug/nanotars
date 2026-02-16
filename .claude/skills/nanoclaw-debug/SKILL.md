@@ -92,7 +92,7 @@ for pj in plugins/*/plugin.json plugins/channels/*/plugin.json; do
     echo "  - $NAME ($AUTH)"
   fi
 done
-[ $CHANNELS -eq 0 ] && echo "  NONE — install a channel with /add-whatsapp, /add-discord, or /add-telegram"
+[ $CHANNELS -eq 0 ] && echo "  NONE — install a channel with /add-channel-whatsapp, /add-channel-discord, or /add-channel-telegram"
 
 echo -e "\n--- Registered Groups ---"
 sqlite3 store/messages.db "SELECT folder, jid, name FROM registered_groups" 2>/dev/null || echo "  No database or no groups registered"

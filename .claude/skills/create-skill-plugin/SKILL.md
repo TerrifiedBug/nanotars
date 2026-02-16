@@ -2,7 +2,7 @@
 name: create-skill-plugin
 description: >
   Create a new NanoClaw skill plugin from an idea. Guides through design choices and
-  generates a complete add-* installation skill. Triggers on "create skill plugin",
+  generates a complete add-skill-* installation skill. Triggers on "create skill plugin",
   "create plugin", "new plugin", "make a plugin", "build a plugin".
 ---
 
@@ -10,11 +10,11 @@ description: >
 
 ## Overview
 
-This skill creates new NanoClaw plugins through guided conversation. The user describes what they want in plain language — a new integration, automation, tool, or capability — and this skill figures out the right architecture, asks clarifying questions, and produces a complete `add-*` installation skill ready to be committed upstream.
+This skill creates new NanoClaw plugins through guided conversation. The user describes what they want in plain language — a new integration, automation, tool, or capability — and this skill figures out the right architecture, asks clarifying questions, and produces a complete `add-skill-*` installation skill ready to be committed upstream.
 
 You are the plugin system expert. Your job is to translate the user's idea into a working plugin without exposing internal details. Keep questions simple and focused on what the user wants the plugin to *do*, not how the plugin system works under the hood. Never surface implementation concepts like hook types, mount strategies, or container internals in user-facing questions — handle those decisions yourself based on what the plugin needs.
 
-The output of this skill is always a self-contained `add-*` skill directory (with its own `SKILL.md`) that, when invoked, installs and configures the plugin end-to-end.
+The output of this skill is always a self-contained `add-skill-*` skill directory (with its own `SKILL.md`) that, when invoked, installs and configures the plugin end-to-end.
 
 ## Conversational Flow
 
@@ -59,20 +59,20 @@ Ask about specifics based on the archetype(s) you determined. Again, **one quest
 - **For services with APIs:** "Does [service] require an API key? How do you get one?" (skip if already answered in Phase 1)
 - **For MCP integrations:** "Do you know the MCP server package or URL, or should I look it up?"
 - **For background processes:** "What port should it listen on?" or "How often should it check for updates?"
-- **For all plugins:** "What should I call this plugin?" — suggest a name based on the conversation (e.g., "How about `add-weather`?")
+- **For all plugins:** "What should I call this plugin?" — suggest a name based on the conversation (e.g., "How about `add-skill-weather`?")
 
 ### Phase 4: Confirm and Generate
 
 Before generating anything:
 
 1. **Summarize in plain language** what will be created. For example:
-   > "I'll create an `add-weather` skill that teaches the agent to look up weather forecasts using the wttr.in API."
+   > "I'll create an `add-skill-weather` skill that teaches the agent to look up weather forecasts using the wttr.in API."
 
 2. **List the files** that will be generated.
 
 3. **Ask for confirmation** before proceeding.
 
-4. **Generate all files** for the complete `add-*` skill.
+4. **Generate all files** for the complete `add-skill-*` skill.
 
 5. **Offer to install immediately** — "Want me to install this plugin now?"
 
@@ -115,14 +115,14 @@ Hard constraints on what this skill can and cannot touch.
 
 ### CAN create/modify:
 
-- `.claude/skills/add-{name}/` — the installation skill being generated (the entire purpose of this skill)
+- `.claude/skills/add-skill-{name}/` — the installation skill being generated (the entire purpose of this skill)
 - `.env` — adding environment variable values, but ONLY with explicit user confirmation
-- `plugins/{name}/` — but ONLY via the `cp -r` install step when the generated add-* skill is run, never directly
+- `plugins/{name}/` — but ONLY via the `cp -r` install step when the generated add-skill-* skill is run, never directly
 
 ### Escalation:
 
 - If the user's idea requires changes to NanoClaw source code — explain clearly: "This would need changes to NanoClaw's core code, which is beyond what a plugin can do. You could use `/nanoclaw-customize` for that."
-- If the idea requires npm dependencies — don't run `npm install`. Instead, document it as a manual prerequisite in the generated add-* SKILL.md (like how add-telegram documents `npm install grammy`).
+- If the idea requires npm dependencies — don't run `npm install`. Instead, document it as a manual prerequisite in the generated add-skill-* SKILL.md (like how add-channel-telegram documents `npm install grammy`).
 - If the idea requires system packages in the Docker image (e.g., ffmpeg) — document it as a manual prerequisite requiring a container rebuild.
 
 ## Output Structure
@@ -130,8 +130,8 @@ Hard constraints on what this skill can and cannot touch.
 This skill generates the following file tree:
 
 ```
-.claude/skills/add-{name}/
-├── SKILL.md                        # Installation skill (invoked via /add-{name})
+.claude/skills/add-skill-{name}/
+├── SKILL.md                        # Installation skill (invoked via /add-skill-{name})
 └── files/                          # Template files, copied to plugins/{name}/ on install
     ├── plugin.json                 # Plugin manifest (always present)
     ├── container-skills/
@@ -142,17 +142,17 @@ This skill generates the following file tree:
         └── {event-name}.js         # Container SDK hooks (if needed)
 ```
 
-- **`files/`** contains the actual plugin — everything the agent or NanoClaw needs at runtime. When the generated `add-*` skill runs, this entire directory is copied to `plugins/{name}/`.
-- **`SKILL.md`** contains the installation instructions — what runs when someone invokes `/add-{name}`. It handles env vars, copying files, rebuilding, and verification.
+- **`files/`** contains the actual plugin — everything the agent or NanoClaw needs at runtime. When the generated `add-skill-*` skill runs, this entire directory is copied to `plugins/{name}/`.
+- **`SKILL.md`** contains the installation instructions — what runs when someone invokes `/add-skill-{name}`. It handles env vars, copying files, rebuilding, and verification.
 - Only **`plugin.json`** is always present. Everything else is included based on the plugin's needs. A simple skill-only plugin might have just `plugin.json` and a `container-skills/SKILL.md`. A complex integration might include all of the above.
 
 ## Generated SKILL.md Template
 
-This is the template for the `add-*` SKILL.md that this skill produces. It follows the pattern used by existing NanoClaw installation skills. Replace all `{placeholders}` with actual values when generating a real skill.
+This is the template for the `add-skill-*` SKILL.md that this skill produces. It follows the pattern used by existing NanoClaw installation skills. Replace all `{placeholders}` with actual values when generating a real skill.
 
 ```markdown
 ---
-name: add-{name}
+name: add-skill-{name}
 description: {description}. Triggers on "{trigger phrases}".
 ---
 
@@ -177,7 +177,7 @@ description: {description}. Triggers on "{trigger phrases}".
 
 3. Copy plugin files:
    ```bash
-   cp -r .claude/skills/add-{name}/files/ plugins/{name}/
+   cp -r .claude/skills/add-skill-{name}/files/ plugins/{name}/
    ```
 
 4. Rebuild and restart:
@@ -308,7 +308,7 @@ allowed-tools: mcp__{server-name}(*), Bash(curl:*)
 
 # {Title}
 
-Control {SERVICE} via its MCP Server integration. If MCP tools and `${SERVICE_URL_VAR}`/`${SERVICE_TOKEN_VAR}` are not configured, tell the user to run `/add-{name}` on the host to set it up.
+Control {SERVICE} via its MCP Server integration. If MCP tools and `${SERVICE_URL_VAR}`/`${SERVICE_TOKEN_VAR}` are not configured, tell the user to run `/add-skill-{name}` on the host to set it up.
 
 ## How It Works
 

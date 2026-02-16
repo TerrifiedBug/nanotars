@@ -126,9 +126,9 @@ NanoClaw ships with no channels installed by default. The setup and add-channel 
 
 | Channel | Installed via | Template location |
 |---------|--------------|-------------------|
-| WhatsApp | `/add-whatsapp` | `.claude/skills/channels/whatsapp/files/` |
-| Discord | `/add-discord` | `.claude/skills/add-discord/` |
-| Telegram | `/add-telegram` | `.claude/skills/channels/telegram/files/` |
+| WhatsApp | `/add-channel-whatsapp` | `.claude/skills/add-channel-whatsapp/files/` |
+| Discord | `/add-channel-discord` | `.claude/skills/add-channel-discord/` |
+| Telegram | `/add-channel-telegram` | `.claude/skills/add-channel-telegram/files/` |
 
 ### How routing works
 
@@ -291,34 +291,34 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 
 | Skill | What it adds |
 |-------|-------------|
-| `add-brave-search` | Web search via Brave Search API |
-| `add-cal` | Google Calendar + CalDAV (includes TypeScript CLI baked into image via Dockerfile.partial) |
-| `add-changedetection` | changedetection.io website monitoring |
-| `add-claude-mem` | Persistent cross-session memory for agents |
-| `add-commute` | Travel times via Waze API |
-| `add-freshrss` | Self-hosted RSS feed reader |
-| `add-github` | GitHub API access (PRs, issues, commits) |
-| `add-gmail` | Gmail access via gog CLI (search, read, send) |
-| `add-homeassistant` | Home Assistant smart home control via MCP |
-| `add-imap-read` | Read-only IMAP email access |
-| `add-n8n` | n8n workflow automation |
-| `add-norish` | Recipe import by URL |
-| `add-notion` | Notion API for notes/project management |
-| `add-parallel` | Parallel AI web research via MCP servers |
-| `add-trains` | UK National Rail departures (includes Python script) |
-| `add-transcription` | Voice message transcription via OpenAI Whisper (channel-agnostic) |
-| `add-weather` | Weather via wttr.in / Open-Meteo (no API key needed) |
-| `add-webhook` | HTTP webhook endpoint for push events (Home Assistant, uptime monitors, etc.) |
+| `add-skill-brave-search` | Web search via Brave Search API |
+| `add-skill-cal` | Google Calendar + CalDAV (includes TypeScript CLI baked into image via Dockerfile.partial) |
+| `add-skill-changedetection` | changedetection.io website monitoring |
+| `add-skill-claude-mem` | Persistent cross-session memory for agents |
+| `add-skill-commute` | Travel times via Waze API |
+| `add-skill-freshrss` | Self-hosted RSS feed reader |
+| `add-skill-github` | GitHub API access (PRs, issues, commits) |
+| `add-skill-gmail` | Gmail access via gog CLI (search, read, send) |
+| `add-skill-homeassistant` | Home Assistant smart home control via MCP |
+| `add-skill-imap-read` | Read-only IMAP email access |
+| `add-skill-n8n` | n8n workflow automation |
+| `add-skill-norish` | Recipe import by URL |
+| `add-skill-notion` | Notion API for notes/project management |
+| `add-skill-parallel` | Parallel AI web research via MCP servers |
+| `add-skill-trains` | UK National Rail departures (includes Python script) |
+| `add-skill-transcription` | Voice message transcription via OpenAI Whisper (channel-agnostic) |
+| `add-skill-weather` | Weather via wttr.in / Open-Meteo (no API key needed) |
+| `add-skill-webhook` | HTTP webhook endpoint for push events (Home Assistant, uptime monitors, etc.) |
 
 ### Channel skills (5)
 
 | Skill | What it adds |
 |-------|-------------|
-| `add-whatsapp` | Install WhatsApp as a channel plugin |
-| `add-discord` | Install Discord as a channel plugin |
-| `add-telegram` | Install Telegram as a channel plugin |
-| `add-telegram-swarm` | Agent Teams support for Telegram (pool bot identities) |
-| `add-channel` | Generic skill to register a group on any installed channel |
+| `add-channel-whatsapp` | Install WhatsApp as a channel plugin |
+| `add-channel-discord` | Install Discord as a channel plugin |
+| `add-channel-telegram` | Install Telegram as a channel plugin |
+| `add-channel-telegram-swarm` | Agent Teams support for Telegram (pool bot identities) |
+| `nanoclaw-add-group` | Generic skill to register a group on any installed channel |
 
 ### Meta skills (6)
 

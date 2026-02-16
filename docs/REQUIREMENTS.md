@@ -38,7 +38,7 @@ The codebase assumes you have an AI collaborator. It doesn't need to be excessiv
 
 ### Skills Over Features
 
-When people contribute, they shouldn't add "Telegram support alongside WhatsApp." They should contribute a skill like `/add-telegram` that transforms the codebase. Users fork the repo, run skills to customize, and end up with clean code that does exactly what they need - not a bloated system trying to support everyone's use case simultaneously.
+When people contribute, they shouldn't add "Telegram support alongside WhatsApp." They should contribute a skill like `/add-channel-telegram` that transforms the codebase. Users fork the repo, run skills to customize, and end up with clean code that does exactly what they need - not a bloated system trying to support everyone's use case simultaneously.
 
 ---
 
@@ -48,8 +48,8 @@ Skills we'd love contributors to build:
 
 ### Communication Channels
 Skills to add or switch to different messaging platforms:
-- `/add-slack` - Add Slack as an input channel
-- `/add-sms` - Add SMS via Twilio or similar
+- `/add-channel-slack` - Add Slack as an input channel
+- `/add-channel-sms` - Add SMS via Twilio or similar
 
 Note: Telegram, Discord, and WhatsApp are already supported via channel plugins.
 

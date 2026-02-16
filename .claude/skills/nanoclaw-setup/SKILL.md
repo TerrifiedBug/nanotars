@@ -47,12 +47,12 @@ Based on the results, determine the setup state:
 
 Use `AskUserQuestion` with options:
 1. **Re-authenticate channel** — Re-run channel auth (e.g., if WhatsApp got disconnected)
-2. **Add another channel or group** — Use `/add-channel`
+2. **Add another channel or group** — Use `/nanoclaw-add-group`
 3. **Reconfigure from scratch** — Start over from step 1
 4. **Nothing, looks good** — Exit
 
 If they pick option 1: Skip to section 5 (Authenticate Channel).
-If they pick option 2: Tell them to use `/add-channel` instead.
+If they pick option 2: Tell them to use `/nanoclaw-add-group` instead.
 If they pick option 3: Continue with section 1 below.
 If they pick option 4: Done.
 
@@ -262,9 +262,9 @@ for f in plugins/channels/*/plugin.json; do
 done
 
 echo "=== AVAILABLE (not yet installed) ==="
-for s in .claude/skills/channels/*/SKILL.md; do
+for s in .claude/skills/add-channel-*/CHANNEL.md; do
   [ -f "$s" ] || continue
-  CHANNEL_NAME=$(basename "$(dirname "$s")")
+  CHANNEL_NAME=$(basename "$(dirname "$s")" | sed 's/^add-channel-//')
   # Skip if already installed
   [ -d "plugins/channels/$CHANNEL_NAME" ] && continue
   echo "$CHANNEL_NAME|$(dirname "$s")"
@@ -289,7 +289,7 @@ Present both installed and available channels to the user. Mark which are instal
 >
 > Which channel do you want to use for your main (admin) channel?
 
-**If user picks an uninstalled channel**: Read the channel skill at `.claude/skills/channels/{name}/SKILL.md` and follow its installation instructions. This typically involves:
+**If user picks an uninstalled channel**: Read the channel skill at `.claude/skills/add-channel-{name}/CHANNEL.md` and follow its installation instructions. This typically involves:
 1. Installing npm dependencies (e.g., `npm install grammy` for Telegram)
 2. Copying plugin files to `plugins/channels/{name}/` (if the skill has a `files/` directory)
 3. Collecting credentials (bot tokens, API keys) and adding them to `.env`
@@ -346,13 +346,13 @@ for i in $(seq 1 60); do STATUS=$(cat data/channels/$CHANNEL_NAME/auth-status.tx
 
 These are common channels with specific auth requirements:
 
-**WhatsApp** — Interactive auth via QR code or pairing code. The auth script supports `--serve` (HTTP QR for headless servers) and `--pairing-code --phone NUMBER` (numeric code entry). Handles error 515 reconnection automatically. See `.claude/skills/channels/whatsapp/SKILL.md` for the full QR/pairing flow details.
+**WhatsApp** — Interactive auth via QR code or pairing code. The auth script supports `--serve` (HTTP QR for headless servers) and `--pairing-code --phone NUMBER` (numeric code entry). Handles error 515 reconnection automatically. See `.claude/skills/add-channel-whatsapp/CHANNEL.md` for the full QR/pairing flow details.
 
 **Telegram** — Token-based. Needs `TELEGRAM_BOT_TOKEN` in `.env` (get from @BotFather). No interactive auth needed.
 
 **Discord** — Token-based. Needs `DISCORD_BOT_TOKEN` in `.env` (get from Discord Developer Portal). Enable Message Content Intent in bot settings. No interactive auth needed.
 
-For WhatsApp specifically, if you need the detailed QR/pairing code flow, read `.claude/skills/channels/whatsapp/SKILL.md` and follow its auth instructions inline.
+For WhatsApp specifically, if you need the detailed QR/pairing code flow, read `.claude/skills/add-channel-whatsapp/CHANNEL.md` and follow its auth instructions inline.
 
 ## 6. Configure Assistant Name and Main Channel
 

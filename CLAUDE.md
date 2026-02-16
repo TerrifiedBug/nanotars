@@ -34,7 +34,7 @@ Agents run in containers with explicit mount boundaries. Before modifying files 
 |-------|-------------|
 | `/nanoclaw-setup` | First-time installation, authentication, service configuration |
 | `/create-channel-plugin` | Build a new channel plugin (Discord, Slack, etc.) from scratch |
-| `/add-channel` | Add a group/chat to an existing channel plugin |
+| `/nanoclaw-add-group` | Add a group/chat to an existing channel plugin |
 | `/create-skill-plugin` | Build a new skill plugin (integrations, tools, hooks) from scratch |
 | `/nanoclaw-customize` | Adding integrations, changing behavior, other modifications |
 | `/nanoclaw-debug` | Container issues, logs, troubleshooting |

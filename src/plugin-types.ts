@@ -17,7 +17,7 @@ export interface PluginManifest {
   dependencies?: boolean;
   /** True if this plugin provides a channel (e.g. WhatsApp, Discord) */
   channelPlugin?: boolean;
-  /** Skill name for interactive auth setup (e.g. "setup-whatsapp", "add-discord") */
+  /** Skill name for interactive auth setup (e.g. "setup-whatsapp", "add-channel-discord") */
   authSkill?: string;
   /** Which channel types this plugin applies to. Default: ["*"] (all) */
   channels?: string[];

@@ -227,14 +227,14 @@ RUN cd /opt/cal-cli && npm install --omit=dev && npm run build && rm -rf src/ ts
 
 ## How Skills Create Plugins
 
-Installation skills live in `.claude/skills/add-{name}/` and contain a `SKILL.md` that guides Claude Code through creating a plugin. The typical pattern is:
+Installation skills live in `.claude/skills/add-skill-{name}/` and contain a `SKILL.md` that guides Claude Code through creating a plugin. The typical pattern is:
 
 1. The skill's `SKILL.md` contains step-by-step instructions
 2. Steps create `plugins/{name}/` with all necessary files (manifest, skills, MCP config, etc.)
 3. Environment variables are added to `.env`
 4. The project is rebuilt (`npm run build`) and the service restarted
 
-Example from `add-brave-search`:
+Example from `add-skill-brave-search`:
 
 ```
 Step 1: Check if already configured

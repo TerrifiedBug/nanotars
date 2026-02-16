@@ -42,7 +42,7 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 
 **AI-native.** No installation wizard; Claude Code guides setup. No monitoring dashboard; ask Claude what's happening. No debugging tools; describe the problem, Claude fixes it.
 
-**Skills over features.** Contributors shouldn't add features (e.g. support for Telegram) to the codebase. Instead, they contribute [claude code skills](https://code.claude.com/docs/en/skills) like `/add-telegram` that transform your fork. You end up with clean code that does exactly what you need.
+**Skills over features.** Contributors shouldn't add features (e.g. support for Telegram) to the codebase. Instead, they contribute [claude code skills](https://code.claude.com/docs/en/skills) like `/add-channel-telegram` that transform your fork. You end up with clean code that does exactly what you need.
 
 **Best harness, best model.** This runs on Claude Agent SDK, which means you're running Claude Code directly. The harness matters. A bad harness makes even smart models seem dumb, a good harness gives them superpowers. Claude Code is (IMO) the best harness available.
 
@@ -55,7 +55,7 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 - **Web access** - Search and fetch content
 - **Container isolation** - Agents sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
 - **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks (first personal AI assistant to support this)
-- **Optional integrations** - Add Gmail (`/add-gmail`) and more via skills
+- **Optional integrations** - Add Gmail (`/add-skill-gmail`) and more via skills
 
 ## Usage
 
@@ -91,18 +91,18 @@ The codebase is small enough that Claude can safely modify it.
 
 **Don't add features. Add skills.**
 
-If you want to add Telegram support, don't create a PR that adds Telegram alongside WhatsApp. Instead, contribute a skill file (`.claude/skills/add-telegram/SKILL.md`) that teaches Claude Code how to transform a NanoClaw installation to use Telegram.
+If you want to add Telegram support, don't create a PR that adds Telegram alongside WhatsApp. Instead, contribute a skill file (`.claude/skills/add-channel-telegram/SKILL.md`) that teaches Claude Code how to transform a NanoClaw installation to use Telegram.
 
-Users then run `/add-telegram` on their fork and get clean code that does exactly what they need, not a bloated system trying to support every use case.
+Users then run `/add-channel-telegram` on their fork and get clean code that does exactly what they need, not a bloated system trying to support every use case.
 
 ### RFS (Request for Skills)
 
 Skills we'd love to see:
 
 **Communication Channels**
-- `/add-telegram` - Add Telegram as channel. Should give the user option to replace WhatsApp or add as additional channel. Also should be possible to add it as a control channel (where it can trigger actions) or just a channel that can be used in actions triggered elsewhere
-- `/add-slack` - Add Slack
-- `/add-discord` - Add Discord
+- `/add-channel-telegram` - Add Telegram as channel. Should give the user option to replace WhatsApp or add as additional channel. Also should be possible to add it as a control channel (where it can trigger actions) or just a channel that can be used in actions triggered elsewhere
+- `/add-channel-slack` - Add Slack
+- `/add-channel-discord` - Add Discord
 
 **Platform Support**
 - `/setup-windows` - Windows via WSL2 + Docker

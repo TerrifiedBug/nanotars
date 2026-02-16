@@ -14,7 +14,7 @@ This skill creates new NanoClaw channel plugins through guided conversation. The
 
 You are the channel plugin expert. Your job is to translate the user's idea into a working channel plugin without exposing internal architecture details. Keep questions focused on what the user wants — platform credentials, chat behavior, naming — not on how the plugin system works under the hood.
 
-The output is a self-contained channel plugin directory (`plugins/channels/{name}/`) with all required files, plus an `add-{name}` installation skill.
+The output is a self-contained channel plugin directory (`plugins/channels/{name}/`) with all required files, plus an `add-channel-{name}` installation skill.
 
 ## Conversational Flow
 
@@ -66,7 +66,7 @@ Before generating:
    > - `plugin.json` — manifest with `channelPlugin: true`
    > - `index.js` — {Platform} bot using {library}, implements Channel interface
    > - `auth.js` — standalone auth script (if applicable)
-   > - `/add-{name}` skill — so you can run `/add-{name}` to install it anytime"
+   > - `/add-channel-{name}` skill — so you can run `/add-channel-{name}` to install it anytime"
 
 2. **List prerequisites** (npm packages, API setup)
 
@@ -76,15 +76,15 @@ Before generating:
 
 5. **Next step — make this prominent and unmissable:**
 
-   > **Your `{name}` channel plugin is ready! To install it, run `/add-{name}`.**
+   > **Your `{name}` channel plugin is ready! To install it, run `/add-channel-{name}`.**
 
    Then immediately ask with `AskUserQuestion`:
-   > "Want me to install it now, or would you prefer to run `/add-{name}` later?"
+   > "Want me to install it now, or would you prefer to run `/add-channel-{name}` later?"
    >
-   > Options: ["Install now", "I'll run /add-{name} later"]
+   > Options: ["Install now", "I'll run /add-channel-{name} later"]
 
-   - If **"Install now"**: Follow the generated `add-{name}` SKILL.md installation steps inline — install npm dependencies, copy plugin files into `plugins/channels/{name}/`, collect credentials from the user and add to `.env`, run `auth.js` if applicable, rebuild and restart. Do not tell the user to go read the SKILL.md — just execute the steps yourself.
-   - If **"I'll run /add-{name} later"**: Confirm with: "Sounds good. When you're ready, just say `/add-{name}` and I'll walk you through it."
+   - If **"Install now"**: Follow the generated `add-channel-{name}` SKILL.md installation steps inline — install npm dependencies, copy plugin files into `plugins/channels/{name}/`, collect credentials from the user and add to `.env`, run `auth.js` if applicable, rebuild and restart. Do not tell the user to go read the SKILL.md — just execute the steps yourself.
+   - If **"I'll run /add-channel-{name} later"**: Confirm with: "Sounds good. When you're ready, just say `/add-channel-{name}` and I'll walk you through it."
 
 ### User-Facing Language
 
@@ -118,7 +118,7 @@ Before generating:
 ### CAN create/modify:
 
 - `plugins/channels/{name}/` — the channel plugin being generated
-- `.claude/skills/add-{name}/` — the installation skill
+- `.claude/skills/add-channel-{name}/` — the installation skill
 - `.env` — adding environment variables, with user confirmation only
 
 ### Escalation:
@@ -129,37 +129,27 @@ Before generating:
 
 ## Output Structure
 
-You MUST create files in **two** locations:
+Create all files in a single skill directory:
 
-### 1. Channel plugin files: `.claude/skills/channels/{name}/`
+### Installation skill: `.claude/skills/add-channel-{name}/`
 
-The `files/` subdirectory holds the actual channel plugin code — it gets copied to `plugins/channels/{name}/` when installed. `/nanoclaw-setup` scans this directory to discover available (but not yet installed) channels.
+This is both the **user-facing entry point** (shows up as `/add-channel-{name}` in the skills list) and the home for the channel plugin template files. The `files/` subdirectory holds the actual channel plugin code that gets copied to `plugins/channels/{name}/` when installed.
 
 ```
-.claude/skills/channels/{name}/
-├── SKILL.md                        # Channel reference (auth, setup details)
+.claude/skills/add-channel-{name}/
+├── SKILL.md                        # Installation skill (name: add-channel-{name})
+├── CHANNEL.md                      # Channel reference (auth details, platform docs)
 └── files/                          # Template channel plugin (copied on install)
     ├── plugin.json                 # Manifest (always present)
     ├── index.js                    # Channel implementation (always present)
     └── auth.js                     # Auth setup script (if interactive auth needed)
 ```
 
-### 2. Discoverable install skill: `.claude/skills/add-{name}/`
-
-This is the **user-facing entry point** — it shows up as `/add-{name}` in the skills list. Without this, users have no way to discover or invoke the installation.
-
-```
-.claude/skills/add-{name}/
-└── SKILL.md                        # Installation skill (name: add-{name})
-```
-
-The `add-{name}` SKILL.md must:
-- Have frontmatter with `name: add-{name}` (e.g., `name: add-discord`)
+The `add-channel-{name}` SKILL.md must:
+- Have frontmatter with `name: add-channel-{name}` (e.g., `name: add-channel-discord`)
 - Include the full installation flow: npm install, copy plugin files, collect credentials, restart
-- Reference the channel files with: `cp -r .claude/skills/channels/{name}/files/* plugins/channels/{name}/`
+- Reference the channel files with: `cp -r .claude/skills/add-channel-{name}/files/* plugins/channels/{name}/`
 - Include registration and verification steps
-
-**Why two locations?** The `channels/{name}/` directory holds the plugin source code and is scanned by `/nanoclaw-setup` for channel discovery. The `add-{name}/` skill is the user-invocable command that appears in the skills list. Both are needed — without `add-{name}/`, users can't find the installer; without `channels/{name}/`, `/nanoclaw-setup` can't discover available channels.
 
 ## Channel Plugin Templates
 
@@ -318,7 +308,7 @@ Status file protocol:
 
 ```markdown
 ---
-name: add-{name}
+name: add-channel-{name}
 description: Add {Platform} as a messaging channel. Triggers on "add {name}", "{name} setup", "{name} channel".
 ---
 
@@ -348,7 +338,7 @@ Adds {Platform} as a messaging channel to NanoClaw.
 3. Copy channel plugin files into place:
    ```bash
    mkdir -p plugins/channels/{name}
-   cp -r .claude/skills/channels/{name}/files/* plugins/channels/{name}/
+   cp -r .claude/skills/add-channel-{name}/files/* plugins/channels/{name}/
    ```
 
 4. Install plugin dependencies:
@@ -368,7 +358,7 @@ Adds {Platform} as a messaging channel to NanoClaw.
 
 ## Register a Chat
 
-After the channel connects, use `/add-channel` to register a group/chat on this channel.
+After the channel connects, use `/nanoclaw-add-group` to register a group/chat on this channel.
 
 ## Verify
 
