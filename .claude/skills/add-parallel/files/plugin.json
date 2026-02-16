@@ -1,0 +1,6 @@
+{
+  "name": "parallel",
+  "description": "Parallel AI web research via MCP",
+  "containerEnvVars": ["PARALLEL_API_KEY"],
+  "hooks": []
+}

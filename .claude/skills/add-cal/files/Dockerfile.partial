@@ -1,5 +1,5 @@
-# Calendar plugin: gogcli (Google Calendar) + cal-cli (CalDAV)
-RUN curl -sL "https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin gog
+# Calendar plugin: gogcli (Google Workspace CLI) + cal-cli (CalDAV)
+RUN which gog >/dev/null 2>&1 || curl -sL "https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin gog
 
 # Build cal-cli for CalDAV support (iCloud, Nextcloud, Fastmail)
 COPY plugins/calendar/cal-cli/ /opt/cal-cli/

@@ -1,0 +1,9 @@
+{
+  "name": "gmail",
+  "description": "Gmail read/send via gog CLI",
+  "containerEnvVars": ["GOG_KEYRING_PASSWORD", "GOG_ACCOUNT"],
+  "containerMounts": [
+    {"hostPath": "data/gogcli", "containerPath": "/home/node/.config/gogcli"}
+  ],
+  "hooks": []
+}
