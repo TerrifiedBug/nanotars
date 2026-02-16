@@ -8,14 +8,14 @@ allowed-tools: Bash(python3:*, curl:*)
 
 Read emails from multiple accounts via IMAP. Can mark emails as read to prevent duplicate digest entries. **Never sends or deletes emails.**
 
-All accounts are configured in the `$EMAIL_ACCOUNTS` environment variable as a JSON array. Run `/add-imap-read` on the host to configure accounts.
+All accounts are configured in the `$IMAP_READ_ACCOUNTS` environment variable as a JSON array. Run `/add-imap-read` on the host to configure accounts.
 
 ## Quick Check — Unread Count
 
 ```bash
 python3 -c "
 import imaplib, json, os
-accounts = json.loads(os.environ['EMAIL_ACCOUNTS'])
+accounts = json.loads(os.environ['IMAP_READ_ACCOUNTS'])
 for a in accounts:
     try:
         m = imaplib.IMAP4_SSL(a['host'], a.get('port', 993))
@@ -61,7 +61,7 @@ def get_body_preview(msg, max_len=300):
             return payload.decode(msg.get_content_charset() or "utf-8", errors="replace")[:max_len]
     return ""
 
-accounts = json.loads(os.environ["EMAIL_ACCOUNTS"])
+accounts = json.loads(os.environ["IMAP_READ_ACCOUNTS"])
 results = []
 
 for a in accounts:
@@ -121,7 +121,7 @@ def get_body_preview(msg, max_len=300):
             return payload.decode(msg.get_content_charset() or "utf-8", errors="replace")[:max_len]
     return ""
 
-accounts = json.loads(os.environ["EMAIL_ACCOUNTS"])
+accounts = json.loads(os.environ["IMAP_READ_ACCOUNTS"])
 results = []
 
 for a in accounts:
@@ -170,7 +170,7 @@ def decode_hdr(val):
         for p, enc in parts
     )
 
-accounts = json.loads(os.environ["EMAIL_ACCOUNTS"])
+accounts = json.loads(os.environ["IMAP_READ_ACCOUNTS"])
 results = []
 
 for a in accounts:
@@ -234,7 +234,7 @@ def get_body(msg):
             return payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
     return ""
 
-accounts = json.loads(os.environ["EMAIL_ACCOUNTS"])
+accounts = json.loads(os.environ["IMAP_READ_ACCOUNTS"])
 account = next((a for a in accounts if a["name"] == ACCOUNT_NAME), None)
 if not account:
     print(json.dumps({"error": f"Account '{ACCOUNT_NAME}' not found"}))
@@ -272,7 +272,7 @@ if not uids_to_mark:
     print("Usage: python3 mark_read.py <uid1> <uid2> ...")
     exit(1)
 
-accounts = json.loads(os.environ["EMAIL_ACCOUNTS"])
+accounts = json.loads(os.environ["IMAP_READ_ACCOUNTS"])
 # Mark across all accounts — IMAP silently ignores UIDs that don't exist in a mailbox
 for a in accounts:
     try:
@@ -297,7 +297,7 @@ import imaplib, json, os, sys
 ACCOUNT_NAME = sys.argv[1]  # e.g., "Yahoo"
 uids_to_mark = sys.argv[2:]  # e.g., "123" "456"
 
-accounts = json.loads(os.environ["EMAIL_ACCOUNTS"])
+accounts = json.loads(os.environ["IMAP_READ_ACCOUNTS"])
 account = next((a for a in accounts if a["name"] == ACCOUNT_NAME), None)
 if not account:
     print(json.dumps({"error": f"Account '{ACCOUNT_NAME}' not found"}))
@@ -315,16 +315,20 @@ PYEOF
 
 ## Setup
 
-Set `EMAIL_ACCOUNTS` in `.env` as a JSON array:
+Set `IMAP_READ_ACCOUNTS` in `.env` as a JSON array:
 
 ```
-EMAIL_ACCOUNTS=[{"name":"Gmail","host":"imap.gmail.com","port":993,"user":"you@gmail.com","pass":"xxxx xxxx xxxx xxxx"},{"name":"Yahoo","host":"imap.mail.yahoo.com","port":993,"user":"you@yahoo.com","pass":"xxxx xxxx xxxx xxxx"}]
+IMAP_READ_ACCOUNTS=[{"name":"Gmail","host":"imap.gmail.com","port":993,"user":"you@gmail.com","pass":"xxxx xxxx xxxx xxxx"},{"name":"Yahoo","host":"imap.mail.yahoo.com","port":993,"user":"you@yahoo.com","pass":"xxxx xxxx xxxx xxxx"}]
 ```
 
 **App passwords required:**
 - Gmail: Google Account > Security > 2-Step Verification > App Passwords
 - Yahoo: Yahoo Account > Account Security > Generate App Password
 - Outlook: Microsoft Account > Security > App Passwords
+
+## When to Use This vs Gmail (gog)
+
+This skill is **read-only** -- it can check, search, and mark emails as read, but cannot send or delete emails. If the Gmail plugin (`gog` CLI) is also installed, use gog only for accounts configured there. Accounts configured here in `IMAP_READ_ACCOUNTS` should always be accessed via this IMAP skill, even if they are Gmail addresses -- the user chose read-only access intentionally.
 
 ## Notes
 

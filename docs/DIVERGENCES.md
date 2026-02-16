@@ -115,14 +115,16 @@ This document tracks all legitimate divergences between our fork's `main` branch
 | `set-model` | Change Claude model for containers |
 | `update-nanoclaw` | Upstream sync management |
 
-### Unchanged from upstream (3)
+### Unchanged from upstream (0)
 
-`add-gmail`, `add-parallel`, `x-integration`
+None -- all upstream skills have been rewritten or removed.
 
-### Rewritten for plugin architecture (2)
+### Rewritten for plugin architecture (4)
 
 | Skill | Categories | Summary |
 |-------|------------|---------|
+| `add-gmail` | PLUGIN | Rewritten from inline source-modification to plugin template pattern (plugin.json + mcp.json + container-skills, GCP OAuth auth, `containerMounts` for credentials) |
+| `add-parallel` | PLUGIN | Rewritten from inline source-modification to plugin template pattern (plugin.json + mcp.json + container-skills, HTTP MCP servers with API key) |
 | `add-telegram` | TELEGRAM, PLUGIN | Rewritten from inline implementation to install-and-auth pattern (copies plugin from skill templates, points to channel docs) |
 | `add-telegram-swarm` | TELEGRAM, PLUGIN | Rewritten from code-modification to config-only (set env var, add CLAUDE.md instructions, restart) |
 
@@ -132,11 +134,12 @@ This document tracks all legitimate divergences between our fork's `main` branch
 |-------|-----|
 | `debug` | Upstream version is WhatsApp-specific; ours is channel-agnostic |
 
-### Removed from upstream (1)
+### Removed from upstream (2)
 
 | Skill | Why |
 |-------|-----|
-| `convert-to-docker` | Deleted — Docker support is baked into `container-runtime.ts` and auto-detected by setup; no conversion needed |
+| `convert-to-docker` | Deleted -- Docker support is baked into `container-runtime.ts` and auto-detected by setup; no conversion needed |
+| `x-integration` | Deleted -- niche Playwright-based Twitter automation; write-only, no read capability, not needed |
 
 ## Not in Fork (upstream-only, intentionally excluded)
 

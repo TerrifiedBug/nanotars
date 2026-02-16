@@ -41,12 +41,18 @@ Import OAuth credentials (user provides their client_secret.json path):
 gog auth credentials /path/to/client_secret.json
 ```
 
-OAuth login:
+OAuth login (include gmail if the Gmail plugin is already installed to preserve its scopes):
 ```bash
-gog auth login --services calendar
+if [ -d plugins/gmail ]; then
+  GOG_KEYRING_PASSWORD=$(grep GOG_KEYRING_PASSWORD .env | cut -d'=' -f2) gog auth login --services calendar,gmail
+else
+  GOG_KEYRING_PASSWORD=$(grep GOG_KEYRING_PASSWORD .env | cut -d'=' -f2) gog auth login --services calendar
+fi
 ```
 
-Verify: `gog calendar calendars`
+On a headless server, add `--manual` to the gog command above.
+
+Verify: `GOG_KEYRING_PASSWORD=$(grep GOG_KEYRING_PASSWORD .env | cut -d'=' -f2) gog calendar calendars`
 
 Configure environment:
 ```bash

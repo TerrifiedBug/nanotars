@@ -17,7 +17,7 @@ Read-only email access for agent containers via IMAP. Supports multiple provider
 
 1. Check existing configuration:
    ```bash
-   grep "^EMAIL_ACCOUNTS=" .env 2>/dev/null && echo "ALREADY_CONFIGURED" || echo "NEEDS_SETUP"
+   grep "^IMAP_READ_ACCOUNTS=" .env 2>/dev/null && echo "ALREADY_CONFIGURED" || echo "NEEDS_SETUP"
    ls plugins/imap-read/plugin.json 2>/dev/null && echo "PLUGIN_EXISTS" || echo "NO_PLUGIN"
    ```
    If `ALREADY_CONFIGURED`, ask the user if they want to add another account or reconfigure.
@@ -52,10 +52,10 @@ Read-only email access for agent containers via IMAP. Supports multiple provider
    > 3. Go to "App passwords" > Create a new app password
    > 4. Copy the generated password
 
-3. Build `EMAIL_ACCOUNTS` JSON array and save to `.env`:
+3. Build `IMAP_READ_ACCOUNTS` JSON array and save to `.env`:
    ```bash
-   sed -i '/^EMAIL_ACCOUNTS=/d' .env
-   echo 'EMAIL_ACCOUNTS=[{"name":"Gmail","host":"imap.gmail.com","port":993,"user":"user@gmail.com","pass":"xxxx xxxx xxxx xxxx"}]' >> .env
+   sed -i '/^IMAP_READ_ACCOUNTS=/d' .env
+   echo 'IMAP_READ_ACCOUNTS=[{"name":"Gmail","host":"imap.gmail.com","port":993,"user":"user@gmail.com","pass":"xxxx xxxx xxxx xxxx"}]' >> .env
    ```
    (Substitute actual account details. JSON must be on a single line.)
 
@@ -96,7 +96,7 @@ Tell the user:
 
 ## Troubleshooting
 
-- **"EMAIL_ACCOUNTS not defined" in container**: Check that `plugins/imap-read/plugin.json` exists with the correct `containerEnvVars`, and that `.env` has the variable set.
+- **"IMAP_READ_ACCOUNTS not defined" in container**: Check that `plugins/imap-read/plugin.json` exists with the correct `containerEnvVars`, and that `.env` has the variable set.
 - **Authentication failures**: App passwords expire if the account password changes. Regenerate and re-run this skill.
 - **Gmail blocks access**: Ensure 2-Step Verification is ON and you're using an app password.
 - **Timeout errors**: Some corporate IMAP servers require VPN.
@@ -106,7 +106,7 @@ Tell the user:
 1. `rm -rf plugins/imap-read/`
 2. Remove env vars from `.env`:
    ```bash
-   sed -i '/^EMAIL_ACCOUNTS=/d' .env
+   sed -i '/^IMAP_READ_ACCOUNTS=/d' .env
    ```
 3. Rebuild and restart.
 4. Revoke app passwords in each provider's security settings.
