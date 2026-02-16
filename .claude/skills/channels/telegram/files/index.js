@@ -4,6 +4,15 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Sanitize a sender name for use as a Telegram bot display name. */
+function sanitizeBotName(name) {
+  // Strip control characters and zero-width chars
+  let clean = name.replace(/[\x00-\x1f\x7f\u200b-\u200f\u2028-\u202f\ufeff]/g, '').trim();
+  // Telegram bot names max 64 chars
+  if (clean.length > 64) clean = clean.slice(0, 64).trim();
+  return clean || 'Agent';
+}
+
 class TelegramChannel {
   name = 'telegram';
 
@@ -273,7 +282,7 @@ class TelegramChannel {
       this.senderBotMap.set(key, idx);
       // Rename the bot to match the sender's role, then wait for Telegram to propagate
       try {
-        await this.poolApis[idx].setMyName(sender);
+        await this.poolApis[idx].setMyName(sanitizeBotName(sender));
         await new Promise((r) => setTimeout(r, 2000));
         this.logger.info({ sender, poolIndex: idx }, 'Assigned and renamed pool bot');
       } catch (err) {
