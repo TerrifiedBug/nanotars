@@ -195,8 +195,16 @@ class WhatsAppChannel {
               content = content
                 ? `${content}\n[${media.type}: ${media.path}]`
                 : `[${media.type}: ${media.path}]`;
+            } else if (!content) {
+              // Media download failed and no caption — add placeholder so message isn't dropped
+              const type = msg.message?.imageMessage ? 'image' : msg.message?.videoMessage ? 'video'
+                : msg.message?.audioMessage ? 'audio' : 'document';
+              content = `[${type}: download failed]`;
             }
           }
+
+          // Skip protocol messages with no content (encryption keys, read receipts, etc.)
+          if (!content) continue;
 
           this.config.onMessage(chatJid, {
             id: msg.key.id || '',
