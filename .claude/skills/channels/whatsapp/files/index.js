@@ -198,6 +198,9 @@ class WhatsAppChannel {
             }
           }
 
+          // Skip protocol messages with no content (encryption keys, read receipts, etc.)
+          if (!content) continue;
+
           this.config.onMessage(chatJid, {
             id: msg.key.id || '',
             chat_jid: chatJid,
