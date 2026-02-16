@@ -107,7 +107,7 @@ Show file-level impact from upstream:
 Bucket the upstream changed files:
 - **Skills** (`.claude/skills/`): unlikely to conflict unless the user edited an upstream skill
 - **Source** (`src/`): may conflict if user modified the same files
-- **Build/config** (`package.json`, `package-lock.json`, `tsconfig*.json`, `container/`, `launchd/`): review needed
+- **Build/config** (`package.json`, `package-lock.json`, `tsconfig*.json`, `container/`): review needed
 - **Other**: docs, tests, misc
 
 Present these buckets to the user and ask them to choose one path using AskUserQuestion:
