@@ -161,8 +161,10 @@ nanoclaw/
 │   └── nanoclaw.error.log         # Host stderr
 │   # Note: Per-container logs are in groups/{folder}/logs/container-*.log
 │
-└── launchd/
-    └── com.nanoclaw.plist         # macOS service configuration
+└── .claude/skills/nanoclaw-setup/
+    ├── com.nanoclaw.plist         # macOS launchd service template
+    ├── mount-allowlist.json       # Example mount allowlist config
+    └── qr-auth.html              # QR code auth page for headless setup
 ```
 
 ---
@@ -494,7 +496,7 @@ When NanoClaw starts, it:
 
 ### Service: com.nanoclaw
 
-**launchd/com.nanoclaw.plist:**
+**.claude/skills/nanoclaw-setup/com.nanoclaw.plist:**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "...">
@@ -534,7 +536,7 @@ When NanoClaw starts, it:
 
 ```bash
 # Install service
-cp launchd/com.nanoclaw.plist ~/Library/LaunchAgents/
+cp .claude/skills/nanoclaw-setup/com.nanoclaw.plist ~/Library/LaunchAgents/
 
 # Start service
 launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
