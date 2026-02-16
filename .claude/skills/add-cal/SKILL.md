@@ -133,9 +133,53 @@ systemctl restart nanoclaw 2>/dev/null || launchctl kickstart -k gui/$(id -u)/co
 Tell the user:
 > Calendar access is configured. Test via WhatsApp: "list my calendars" or "what's on my calendar today?"
 
+## Refresh Google OAuth Token
+
+Google OAuth tokens expire periodically. When the agent reports `"invalid_grant" "Token has been expired or revoked."`, re-authenticate:
+
+### On a machine with a browser:
+```bash
+GOG_KEYRING_PASSWORD=$(grep GOG_KEYRING_PASSWORD .env | cut -d'=' -f2) gog auth add EMAIL --services=calendar --force-consent
+```
+
+### On a headless server (no browser):
+```bash
+GOG_KEYRING_PASSWORD=$(grep GOG_KEYRING_PASSWORD .env | cut -d'=' -f2) gog auth add EMAIL --manual --services=calendar --force-consent
+```
+This prints an OAuth URL. Open it in any browser, authorize, then copy the `localhost:1` redirect URL from the address bar and paste it back at the prompt.
+
+If the process can't accept interactive input (e.g. from Claude Code), use `expect`:
+```bash
+export GOG_KEYRING_PASSWORD=$(grep GOG_KEYRING_PASSWORD .env | cut -d'=' -f2)
+expect -c '
+set timeout 30
+spawn gog auth add EMAIL --manual --services=calendar --force-consent
+expect -re {state=([^\s&]+)}
+set state $expect_out(1,string)
+expect "Paste redirect URL"
+send "http://localhost:1/?state=$state&code=AUTH_CODE_HERE&scope=email%20https://www.googleapis.com/auth/calendar%20https://www.googleapis.com/auth/userinfo.email%20openid&authuser=0&prompt=consent\r"
+expect eof
+'
+```
+
+### CRITICAL: Sync credentials to container mount
+
+After re-auth, `gog` writes tokens to `~/.config/gogcli/` but containers mount `data/gogcli/`. You MUST sync:
+```bash
+cp -r ~/.config/gogcli/* data/gogcli/
+chown -R 1000:1000 data/gogcli/
+```
+Without this step, containers will still see the old expired token.
+
+Verify from the container mount path:
+```bash
+GOG_KEYRING_PASSWORD=$(grep GOG_KEYRING_PASSWORD .env | cut -d'=' -f2) XDG_CONFIG_HOME=$(pwd)/data gog calendar list --account EMAIL --all
+```
+
 ## Troubleshooting
 
-- **gog "auth required"**: OAuth tokens may have expired. Re-run `gog auth login --services calendar` on the host.
+- **gog "invalid_grant" / "Token has been expired or revoked"**: Follow the "Refresh Google OAuth Token" section above.
+- **gog works on host but not in container**: Credentials not synced — run `cp -r ~/.config/gogcli/* data/gogcli/ && chown -R 1000:1000 data/gogcli/`.
 - **gog config not found in container**: Ensure `data/gogcli/` exists and is chowned to 1000:1000.
 - **iCloud "401 Unauthorized"**: Use an app-specific password, not your Apple ID password.
 - **"CALDAV_ACCOUNTS not defined"**: Check it's in both `.env` and `plugin.json` containerEnvVars.
