@@ -122,11 +122,13 @@ Upstream has WhatsApp hardcoded throughout. This fork extracted WhatsApp into a 
 
 ### Channel plugins available
 
-| Channel | Status | Plugin Location |
-|---------|--------|----------------|
-| WhatsApp | Production | `plugins/channels/whatsapp/` |
-| Discord | Working | Installed via `/add-discord` skill |
-| Telegram | Skill template | Installed via `/add-telegram` skill |
+NanoClaw ships with no channels installed by default. The setup and add-channel skills discover available channel templates and guide installation. Currently supported:
+
+| Channel | Installed via | Template location |
+|---------|--------------|-------------------|
+| WhatsApp | `/add-whatsapp` | `.claude/skills/channels/whatsapp/files/` |
+| Discord | `/add-discord` | `.claude/skills/add-discord/` |
+| Telegram | `/add-telegram` | `.claude/skills/channels/telegram/files/` |
 
 ### How routing works
 
