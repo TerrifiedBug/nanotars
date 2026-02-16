@@ -272,33 +272,6 @@ export function storeMessage(msg: NewMessage): void {
 }
 
 /**
- * Store a message directly (for channels that provide plain message objects).
- */
-export function storeMessageDirect(msg: {
-  id: string;
-  chat_jid: string;
-  sender: string;
-  sender_name: string;
-  content: string;
-  timestamp: string;
-  is_from_me: boolean;
-  is_bot_message?: boolean;
-}): void {
-  db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    msg.id,
-    msg.chat_jid,
-    msg.sender,
-    msg.sender_name,
-    msg.content,
-    msg.timestamp,
-    msg.is_from_me ? 1 : 0,
-    msg.is_bot_message ? 1 : 0,
-  );
-}
-
-/**
  * Store an externally-originated message (plain strings, no channel SDK dependency).
  * Used by plugins (webhooks, channels, etc.) to inject messages into the
  * message store so the polling loop picks them up like any other message.
@@ -567,26 +540,19 @@ export function getAllSessions(): Record<string, string> {
 
 // --- Registered group accessors ---
 
-export function getRegisteredGroup(
-  jid: string,
-): (RegisteredGroup & { jid: string }) | undefined {
-  const row = db
-    .prepare('SELECT * FROM registered_groups WHERE jid = ?')
-    .get(jid) as
-    | {
-        jid: string;
-        name: string;
-        folder: string;
-        trigger_pattern: string;
-        added_at: string;
-        container_config: string | null;
-        requires_trigger: number | null;
-        channel: string | null;
-      }
-    | undefined;
-  if (!row) return undefined;
+interface RegisteredGroupRow {
+  jid: string;
+  name: string;
+  folder: string;
+  trigger_pattern: string;
+  added_at: string;
+  container_config: string | null;
+  requires_trigger: number | null;
+  channel: string | null;
+}
+
+function mapRegisteredGroupRow(row: RegisteredGroupRow): RegisteredGroup {
   return {
-    jid: row.jid,
     name: row.name,
     folder: row.folder,
     trigger: row.trigger_pattern,
@@ -597,6 +563,16 @@ export function getRegisteredGroup(
       : undefined,
     requiresTrigger: row.requires_trigger === null ? undefined : row.requires_trigger === 1,
   };
+}
+
+export function getRegisteredGroup(
+  jid: string,
+): (RegisteredGroup & { jid: string }) | undefined {
+  const row = db
+    .prepare('SELECT * FROM registered_groups WHERE jid = ?')
+    .get(jid) as RegisteredGroupRow | undefined;
+  if (!row) return undefined;
+  return { jid: row.jid, ...mapRegisteredGroupRow(row) };
 }
 
 export function setRegisteredGroup(
@@ -622,29 +598,10 @@ export function setRegisteredGroup(
 export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
   const rows = db
     .prepare('SELECT * FROM registered_groups')
-    .all() as Array<{
-    jid: string;
-    name: string;
-    folder: string;
-    trigger_pattern: string;
-    added_at: string;
-    container_config: string | null;
-    requires_trigger: number | null;
-    channel: string | null;
-  }>;
+    .all() as RegisteredGroupRow[];
   const result: Record<string, RegisteredGroup> = {};
   for (const row of rows) {
-    result[row.jid] = {
-      name: row.name,
-      folder: row.folder,
-      trigger: row.trigger_pattern,
-      added_at: row.added_at,
-      channel: row.channel || undefined,
-      containerConfig: row.container_config
-        ? JSON.parse(row.container_config)
-        : undefined,
-      requiresTrigger: row.requires_trigger === null ? undefined : row.requires_trigger === 1,
-    };
+    result[row.jid] = mapRegisteredGroupRow(row);
   }
   return result;
 }

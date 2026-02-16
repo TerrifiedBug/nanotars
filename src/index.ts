@@ -42,7 +42,7 @@ import {
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
-import { formatMessages, formatOutbound, routeOutbound, stripInternalTags } from './router.js';
+import { formatMessages, routeOutbound, stripInternalTags } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import type { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
@@ -527,7 +527,7 @@ async function main(): Promise<void> {
     queue,
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
-      const text = formatOutbound(rawText);
+      const text = stripInternalTags(rawText);
       if (text) await routeOutbound(channels, jid, text);
     },
   });

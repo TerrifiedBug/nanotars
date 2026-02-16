@@ -20,12 +20,6 @@ export function stripInternalTags(text: string): string {
   return text.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
 }
 
-export function formatOutbound(rawText: string): string {
-  const text = stripInternalTags(rawText);
-  if (!text) return '';
-  return text;
-}
-
 export async function routeOutbound(
   channels: Channel[],
   jid: string,
@@ -41,9 +35,3 @@ export async function routeOutbound(
   return true;
 }
 
-export function findChannel(
-  channels: Channel[],
-  jid: string,
-): Channel | undefined {
-  return channels.find((c) => c.ownsJid(jid));
-}
