@@ -42,6 +42,18 @@ List events:
 node /opt/cal-cli/dist/index.js events --from today --to "+7d"
 ```
 
+## Multiple Google Accounts
+
+If multiple Google accounts are configured, gog uses `$GOG_ACCOUNT` as the default. To target a specific account, pass `--account`:
+```bash
+gog calendar events --from today --to "+7d" --account user@gmail.com
+```
+
+List all available accounts:
+```bash
+gog auth list
+```
+
 ## Tips
 
 - Default to 7-day lookahead unless the user specifies a range
