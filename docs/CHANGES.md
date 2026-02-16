@@ -24,7 +24,7 @@ This document describes all changes made in this fork compared to the upstream [
 
 ## 1. Plugin Architecture
 
-**The single largest change.** Upstream NanoClaw is a monolithic app with WhatsApp hardcoded into core. This fork introduces a full plugin system that makes the core channel-agnostic and extensible without modifying core files.
+**The single largest change.** Upstream NanoClaw is a monolithic app where channels, skills, and integrations are hardcoded into core source files. This fork introduces a plugin system that makes the core plugin-agnostic — channels, skills, and integrations are all runtime-loaded extensions. No core file modifications needed to add new capabilities.
 
 ### What was built
 
