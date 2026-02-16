@@ -9,7 +9,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "node-ical": "^0.18.0",
+    "node-ical": "^0.25.2",
     "tsdav": "^2.1.1"
   },
   "devDependencies": {
