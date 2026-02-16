@@ -65,6 +65,11 @@ Set keyring password:
 grep "^GOG_KEYRING_PASSWORD=" .env 2>/dev/null && echo "ALREADY_SET" || echo 'GOG_KEYRING_PASSWORD=CHOOSE_A_PASSWORD' >> .env
 ```
 
+Optionally set `GOG_ACCOUNT` if the user has multiple Google accounts (gog defaults to the first):
+```bash
+echo 'GOG_ACCOUNT=user@gmail.com' >> .env
+```
+
 ## Step 3: Enable Gmail API and Authorize
 
 **If gog was already set up for Calendar (via /add-cal):**
@@ -120,7 +125,7 @@ cp -r .claude/skills/add-gmail/files/ plugins/gmail/
 ## Step 6: Build and Restart
 
 ```bash
-npm run build
+./container/build.sh && npm run build
 systemctl restart nanoclaw 2>/dev/null || launchctl kickstart -k gui/$(id -u)/com.nanoclaw 2>/dev/null || echo "Restart the NanoClaw service manually"
 ```
 

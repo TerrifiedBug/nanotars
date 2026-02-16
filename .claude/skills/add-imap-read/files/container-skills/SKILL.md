@@ -326,6 +326,10 @@ EMAIL_ACCOUNTS=[{"name":"Gmail","host":"imap.gmail.com","port":993,"user":"you@g
 - Yahoo: Yahoo Account > Account Security > Generate App Password
 - Outlook: Microsoft Account > Security > App Passwords
 
+## When to Use This vs Gmail (gog)
+
+If the Gmail plugin (`gog` CLI) is also installed, **prefer gog for Gmail accounts** -- it has full Gmail API search, send, labels, and drafts. Use this IMAP skill only for non-Gmail providers (Yahoo, Outlook, iCloud, etc.) or when you specifically need to mark emails as read for digests across all accounts.
+
 ## Notes
 
 - Most reads use `readonly=True` and `BODY.PEEK[]` — the digest script is the exception, marking fetched emails as read

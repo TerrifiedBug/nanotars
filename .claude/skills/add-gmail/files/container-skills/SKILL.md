@@ -69,3 +69,4 @@ gog gmail labels --help
 - Default to 7-day search range unless the user specifies otherwise
 - Use `--output json` for structured data when processing results
 - If gog reports "invalid_grant", the OAuth token has expired -- tell user to refresh via `/add-cal`
+- **If the imap-read skill is also available:** Always prefer `gog gmail` for Gmail accounts -- it has richer search, send, and label management. Only use imap-read for non-Gmail providers (Yahoo, Outlook, etc.)

@@ -59,7 +59,7 @@ cp -r .claude/skills/add-parallel/files/ plugins/parallel/
 ## Step 5: Build and Restart
 
 ```bash
-npm run build
+./container/build.sh && npm run build
 systemctl restart nanoclaw  # or launchctl on macOS
 ```
 
