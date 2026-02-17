@@ -33,7 +33,7 @@ function makeDeps(overrides: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
       closeStdin: vi.fn(),
       registerProcess: vi.fn(),
     } as any,
-    assistantName: 'Andy',
+    assistantName: 'TARS',
     mainGroupFolder: 'main',
     pollInterval: 2000,
     groupsDir: '/tmp/groups',
@@ -52,14 +52,14 @@ function makeDeps(overrides: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
 const mainGroup: RegisteredGroup = {
   name: 'Main Chat',
   folder: 'main',
-  trigger: '@Andy',
+  trigger: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
 const secondaryGroup: RegisteredGroup = {
   name: 'Secondary',
   folder: 'secondary',
-  trigger: '@Andy',
+  trigger: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
   requiresTrigger: true,
 };
@@ -255,7 +255,7 @@ describe('MessageOrchestrator', () => {
     it('non-main group processes with trigger present', async () => {
       const deps = makeDeps({
         getMessagesSince: vi.fn(() => [
-          makeMessage({ chat_jid: 'sec@g.us', content: '@Andy hello' }),
+          makeMessage({ chat_jid: 'sec@g.us', content: '@TARS hello' }),
         ]),
       });
       const orch = new MessageOrchestrator(deps);

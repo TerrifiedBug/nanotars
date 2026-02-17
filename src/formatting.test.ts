@@ -116,8 +116,8 @@ describe('TRIGGER_PATTERN', () => {
     expect(TRIGGER_PATTERN.test(`hello @${name}`)).toBe(false);
   });
 
-  it('does not match partial name like @Andyrew (word boundary)', () => {
-    expect(TRIGGER_PATTERN.test(`@${name}rew hello`)).toBe(false);
+  it('does not match partial name like @TARSbot', () => {
+    expect(TRIGGER_PATTERN.test(`@${name}bot hello`)).toBe(false);
   });
 
   it('matches with word boundary before apostrophe', () => {

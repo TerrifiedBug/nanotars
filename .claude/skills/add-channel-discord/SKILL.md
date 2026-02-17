@@ -98,12 +98,7 @@ The easiest way to get a channel ID is dynamic discovery:
    - Right-click the text channel (or DM conversation) you want to register
    - Click **Copy Channel ID**
    - Format as `dc:CHANNEL_ID` when registering
-3. Register the chat using `/nanoclaw-add-group`, or directly:
-   ```bash
-   sqlite3 store/messages.db "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger, channel) VALUES ('dc:CHANNEL_ID', 'GROUP_NAME', 'FOLDER_NAME', '@ASSISTANT_NAME', datetime('now'), TRIGGER_BOOL, 'discord')"
-   ```
-   - `requires_trigger`: `0` for DMs/main (responds to all), `1` for group channels (needs @mention)
-   - Create the group folder: `mkdir -p groups/FOLDER_NAME`
+3. Register the main group (there can only be one) via `/nanoclaw-setup`. Add additional groups with `/nanoclaw-add-group`.
 
 4. Restart to pick up the registration:
    ```bash

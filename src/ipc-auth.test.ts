@@ -22,14 +22,14 @@ const MAIN_GROUP: RegisteredGroup = {
 const OTHER_GROUP: RegisteredGroup = {
   name: 'Other',
   folder: 'other-group',
-  trigger: '@Andy',
+  trigger: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
 const THIRD_GROUP: RegisteredGroup = {
   name: 'Third',
   folder: 'third-group',
-  trigger: '@Andy',
+  trigger: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
@@ -291,7 +291,7 @@ describe('register_group authorization', () => {
         jid: 'new@g.us',
         name: 'New Group',
         folder: 'new-group',
-        trigger: '@Andy',
+        trigger: '@TARS',
       },
       'other-group',
       false,
@@ -561,7 +561,7 @@ describe('register_group success', () => {
         jid: 'new@g.us',
         name: 'New Group',
         folder: 'new-group',
-        trigger: '@Andy',
+        trigger: '@TARS',
       },
       'main',
       true,
@@ -573,7 +573,7 @@ describe('register_group success', () => {
     expect(group).toBeDefined();
     expect(group!.name).toBe('New Group');
     expect(group!.folder).toBe('new-group');
-    expect(group!.trigger).toBe('@Andy');
+    expect(group!.trigger).toBe('@TARS');
   });
 
   it('register_group rejects request with missing fields', async () => {

@@ -253,7 +253,7 @@ Use available_groups.json to find the JID for a group. The folder name should be
     jid: z.string().describe('The group JID identifier (e.g., "120363336345536173@g.us" for WhatsApp, "dc:123456789" for Discord)'),
     name: z.string().describe('Display name for the group'),
     folder: z.string().describe('Folder name for group files (lowercase, hyphens, e.g., "family-chat")'),
-    trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
+    trigger: z.string().describe('Trigger word (e.g., "@TARS")'),
   },
   async (args) => {
     if (!isMain) {

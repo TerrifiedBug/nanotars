@@ -142,17 +142,16 @@ export function buildVolumeMounts(
       containerPath: '/workspace/group',
       readonly: false,
     });
+  }
 
-    // Global memory directory (read-only for non-main)
-    // Apple Container only supports directory mounts, not file mounts
-    const globalDir = path.join(GROUPS_DIR, 'global');
-    if (fs.existsSync(globalDir)) {
-      mounts.push({
-        hostPath: globalDir,
-        containerPath: '/workspace/global',
-        readonly: true,
-      });
-    }
+  // Global directory (read-only) — available to all groups for IDENTITY.md and shared config
+  const globalDir = path.join(GROUPS_DIR, 'global');
+  if (fs.existsSync(globalDir)) {
+    mounts.push({
+      hostPath: globalDir,
+      containerPath: '/workspace/global',
+      readonly: true,
+    });
   }
 
   // Per-group Claude sessions directory (isolated from other groups)
