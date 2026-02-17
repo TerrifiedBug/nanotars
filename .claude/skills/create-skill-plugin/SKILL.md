@@ -612,6 +612,25 @@ Most real plugins combine multiple archetypes. When generating a plugin, mix and
 
 When combining, merge the `plugin.json` fields: list all `containerEnvVars`, all `hooks` (host), and all `containerHooks` (container) in a single `plugin.json`. Each archetype's files coexist in the same plugin directory.
 
+### containerMounts — Sharing Host Directories with Agents
+
+If a plugin stores data on the host that agents need to read inside their containers (e.g., auth tokens, credential files, cached data), use `containerMounts` in `plugin.json`:
+
+```json
+{
+  "containerMounts": [
+    {"hostPath": "data/my-plugin", "containerPath": "/home/node/.config/my-tool"}
+  ]
+}
+```
+
+- **`hostPath`** — relative to the NanoClaw project root (resolved to absolute at load time). Must exist on disk.
+- **`containerPath`** — absolute path inside the container where the directory is mounted read-only.
+
+Use this when the agent needs access to files that persist across container invocations (e.g., OAuth tokens saved by a CLI tool, cached API responses). The mount is read-only inside the container.
+
+Real-world example: the `gmail` and `cal` plugins mount `data/gogcli` at `/home/node/.config/gogcli` so agents can use the `gog` CLI with pre-authenticated credentials.
+
 ## Plugin System Reference
 
 Concise technical cheat sheet for generating plugins. Complements the archetype templates above.

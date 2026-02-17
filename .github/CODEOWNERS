@@ -2,6 +2,7 @@
 /src/ @TerrifiedBug
 /container/ @TerrifiedBug
 /groups/ @TerrifiedBug
+/plugins/ @TerrifiedBug
 /package.json @TerrifiedBug
 /package-lock.json @TerrifiedBug
 
