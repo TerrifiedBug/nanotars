@@ -1,5 +1,5 @@
 ---
-name: update-nanoclaw
+name: nanoclaw-update
 description: Efficiently bring upstream NanoClaw updates into a customized install, with preview, selective cherry-pick, and low token usage.
 ---
 
@@ -9,7 +9,7 @@ description: Efficiently bring upstream NanoClaw updates into a customized insta
 
 Your NanoClaw fork drifts from upstream as you customize it. This skill pulls upstream changes into your install without losing your modifications.
 
-Run `/update-nanoclaw` in Claude Code.
+Run `/nanoclaw-update` in Claude Code.
 
 ## How it works
 

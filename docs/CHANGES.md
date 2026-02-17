@@ -330,7 +330,7 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `nanoclaw-set-model` | Change Claude model used by containers |
 | `create-skill-plugin` | Guided creation of new skill plugins from an idea |
 | `create-channel-plugin` | Guided creation of new channel plugins |
-| `update-nanoclaw` | Manage upstream sync with selective cherry-pick |
+| `nanoclaw-update` | Manage upstream sync with selective cherry-pick |
 
 ### Rewritten upstream skills
 
