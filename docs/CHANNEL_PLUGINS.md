@@ -246,7 +246,7 @@ interface ChannelPluginConfig {
 | `paths.storeDir` | Absolute path to `store/` directory |
 | `paths.groupsDir` | Absolute path to `groups/` directory |
 | `paths.channelsDir` | Absolute path to `data/channels/` — store auth state under `{channelsDir}/{name}/` |
-| `assistantName` | The trigger name (e.g. `"Andy"`). Used for message prefixing in shared-account mode. |
+| `assistantName` | The trigger name (e.g. `"TARS"`). Used for message prefixing in shared-account mode. |
 | `assistantHasOwnNumber` | If `true`, the bot has a dedicated platform identity. Skip prefixing outbound messages with `AssistantName:`. |
 | `db.getLastGroupSync()` | Returns ISO timestamp of last group metadata sync, or `null` |
 | `db.setLastGroupSync()` | Record that a metadata sync just happened |

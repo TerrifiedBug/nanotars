@@ -145,7 +145,7 @@ Each channel plugin registers which JID patterns it owns (e.g., WhatsApp owns `*
 ### Channel-agnostic changes
 
 - `groups/main/CLAUDE.md` — Anti-prompt-injection rules, generic trigger examples
-- `groups/global/CLAUDE.md` — References `$ASSISTANT_NAME` env var instead of hardcoded "Andy"
+- `groups/global/CLAUDE.md` — References `$ASSISTANT_NAME` env var instead of hardcoded "TARS"
 - `container/agent-runner/src/ipc-mcp-stdio.ts` — Tool descriptions say "message" not "WhatsApp message"
 - Setup skill — Detects installed channels, doesn't assume WhatsApp
 - All skill templates — Use generic "channel" language

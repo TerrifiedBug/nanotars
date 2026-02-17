@@ -361,7 +361,7 @@ This step configures three things at once: the trigger word, the main channel ty
 ### 6a. Ask for trigger word
 
 Ask the user:
-> What trigger word do you want to use? (default: `Andy`)
+> What trigger word do you want to use? (default: `TARS`)
 >
 > In group chats, messages starting with `@TriggerWord` will be sent to Claude.
 > In your main channel (and optionally solo chats), no prefix is needed — all messages are processed.

@@ -140,7 +140,7 @@ Ask about the trigger pattern:
 
 Options:
 1. **Respond to all messages** (no trigger needed) — Best for admin/main and solo DMs. Sets `requiresTrigger: false`.
-2. **Require @mention** (e.g., `@Andy`) — Default for groups. Sets `requiresTrigger: true` with trigger `@{ASSISTANT_NAME}`.
+2. **Require @mention** (e.g., `@TARS`) — Default for groups. Sets `requiresTrigger: true` with trigger `@{ASSISTANT_NAME}`.
 3. **Custom trigger** — A different trigger word or pattern.
 
 For admin/main groups, default to "Respond to all messages". For regular groups, default to "Require @mention".
@@ -150,7 +150,7 @@ For admin/main groups, default to "Respond to all messages". For regular groups,
 Read the assistant name from config:
 
 ```bash
-grep '^ASSISTANT_NAME=' .env | cut -d= -f2 || echo "Andy"
+grep '^ASSISTANT_NAME=' .env | cut -d= -f2 || echo "TARS"
 ```
 
 Determine the channel name from the plugin. Then register via SQLite:

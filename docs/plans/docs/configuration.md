@@ -18,7 +18,7 @@ One of these is required for container authentication:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ASSISTANT_NAME` | `Andy` | Bot display name (used in trigger patterns, message prefixes) |
+| `ASSISTANT_NAME` | `TARS` | Bot display name (used in trigger patterns, message prefixes) |
 | `ASSISTANT_HAS_OWN_NUMBER` | `false` | WhatsApp-specific: `true` if bot has its own phone number |
 | `CLAUDE_MODEL` | SDK default | Model for agent containers (e.g., `claude-sonnet-4-5`) |
 | `CONTAINER_IMAGE` | `nanoclaw-agent:latest` | Docker image name for agent containers |

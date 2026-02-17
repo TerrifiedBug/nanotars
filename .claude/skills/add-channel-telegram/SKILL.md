@@ -39,7 +39,7 @@ cd plugins/channels/telegram && npm install && cd -
 
 1. Open Telegram and search for `@BotFather`
 2. Send `/newbot` and follow prompts:
-   - Bot name: Something friendly (e.g., "Andy Assistant")
+   - Bot name: Something friendly (e.g., "TARS Assistant")
    - Bot username: Must end with "bot" (e.g., "andy_ai_bot")
 3. Copy the bot token (looks like `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`)
 
@@ -89,7 +89,7 @@ Register the main group (there can only be one) via `/nanoclaw-setup`. Add addit
 The bot responds when:
 1. Chat has `requiresTrigger: false` (e.g., main group)
 2. Bot is @mentioned in Telegram (auto-translated to trigger pattern)
-3. Message matches trigger pattern directly (e.g., starts with @Andy)
+3. Message matches trigger pattern directly (e.g., starts with @TARS)
 
 ## Agent Swarm Support
 

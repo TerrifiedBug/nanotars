@@ -78,7 +78,7 @@ A personal Claude assistant accessible via messaging channels, with minimal cust
 ### Message Routing
 - Channel plugins deliver messages to the router
 - Only messages from registered groups are processed
-- Trigger: `@Andy` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
+- Trigger: `@TARS` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
 - Unregistered groups are ignored completely
 
 ### Memory System
@@ -174,8 +174,8 @@ A personal Claude assistant accessible via messaging channels, with minimal cust
 
 These are the creator's settings, stored here for reference:
 
-- **Trigger**: `@Andy` (case insensitive)
-- **Response prefix**: `Andy:`
+- **Trigger**: `@TARS` (case insensitive)
+- **Response prefix**: `TARS:`
 - **Persona**: Default Claude (no custom personality)
 - **Main channel**: Self-chat (messaging yourself in WhatsApp)
 

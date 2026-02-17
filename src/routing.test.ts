@@ -38,7 +38,7 @@ function makeDeps(): OrchestratorDeps {
     writeTasksSnapshot: vi.fn(),
     writeGroupsSnapshot: vi.fn(),
     queue: { enqueueMessageCheck: vi.fn(), sendMessage: vi.fn(), closeStdin: vi.fn(), registerProcess: vi.fn() } as any,
-    assistantName: 'Andy',
+    assistantName: 'TARS',
     mainGroupFolder: 'main',
     pollInterval: 2000,
     groupsDir: '/tmp/groups',
@@ -110,7 +110,7 @@ describe('getAvailableGroups', () => {
       'reg@g.us': {
         name: 'Registered',
         folder: 'registered',
-        trigger: '@Andy',
+        trigger: '@TARS',
         added_at: '2024-01-01T00:00:00.000Z',
       },
     };

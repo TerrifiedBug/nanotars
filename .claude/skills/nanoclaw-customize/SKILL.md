@@ -167,7 +167,7 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw
 
 User: "Add Telegram as an input channel"
 
-1. Ask: "Should Telegram use the same @Andy trigger, or a different one?"
+1. Ask: "Should Telegram use the same @TARS trigger, or a different one?"
 2. Ask: "Should Telegram messages create separate conversation contexts, or share with WhatsApp groups?"
 3. Create `plugins/telegram/` with `plugin.json` and `index.js` exporting `onChannel` (see `plugins/channels/whatsapp/` for reference)
 4. Add the channel to `main()` in `src/index.ts`
