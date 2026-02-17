@@ -37,7 +37,7 @@ function makeDeps(overrides: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
     mainGroupFolder: 'main',
     pollInterval: 2000,
     groupsDir: '/tmp/groups',
-    dataDir: '/tmp/data',
+
     dbEvents: new EventEmitter(),
     logger: {
       info: vi.fn(),

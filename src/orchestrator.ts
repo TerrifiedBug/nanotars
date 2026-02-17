@@ -57,7 +57,6 @@ export interface OrchestratorDeps {
   mainGroupFolder: string;
   pollInterval: number;
   groupsDir: string;
-  dataDir: string;
 
   // Events
   dbEvents: EventEmitter;

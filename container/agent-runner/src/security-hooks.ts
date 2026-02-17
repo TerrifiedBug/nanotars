@@ -36,7 +36,7 @@ export function createSanitizeBashHook(): HookCallback {
     }
 
     // Block attempts to read .credentials.json (OAuth token) via any tool/interpreter
-    if (/\.credentials\.json/.test(command) || /credentials\.json/.test(command)) {
+    if (/\.credentials\.json/.test(command)) {
       return {
         hookSpecificOutput: {
           hookEventName: h.hook_event_name,

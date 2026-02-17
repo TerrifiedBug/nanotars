@@ -81,7 +81,6 @@ async function main(): Promise<void> {
     mainGroupFolder: MAIN_GROUP_FOLDER,
     pollInterval: POLL_INTERVAL,
     groupsDir: GROUPS_DIR,
-    dataDir: DATA_DIR,
     dbEvents,
     logger,
   });

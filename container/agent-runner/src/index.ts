@@ -482,7 +482,7 @@ async function runQuery(
       settingSources: ['project', 'user'],
       mcpServers: {
         nanoclaw: {
-          command: 'node',
+          command: 'tsx',
           args: [mcpServerPath],
           env: {
             NANOCLAW_CHAT_JID: containerInput.chatJid,
@@ -558,7 +558,8 @@ async function main(): Promise<void> {
   }
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
+  // tsx resolves import.meta.url to .ts source; use .ts extension for the MCP server
+  const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.ts');
 
   let sessionId = containerInput.sessionId;
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
