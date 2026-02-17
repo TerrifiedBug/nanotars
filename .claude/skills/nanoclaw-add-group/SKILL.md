@@ -159,25 +159,29 @@ Determine the channel name from the plugin. Then register via SQLite:
 sqlite3 store/messages.db "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger, channel) VALUES ('{jid}', '{name}', '{folder}', '{trigger}', datetime('now'), {requiresTrigger}, '{channel}')"
 ```
 
-Create the group's directory structure:
+Create the group's directory:
 
 ```bash
 mkdir -p groups/{folder}
 ```
 
-Create a basic `CLAUDE.md` for the group:
+No per-group CLAUDE.md needed — the global `groups/global/CLAUDE.md` applies automatically. Group-specific personality goes in IDENTITY.md (see Step 5.5).
 
-```bash
-cat > groups/{folder}/CLAUDE.md << 'EOF'
-# {Group Name}
+### Step 5.5: Group Identity
 
-This is the {folder} group on {channel}.
+Ask the user if they want a custom personality for this group:
 
-## Instructions
+> "Want a custom personality for this group, or use the default TARS identity?"
 
-{Customize this file to give the assistant context about this group.}
-EOF
-```
+Options:
+1. **Use default** (Recommended) — The global IDENTITY.md personality applies automatically. No action needed.
+2. **Custom personality** — Write a custom personality for this group only.
+
+If the user picks **Use default**: do nothing. The global `groups/global/IDENTITY.md` applies as a fallback.
+
+If the user picks **Custom personality**: ask them to describe the personality they want, then write it to `groups/{folder}/IDENTITY.md`. The per-group file takes priority over the global one.
+
+**Important**: Do NOT create an IDENTITY.md file when the user picks the default option. The fallback mechanism handles it.
 
 ### Step 6: Channel-Specific Auth (if needed)
 

@@ -211,7 +211,7 @@ Wait for the user to confirm authentication succeeded, then continue to the next
 
 ## Register a Chat
 
-After authentication, the user needs to register their main chat. This is handled by `/nanoclaw-setup` (section 6c) or `/nanoclaw-add-group`.
+After authentication, the main chat is registered by `/nanoclaw-setup` (section 6c). Additional groups can be added later with `/nanoclaw-add-group`.
 
 ### WhatsApp JID Formats
 

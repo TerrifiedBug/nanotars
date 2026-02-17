@@ -19,6 +19,7 @@ This document describes all changes made in this fork compared to the upstream [
 9. [Documentation](#9-documentation) — Plugin guides, channel plugin architecture
 10. [Code Quality & Refactoring](#10-code-quality--refactoring) — Module decomposition, dead code removal
 11. [Minor Improvements](#11-minor-improvements) — Typing indicators, read receipts
+12. [Agent Identity System](#12-agent-identity-system) — IDENTITY.md personality support
 
 ---
 
@@ -436,6 +437,35 @@ This Fork:
               Dockerfile.partial                             Security Hooks
               Plugin Hooks                                   Media Pipeline
 ```
+
+---
+
+## 12. Agent Identity System
+
+Agents can now have a personality via `IDENTITY.md` files, inspired by OpenClaw's SOUL.md philosophy.
+
+### What was built
+
+| File | Purpose |
+|------|---------|
+| `groups/global/IDENTITY.md` | Default TARS personality — applies to all groups as a fallback |
+| `container/agent-runner/src/index.ts` | Loads IDENTITY.md into system prompt (per-group override or global fallback) |
+| `src/container-mounts.ts` | Mounts `/workspace/global` for all groups (was non-main only) |
+
+### How it works
+
+The agent-runner loads identity files with a fallback pattern:
+1. Check for `groups/{folder}/IDENTITY.md` (per-group override)
+2. Fall back to `groups/global/IDENTITY.md` (default personality)
+3. Identity content is prepended to the system prompt, before functional CLAUDE.md instructions
+
+This separates **personality** (IDENTITY.md) from **capabilities and rules** (CLAUDE.md). Groups can override the personality without duplicating operational instructions.
+
+### Per-group customization
+
+The `nanoclaw-add-group` skill now offers optional per-group personality customization at registration time. Creating `groups/{folder}/IDENTITY.md` overrides the global identity for that group only.
+
+---
 
 ### Key architectural differences
 

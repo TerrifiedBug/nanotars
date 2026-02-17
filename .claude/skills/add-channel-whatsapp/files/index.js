@@ -68,7 +68,7 @@ class WhatsAppChannel {
 
       if (qr) {
         const msg =
-          'WhatsApp authentication required. Run /nanoclaw-setup in Claude Code.';
+          'WhatsApp authentication required. Run /add-channel-whatsapp in Claude Code.';
         this.logger.error(msg);
         exec(
           `osascript -e 'display notification "${msg}" with title "NanoClaw" sound name "Basso"'`,
@@ -93,7 +93,7 @@ class WhatsAppChannel {
             }, 5000);
           });
         } else {
-          this.logger.info('Logged out. Run /nanoclaw-setup to re-authenticate.');
+          this.logger.info('Logged out. Run /add-channel-whatsapp to re-authenticate.');
           process.exit(0);
         }
       } else if (connection === 'open') {

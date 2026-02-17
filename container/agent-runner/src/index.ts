@@ -416,12 +416,25 @@ async function runQuery(
   let messageCount = 0;
   let resultCount = 0;
 
-  // Load global CLAUDE.md as additional system context (shared across all groups)
+  // Load identity — per-group override or global fallback (applies to ALL groups)
+  const groupIdentityPath = '/workspace/group/IDENTITY.md';
+  const globalIdentityPath = '/workspace/global/IDENTITY.md';
+  const identityPath = fs.existsSync(groupIdentityPath)
+    ? groupIdentityPath
+    : globalIdentityPath;
+  const identity = fs.existsSync(identityPath)
+    ? fs.readFileSync(identityPath, 'utf-8')
+    : undefined;
+
+  // Load global CLAUDE.md as additional system context (non-main groups only)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
   let globalClaudeMd: string | undefined;
   if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
     globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
   }
+
+  // Combine: identity first, then functional instructions
+  const systemAppend = [identity, globalClaudeMd].filter(Boolean).join('\n\n');
 
   // Discover additional directories mounted at /workspace/extra/*
   // These are passed to the SDK so their CLAUDE.md files are loaded automatically
@@ -463,8 +476,8 @@ async function runQuery(
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
       resumeSessionAt: resumeAt,
-      systemPrompt: globalClaudeMd
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
+      systemPrompt: systemAppend
+        ? { type: 'preset' as const, preset: 'claude_code' as const, append: systemAppend }
         : undefined,
       allowedTools: [
         'Bash',
