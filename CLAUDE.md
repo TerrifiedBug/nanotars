@@ -21,6 +21,9 @@ Single Node.js process that connects to messaging channels via plugins, routes m
 | `src/group-queue.ts` | Concurrency management, container lifecycle |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/db.ts` | SQLite operations |
+| `src/plugin-types.ts` | Plugin system type definitions |
+| `src/container-mounts.ts` | Volume mount construction, env files, secrets |
+| `src/snapshots.ts` | Task/group snapshot utilities for IPC |
 | `plugins/channels/*/index.js` | Channel plugins (WhatsApp, Discord, etc.) |
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
 

@@ -39,7 +39,7 @@ class DiscordChannel {
     });
 
     return new Promise((resolve) => {
-      this.client.once('ready', () => {
+      this.client.once('clientReady', () => {
         this.connected = true;
         this.logger.info(
           { username: this.client.user?.tag, id: this.client.user?.id },

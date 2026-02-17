@@ -1,6 +1,7 @@
 {
   "name": "nanoclaw-channel-telegram",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "dependencies": {
     "grammy": "^1.35.0"

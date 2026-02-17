@@ -33,8 +33,12 @@ Only `plugin.json` is required. Everything else is optional depending on what th
 | `containerHooks` | `string[]` | No | JS files (relative paths) loaded as SDK hooks inside containers |
 | `containerMounts` | `Array<{hostPath, containerPath}>` | No | Additional read-only mounts for containers |
 | `dependencies` | `boolean` | No | Whether the plugin has its own `package.json`/`node_modules` |
+| `channelPlugin` | `boolean` | No | `true` if this plugin provides a messaging channel (requires `onChannel` hook) |
+| `authSkill` | `string` | No | Name of a Claude Code skill for interactive auth setup (e.g., `"add-channel-discord"`) |
 | `channels` | `string[]` | No | Only inject into containers for these channels (default: `["*"]` = all). See [Plugin Scoping](CHANNEL_PLUGINS.md#plugin-scoping). |
 | `groups` | `string[]` | No | Only inject into containers for these group folders (default: `["*"]` = all). See [Plugin Scoping](CHANNEL_PLUGINS.md#plugin-scoping). |
+| `version` | `string` | No | Plugin version (semver). Informational. |
+| `minCoreVersion` | `string` | No | Minimum NanoClaw core version required (semver). Informational. |
 
 ### Examples
 
@@ -511,6 +515,17 @@ export function register(ctx) {
 ```
 
 This hook auto-captures every tool use (Bash, Read, MCP calls) to a persistent vector database. The `register()` function receives a context object with `env` and `groupFolder`, and returns SDK hook registrations.
+
+### Available SDK Events
+
+| Event | Input fields | When it fires |
+|-------|-------------|---------------|
+| `UserPromptSubmit` | `session_id`, `prompt` | When a user message is submitted to the agent. |
+| `PostToolUse` | `session_id`, `tool_name`, `tool_input`, `tool_response` | After each tool call completes. |
+| `Stop` | `session_id`, `stop_reason` | When the agent turn ends. |
+| `PreCompact` | `session_id` | Before context compaction. Use for summarization before context is trimmed. |
+
+Every hook function **must** return `{}` (empty object). Use `console.error()` for logging inside containers (stdout is reserved for SDK communication).
 
 ### How container hooks differ from host hooks
 

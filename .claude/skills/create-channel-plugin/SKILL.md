@@ -194,6 +194,7 @@ Notes:
 - `channelPlugin: true` is required — tells the plugin loader this provides a Channel
 - `hooks: ["onChannel"]` is required — the entry point for channel initialization
 - `authSkill` is optional — references an interactive auth skill if the platform needs it
+- When `dependencies: true`, the plugin's `package.json` **must** include `"type": "module"` — the plugin loader uses `import()` and all index.js files use ESM syntax. Without it, Node falls back to CJS parsing and emits warnings.
 
 ### index.js
 
@@ -273,6 +274,10 @@ export async function onChannel(ctx, config) {
      timestamp: new Date().toISOString(),
      is_from_me: false,
      is_bot_message: false,
+     // Optional media fields (for voice notes, images, documents, etc.):
+     // mediaType: 'image' | 'video' | 'audio' | 'document',
+     // mediaPath: '/workspace/group/media/xyz.ogg',       // container-relative path
+     // mediaHostPath: '/absolute/host/path/to/media/file', // host-side path (for host hooks)
    });
    ```
 

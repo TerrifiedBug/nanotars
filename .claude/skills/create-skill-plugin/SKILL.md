@@ -587,8 +587,12 @@ export function register(ctx) {
 - The hook file exports a `register(ctx)` function — NOT individual event handlers
 - `register()` returns an object mapping SDK event names to arrays of hook configs
 - Each hook config is `{ hooks: [asyncFunction] }` — the nested structure is required by the SDK
-- Every hook function receives an `input` object and MUST return `{}`
-- Available SDK events: `UserPromptSubmit`, `PostToolUse`, `Stop`, `PreCompact`
+- Every hook function receives an `input` object and MUST return `{}` (empty object)
+- Available SDK events:
+  - `UserPromptSubmit` — fires when a user message is submitted. Input: `{ session_id, prompt }`
+  - `PostToolUse` — fires after each tool call completes. Input: `{ session_id, tool_name, tool_input, tool_response }`
+  - `Stop` — fires when the agent turn ends. Input: `{ session_id, stop_reason }`
+  - `PreCompact` — fires before context compaction. Input: `{ session_id }`. Use for summarization before context is trimmed
 - `ctx.env` contains the container environment variables (from `containerEnvVars` in plugin.json)
 - Use `console.error()` for logging (stdout is reserved for SDK communication)
 - Use fire-and-forget for non-critical calls; use `await` only when ordering matters (e.g., summarize before complete)
@@ -608,6 +612,25 @@ Most real plugins combine multiple archetypes. When generating a plugin, mix and
 
 When combining, merge the `plugin.json` fields: list all `containerEnvVars`, all `hooks` (host), and all `containerHooks` (container) in a single `plugin.json`. Each archetype's files coexist in the same plugin directory.
 
+### containerMounts — Sharing Host Directories with Agents
+
+If a plugin stores data on the host that agents need to read inside their containers (e.g., auth tokens, credential files, cached data), use `containerMounts` in `plugin.json`:
+
+```json
+{
+  "containerMounts": [
+    {"hostPath": "data/my-plugin", "containerPath": "/home/node/.config/my-tool"}
+  ]
+}
+```
+
+- **`hostPath`** — relative to the NanoClaw project root (resolved to absolute at load time). Must exist on disk.
+- **`containerPath`** — absolute path inside the container where the directory is mounted read-only.
+
+Use this when the agent needs access to files that persist across container invocations (e.g., OAuth tokens saved by a CLI tool, cached API responses). The mount is read-only inside the container.
+
+Real-world example: the `gmail` and `cal` plugins mount `data/gogcli` at `/home/node/.config/gogcli` so agents can use the `gog` CLI with pre-authenticated credentials.
+
 ## Plugin System Reference
 
 Concise technical cheat sheet for generating plugins. Complements the archetype templates above.
@@ -622,7 +645,9 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
   "hooks": ["string — host-side hook function names exported from index.js. Valid: onStartup, onShutdown, onInboundMessage, onChannel"],
   "containerHooks": ["string — relative paths to JS files loaded as SDK hooks inside agent containers. E.g., hooks/post-tool-use.js"],
   "containerMounts": [{"hostPath": "string", "containerPath": "string — additional read-only mounts for agent containers"}],
-  "dependencies": "boolean — set true if plugin has its own package.json/node_modules"
+  "dependencies": "boolean — set true if plugin has its own package.json/node_modules. If the plugin also has hooks + index.js, package.json should include \"type\": \"module\" (the loader uses import())",
+  "channels": ["string — filter which channel types get this plugin. Default: [\"*\"] (all channels)"],
+  "groups": ["string — filter which group folders get this plugin's container injection. Default: [\"*\"] (all groups)"]
 }
 ```
 
