@@ -1,9 +1,9 @@
 # Core code - maintainer only
-/src/ @gavrielc
-/container/ @gavrielc
-/groups/ @gavrielc
-/package.json @gavrielc
-/package-lock.json @gavrielc
+/src/ @TerrifiedBug
+/container/ @TerrifiedBug
+/groups/ @TerrifiedBug
+/package.json @TerrifiedBug
+/package-lock.json @TerrifiedBug
 
 # Skills - open to contributors
 /.claude/skills/

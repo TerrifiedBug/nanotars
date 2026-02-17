@@ -22,13 +22,13 @@ The entire codebase should be something you can read and understand. One Node.js
 
 Instead of application-level permission systems trying to prevent agents from accessing things, agents run in actual Linux containers (Docker or Apple Container). The isolation is at the OS level. Agents can only see what's explicitly mounted. Bash access is safe because commands run inside the container, not on the host.
 
-### Built for One User
+### Built for Your Needs
 
-This isn't a framework or a platform. It's working software for my specific needs. I use WhatsApp and Email, so it supports WhatsApp and Email. I don't use Telegram, so it doesn't support Telegram. I add the integrations I actually want, not every possible integration.
+This isn't a framework or a platform. It's working software you customize to your exact needs. You fork it, install the channel and skill plugins you want, and end up with a clean system that does exactly what you need — not a bloated system trying to support everyone.
 
-### Customization = Code Changes
+### Customization = Plugins + Skills
 
-No configuration sprawl. If you want different behavior, modify the code. The codebase is small enough that this is safe and practical. Very minimal things like the trigger word are in config. Everything else - just change the code to do what you want.
+No configuration sprawl. The core stays untouched. Users add capabilities via the plugin system — channel plugins for messaging platforms, skill plugins for integrations. Run `/create-channel-plugin` or `/create-skill-plugin` to extend. The codebase is small enough that direct code changes are also safe when needed.
 
 ### AI-Native Development
 
@@ -36,9 +36,9 @@ I don't need an installation wizard - Claude Code guides the setup. I don't need
 
 The codebase assumes you have an AI collaborator. It doesn't need to be excessively self-documenting or self-debugging because Claude is always there.
 
-### Skills Over Features
+### Plugins Over Features
 
-When people contribute, they shouldn't add "Telegram support alongside WhatsApp." They should contribute a skill like `/add-channel-telegram` that transforms the codebase. Users fork the repo, run skills to customize, and end up with clean code that does exactly what they need - not a bloated system trying to support everyone's use case simultaneously.
+When people contribute, they shouldn't add features to the core. They should contribute plugins — channel plugins for new messaging platforms, skill plugins for integrations — installed via skills like `/add-channel-telegram`. Users fork the repo, run skills to install plugins, and end up with clean code that does exactly what they need.
 
 ---
 
@@ -50,8 +50,6 @@ Skills we'd love contributors to build:
 Skills to add or switch to different messaging platforms:
 - `/add-channel-slack` - Add Slack as an input channel
 - `/add-channel-sms` - Add SMS via Twilio or similar
-
-Note: Telegram, Discord, and WhatsApp are already supported via channel plugins.
 
 ---
 
@@ -78,7 +76,7 @@ A personal Claude assistant accessible via messaging channels, with minimal cust
 ## Architecture Decisions
 
 ### Message Routing
-- A router listens to WhatsApp and routes messages based on configuration
+- Channel plugins deliver messages to the router
 - Only messages from registered groups are processed
 - Trigger: `@Andy` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
 - Unregistered groups are ignored completely
