@@ -1,6 +1,7 @@
 {
   "name": "nanoclaw-channel-whatsapp",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",

@@ -1,6 +1,7 @@
 {
   "name": "nanoclaw-channel-discord",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "dependencies": {
     "discord.js": "^14.25.1"
