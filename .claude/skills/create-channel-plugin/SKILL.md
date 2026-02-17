@@ -194,6 +194,7 @@ Notes:
 - `channelPlugin: true` is required — tells the plugin loader this provides a Channel
 - `hooks: ["onChannel"]` is required — the entry point for channel initialization
 - `authSkill` is optional — references an interactive auth skill if the platform needs it
+- When `dependencies: true`, the plugin's `package.json` **must** include `"type": "module"` — the plugin loader uses `import()` and all index.js files use ESM syntax. Without it, Node falls back to CJS parsing and emits warnings.
 
 ### index.js
 

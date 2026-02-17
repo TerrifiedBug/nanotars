@@ -645,7 +645,7 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
   "hooks": ["string — host-side hook function names exported from index.js. Valid: onStartup, onShutdown, onInboundMessage, onChannel"],
   "containerHooks": ["string — relative paths to JS files loaded as SDK hooks inside agent containers. E.g., hooks/post-tool-use.js"],
   "containerMounts": [{"hostPath": "string", "containerPath": "string — additional read-only mounts for agent containers"}],
-  "dependencies": "boolean — set true if plugin has its own package.json/node_modules",
+  "dependencies": "boolean — set true if plugin has its own package.json/node_modules. If the plugin also has hooks + index.js, package.json should include \"type\": \"module\" (the loader uses import())",
   "channels": ["string — filter which channel types get this plugin. Default: [\"*\"] (all channels)"],
   "groups": ["string — filter which group folders get this plugin's container injection. Default: [\"*\"] (all groups)"]
 }
