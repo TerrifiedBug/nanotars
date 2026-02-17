@@ -146,6 +146,32 @@ export async function runContainerAgent(
     let newSessionId: string | undefined;
     let outputChain = Promise.resolve();
 
+    let timedOut = false;
+    let hadStreamingOutput = false;
+    const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
+    // Grace period: hard timeout must be at least IDLE_TIMEOUT + 30s so the
+    // graceful _close sentinel has time to trigger before the hard kill fires.
+    const timeoutMs = Math.max(configTimeout, IDLE_TIMEOUT + 30_000);
+
+    const killOnTimeout = () => {
+      timedOut = true;
+      logger.error({ group: group.name, containerName }, 'Container timeout, stopping gracefully');
+      containerRuntime.stop(containerName, (err) => {
+        if (err) {
+          logger.warn({ group: group.name, containerName, err }, 'Graceful stop failed, force killing');
+          container.kill('SIGKILL');
+        }
+      });
+    };
+
+    let timeout = setTimeout(killOnTimeout, timeoutMs);
+
+    // Reset the timeout whenever there's activity (streaming output)
+    const resetTimeout = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(killOnTimeout, timeoutMs);
+    };
+
     container.stdout.on('data', (data) => {
       const chunk = data.toString();
 
@@ -219,32 +245,6 @@ export async function runContainerAgent(
         stderr += chunk;
       }
     });
-
-    let timedOut = false;
-    let hadStreamingOutput = false;
-    const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
-    // Grace period: hard timeout must be at least IDLE_TIMEOUT + 30s so the
-    // graceful _close sentinel has time to trigger before the hard kill fires.
-    const timeoutMs = Math.max(configTimeout, IDLE_TIMEOUT + 30_000);
-
-    const killOnTimeout = () => {
-      timedOut = true;
-      logger.error({ group: group.name, containerName }, 'Container timeout, stopping gracefully');
-      containerRuntime.stop(containerName, (err) => {
-        if (err) {
-          logger.warn({ group: group.name, containerName, err }, 'Graceful stop failed, force killing');
-          container.kill('SIGKILL');
-        }
-      });
-    };
-
-    let timeout = setTimeout(killOnTimeout, timeoutMs);
-
-    // Reset the timeout whenever there's activity (streaming output)
-    const resetTimeout = () => {
-      clearTimeout(timeout);
-      timeout = setTimeout(killOnTimeout, timeoutMs);
-    };
 
     container.on('close', (code) => {
       clearTimeout(timeout);
