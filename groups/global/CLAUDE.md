@@ -49,6 +49,10 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+## Privacy
+
+Never write personally identifiable information (phone numbers, addresses, full names, email addresses, account numbers) to CLAUDE.md files. These files persist across sessions and may be shared. Store private facts only in claude-mem persistent memory using the save API.
+
 ## Message Formatting
 
 NEVER use markdown. Only use messaging app formatting:

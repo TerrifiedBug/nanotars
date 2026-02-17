@@ -494,32 +494,15 @@ echo "TZ=THEIR_CHOICE" >> .env
 
 Once you have the JID, configure it. Use the assistant name from step 6a and the channel name from step 5.
 
-For private/DM chats (solo, no prefix needed), set `requiresTrigger` to `false`:
-
-```json
-{
-  "JID_HERE": {
-    "name": "main",
-    "folder": "main",
-    "trigger": "@ASSISTANT_NAME",
-    "added_at": "CURRENT_ISO_TIMESTAMP",
-    "requiresTrigger": false,
-    "channel": "CHANNEL_NAME"
-  }
-}
-```
-
-For groups, keep `requiresTrigger` as `true` (default).
-
-**Important:** Always include the `channel` field with the channel plugin name (e.g., `"whatsapp"`, `"telegram"`, `"discord"`). This is stored in the `registered_groups` table and used for plugin scoping.
-
-Write to the database directly by creating a temporary registration script, or write `data/registered_groups.json` which will be auto-migrated on first run:
+Register the group directly in the database:
 
 ```bash
-mkdir -p data
+sqlite3 store/messages.db "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger, channel) VALUES ('<JID>', '<GROUP_NAME>', '<FOLDER>', '<TRIGGER>', datetime('now'), 1, '<CHANNEL>')"
 ```
 
-Then write `data/registered_groups.json` with the correct JID, trigger, channel, and timestamp.
+- For DMs or main groups, set `requires_trigger` to `0` (responds to all messages)
+- For group chats, keep `requires_trigger` as `1` (default, needs @mention)
+- Always include the `channel` value (e.g., `whatsapp`, `telegram`, `discord`) — used for plugin scoping
 
 The group CLAUDE.md files use the `$ASSISTANT_NAME` environment variable — no name replacement needed.
 
@@ -626,13 +609,9 @@ Tell the user:
 > - This config file is stored outside the project, so agents cannot modify it
 > - Changes require restarting the NanoClaw service
 >
-> To grant a group access to a directory, add it to their config in `data/registered_groups.json`:
-> ```json
-> "containerConfig": {
->   "additionalMounts": [
->     { "hostPath": "~/projects/my-app" }
->   ]
-> }
+> To grant a group access to an external directory, update its config in the database:
+> ```bash
+> sqlite3 store/messages.db "UPDATE registered_groups SET container_config = json('{\"additionalMounts\": [{\"hostPath\": \"~/projects/my-app\"}]}') WHERE jid = '<JID>'"
 > ```
 > The folder appears inside the container at `/workspace/extra/<folder-name>` (derived from the last segment of the path). Add `"readonly": false` for write access, or `"containerPath": "custom-name"` to override the default name.
 
