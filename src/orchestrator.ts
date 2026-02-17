@@ -117,7 +117,7 @@ export class MessageOrchestrator {
     this.registeredGroups[jid] = group;
     this.deps.setRegisteredGroup(jid, group);
 
-    const groupDir = path.join(this.deps.dataDir, '..', 'groups', group.folder);
+    const groupDir = path.join(this.deps.groupsDir, group.folder);
     fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
 
     this.deps.logger.info(

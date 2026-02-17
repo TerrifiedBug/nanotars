@@ -119,13 +119,20 @@ function runMigrations(database: Database.Database): void {
     )
   `);
 
-  // Detect pre-existing databases: if is_bot_message column already exists,
-  // all current migrations were applied by the old ALTER-TABLE-based system.
+  // Detect pre-existing databases that used the old ALTER-TABLE-based system.
+  // Check the last migration's column as proof all prior migrations ran.
+  // If a future migration adds columns to a different table, add its sentinel here.
   const applied = database.prepare('SELECT version FROM schema_version').all() as Array<{ version: string }>;
   if (applied.length === 0) {
-    const columns = database.pragma('table_info(messages)') as Array<{ name: string }>;
-    const hasIsBotMessage = columns.some((c) => c.name === 'is_bot_message');
-    if (hasIsBotMessage) {
+    const msgCols = database.pragma('table_info(messages)') as Array<{ name: string }>;
+    const taskCols = database.pragma('table_info(scheduled_tasks)') as Array<{ name: string }>;
+    const groupCols = database.pragma('table_info(registered_groups)') as Array<{ name: string }>;
+    const hasAllMigrated =
+      msgCols.some((c) => c.name === 'is_bot_message') &&
+      taskCols.some((c) => c.name === 'context_mode') &&
+      taskCols.some((c) => c.name === 'model') &&
+      groupCols.some((c) => c.name === 'channel');
+    if (hasAllMigrated) {
       // Mark all existing migrations as already applied
       const now = new Date().toISOString();
       const stmt = database.prepare('INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)');

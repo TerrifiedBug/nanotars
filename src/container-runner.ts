@@ -267,6 +267,9 @@ export async function runContainerAgent(
               result: null,
               newSessionId: parser.newSessionId,
             });
+          }).catch((err) => {
+            logger.error({ group: group.name, err }, 'Output chain error after timeout');
+            resolve({ status: 'error', result: null, error: String(err) });
           });
           return;
         }
@@ -374,6 +377,9 @@ export async function runContainerAgent(
             result: null,
             newSessionId: parser.newSessionId,
           });
+        }).catch((err) => {
+          logger.error({ group: group.name, err }, 'Output chain error on exit');
+          resolve({ status: 'error', result: null, error: String(err) });
         });
         return;
       }
