@@ -35,6 +35,17 @@ export function createSanitizeBashHook(): HookCallback {
       };
     }
 
+    // Block attempts to read .credentials.json (OAuth token)
+    if (/\.credentials\.json/.test(command)) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: h.hook_event_name,
+          permissionDecision: 'deny' as const,
+          reason: 'Access to .credentials.json is blocked for security reasons',
+        },
+      };
+    }
+
     // Prepend unset for secret vars so child shells can't access them
     const unsetPrefix = SECRET_ENV_VARS.map(v => `unset ${v}`).join('; ');
     return {
@@ -79,6 +90,17 @@ export function createSecretPathBlockHook(): HookCallback {
           hookEventName: h.hook_event_name,
           permissionDecision: 'deny' as const,
           reason: 'Access to container input file is blocked for security reasons',
+        },
+      };
+    }
+
+    // Block .credentials.json (OAuth token)
+    if (filePath.endsWith('.credentials.json')) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: h.hook_event_name,
+          permissionDecision: 'deny' as const,
+          reason: 'Access to .credentials.json is blocked for security reasons',
         },
       };
     }

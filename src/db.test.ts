@@ -1,13 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import {
   _initTestDatabase,
+  _getSchemaVersion,
   createTask,
+  dbEvents,
   deleteTask,
   getAllChats,
   getMessagesSince,
   getNewMessages,
   getTaskById,
+  insertExternalMessage,
   storeChatMetadata,
   storeMessage,
   updateTask,
@@ -367,5 +370,63 @@ describe('task CRUD', () => {
 
     deleteTask('task-3');
     expect(getTaskById('task-3')).toBeUndefined();
+  });
+});
+
+// --- Schema version table ---
+
+describe('schema_version', () => {
+  it('creates version table with all migrations applied', () => {
+    const versions = _getSchemaVersion();
+    expect(versions.length).toBe(4);
+    expect(versions[0].version).toBe('001_add_context_mode');
+    expect(versions[3].version).toBe('004_add_is_bot_message');
+  });
+
+  it('is idempotent on re-init', () => {
+    const before = _getSchemaVersion();
+    // Re-initializing should not duplicate entries
+    _initTestDatabase();
+    const after = _getSchemaVersion();
+    expect(after.length).toBe(before.length);
+  });
+
+  it('records applied_at timestamp', () => {
+    const versions = _getSchemaVersion();
+    for (const v of versions) {
+      expect(v.applied_at).toBeTruthy();
+      // Should be a valid ISO date
+      expect(new Date(v.applied_at).toISOString()).toBe(v.applied_at);
+    }
+  });
+});
+
+// --- dbEvents ---
+
+describe('dbEvents', () => {
+  it('emits new-message on storeMessage', () => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    const handler = vi.fn();
+    dbEvents.on('new-message', handler);
+    try {
+      storeMessage({
+        id: 'evt-1', chat_jid: 'group@g.us', sender: 'user@s.whatsapp.net',
+        sender_name: 'User', content: 'hello', timestamp: '2024-01-01T00:00:01.000Z',
+      });
+      expect(handler).toHaveBeenCalledWith('group@g.us');
+    } finally {
+      dbEvents.off('new-message', handler);
+    }
+  });
+
+  it('emits new-message on insertExternalMessage', () => {
+    const handler = vi.fn();
+    dbEvents.on('new-message', handler);
+    try {
+      insertExternalMessage('ext@g.us', 'ext-1', 'sender@s', 'Sender', 'external msg');
+      expect(handler).toHaveBeenCalledWith('ext@g.us');
+    } finally {
+      dbEvents.off('new-message', handler);
+    }
   });
 });

@@ -19,13 +19,11 @@ import * as containerRuntime from './container-runtime.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 
+import { createOutputParser, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
+
 // Re-export for consumers that still import from container-runner
 export { setPluginRegistry, VolumeMount } from './container-mounts.js';
 export { AvailableGroup, mapTasksToSnapshot, writeGroupsSnapshot, writeTasksSnapshot } from './snapshots.js';
-
-// Sentinel markers for robust output parsing (must match agent-runner)
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
 export interface ContainerInput {
   prompt: string;
@@ -141,13 +139,7 @@ export async function runContainerAgent(
     // Remove secrets from input so they don't appear in logs
     delete input.secrets;
 
-    // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
-    let parseBuffer = '';
-    let newSessionId: string | undefined;
-    let outputChain = Promise.resolve();
-
     let timedOut = false;
-    let hadStreamingOutput = false;
     const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
     // Grace period: hard timeout must be at least IDLE_TIMEOUT + 30s so the
     // graceful _close sentinel has time to trigger before the hard kill fires.
@@ -172,6 +164,17 @@ export async function runContainerAgent(
       timeout = setTimeout(killOnTimeout, timeoutMs);
     };
 
+    // Streaming output parser (only created when onOutput is provided)
+    const parser = onOutput
+      ? createOutputParser({
+          onOutput,
+          onActivity: () => resetTimeout(),
+          onParseError: (err) => {
+            logger.warn({ group: group.name, error: err }, 'Failed to parse streamed output chunk');
+          },
+        })
+      : null;
+
     container.stdout.on('data', (data) => {
       const chunk = data.toString();
 
@@ -191,37 +194,7 @@ export async function runContainerAgent(
       }
 
       // Stream-parse for output markers
-      if (onOutput) {
-        parseBuffer += chunk;
-        let startIdx: number;
-        while ((startIdx = parseBuffer.indexOf(OUTPUT_START_MARKER)) !== -1) {
-          const endIdx = parseBuffer.indexOf(OUTPUT_END_MARKER, startIdx);
-          if (endIdx === -1) break; // Incomplete pair, wait for more data
-
-          const jsonStr = parseBuffer
-            .slice(startIdx + OUTPUT_START_MARKER.length, endIdx)
-            .trim();
-          parseBuffer = parseBuffer.slice(endIdx + OUTPUT_END_MARKER.length);
-
-          try {
-            const parsed: ContainerOutput = JSON.parse(jsonStr);
-            if (parsed.newSessionId) {
-              newSessionId = parsed.newSessionId;
-            }
-            hadStreamingOutput = true;
-            // Activity detected — reset the hard timeout
-            resetTimeout();
-            // Call onOutput for all markers (including null results)
-            // so idle timers start even for "silent" query completions.
-            outputChain = outputChain.then(() => onOutput(parsed));
-          } catch (err) {
-            logger.warn(
-              { group: group.name, error: err },
-              'Failed to parse streamed output chunk',
-            );
-          }
-        }
-      }
+      parser?.feed(chunk);
     });
 
     container.stderr.on('data', (data) => {
@@ -277,22 +250,22 @@ export async function runContainerAgent(
           `Container: ${containerName}`,
           `Duration: ${duration}ms`,
           `Exit Code: ${code}`,
-          `Had Streaming Output: ${hadStreamingOutput}`,
+          `Had Streaming Output: ${parser?.hadOutput ?? false}`,
         ].join('\n'));
 
         // Timeout after output = idle cleanup, not failure.
         // The agent already sent its response; this is just the
         // container being reaped after the idle period expired.
-        if (hadStreamingOutput) {
+        if (parser?.hadOutput) {
           logger.info(
             { group: group.name, containerName, duration, code },
             'Container timed out after output (idle cleanup)',
           );
-          outputChain.then(() => {
+          parser.settled().then(() => {
             resolve({
               status: 'success',
               result: null,
-              newSessionId,
+              newSessionId: parser.newSessionId,
             });
           });
           return;
@@ -390,16 +363,16 @@ export async function runContainerAgent(
       }
 
       // Streaming mode: wait for output chain to settle, return completion marker
-      if (onOutput) {
-        outputChain.then(() => {
+      if (parser) {
+        parser.settled().then(() => {
           logger.info(
-            { group: group.name, duration, newSessionId },
+            { group: group.name, duration, newSessionId: parser.newSessionId },
             'Container completed (streaming mode)',
           );
           resolve({
             status: 'success',
             result: null,
-            newSessionId,
+            newSessionId: parser.newSessionId,
           });
         });
         return;

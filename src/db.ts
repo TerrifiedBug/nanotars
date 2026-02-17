@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 
@@ -7,6 +8,10 @@ import { logger } from './logger.js';
 import { NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
 
 let db: Database.Database;
+
+/** Event emitter for database changes. Emits 'new-message' with chatJid after inserts. */
+export const dbEvents = new EventEmitter();
+dbEvents.setMaxListeners(50);
 
 function createSchema(database: Database.Database): void {
   database.exec(`
@@ -37,6 +42,8 @@ function createSchema(database: Database.Database): void {
       prompt TEXT NOT NULL,
       schedule_type TEXT NOT NULL,
       schedule_value TEXT NOT NULL,
+      context_mode TEXT DEFAULT 'isolated',
+      model TEXT DEFAULT 'claude-sonnet-4-5',
       next_run TEXT,
       last_run TEXT,
       last_result TEXT,
@@ -73,35 +80,72 @@ function createSchema(database: Database.Database): void {
       trigger_pattern TEXT NOT NULL,
       added_at TEXT NOT NULL,
       container_config TEXT,
-      requires_trigger INTEGER DEFAULT 1
+      requires_trigger INTEGER DEFAULT 1,
+      channel TEXT
     );
   `);
 
-  // Schema migrations — add columns if they don't exist.
-  // Only ignore "duplicate column" errors; rethrow anything else (disk full, corruption).
-  const migrate = (sql: string) => {
-    try {
-      database.exec(sql);
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('duplicate column')) return;
-      throw err;
+  runMigrations(database);
+}
+
+/** Ordered list of schema migrations. Each entry runs once, in order. */
+const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> = [
+  {
+    name: '001_add_context_mode',
+    up: (db) => db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN context_mode TEXT DEFAULT 'isolated'`),
+  },
+  {
+    name: '002_add_model',
+    up: (db) => db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN model TEXT DEFAULT 'claude-sonnet-4-5'`),
+  },
+  {
+    name: '003_add_channel',
+    up: (db) => db.exec(`ALTER TABLE registered_groups ADD COLUMN channel TEXT`),
+  },
+  {
+    name: '004_add_is_bot_message',
+    up: (db) => {
+      db.exec(`ALTER TABLE messages ADD COLUMN is_bot_message INTEGER DEFAULT 0`);
+      db.prepare(`UPDATE messages SET is_bot_message = 1 WHERE content LIKE ?`).run(`${ASSISTANT_NAME}:%`);
+    },
+  },
+];
+
+function runMigrations(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS schema_version (
+      version TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )
+  `);
+
+  // Detect pre-existing databases: if is_bot_message column already exists,
+  // all current migrations were applied by the old ALTER-TABLE-based system.
+  const applied = database.prepare('SELECT version FROM schema_version').all() as Array<{ version: string }>;
+  if (applied.length === 0) {
+    const columns = database.pragma('table_info(messages)') as Array<{ name: string }>;
+    const hasIsBotMessage = columns.some((c) => c.name === 'is_bot_message');
+    if (hasIsBotMessage) {
+      // Mark all existing migrations as already applied
+      const now = new Date().toISOString();
+      const stmt = database.prepare('INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)');
+      for (const m of MIGRATIONS) {
+        stmt.run(m.name, now);
+      }
+      return;
     }
-  };
+  }
 
-  migrate(`ALTER TABLE scheduled_tasks ADD COLUMN context_mode TEXT DEFAULT 'isolated'`);
-  migrate(`ALTER TABLE scheduled_tasks ADD COLUMN model TEXT DEFAULT 'claude-sonnet-4-5'`);
-  migrate(`ALTER TABLE registered_groups ADD COLUMN channel TEXT`);
+  const appliedSet = new Set(applied.map((r) => r.version));
+  const now = new Date().toISOString();
 
-  // is_bot_message needs a backfill after the column add
-  try {
-    database.exec(
-      `ALTER TABLE messages ADD COLUMN is_bot_message INTEGER DEFAULT 0`,
-    );
-    database.prepare(
-      `UPDATE messages SET is_bot_message = 1 WHERE content LIKE ?`,
-    ).run(`${ASSISTANT_NAME}:%`);
-  } catch (err) {
-    if (!(err instanceof Error && err.message.includes('duplicate column'))) throw err;
+  for (const migration of MIGRATIONS) {
+    if (appliedSet.has(migration.name)) continue;
+    database.transaction(() => {
+      migration.up(database);
+      database.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(migration.name, now);
+    })();
+    logger.info({ migration: migration.name }, 'Applied migration');
   }
 }
 
@@ -130,6 +174,11 @@ export function initDatabase(): void {
 export function _initTestDatabase(): void {
   db = new Database(':memory:');
   createSchema(db);
+}
+
+/** @internal - for tests only. Returns the current schema version entries. */
+export function _getSchemaVersion(): Array<{ version: string; applied_at: string }> {
+  return db.prepare('SELECT version, applied_at FROM schema_version ORDER BY version').all() as Array<{ version: string; applied_at: string }>;
 }
 
 /**
@@ -269,6 +318,7 @@ export function storeMessage(msg: NewMessage): void {
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
   );
+  dbEvents.emit('new-message', msg.chat_jid);
 }
 
 /**
@@ -290,6 +340,7 @@ export function insertExternalMessage(
   db.prepare(
     `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me) VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(messageId, chatJid, sender, senderName, text, timestamp, 0);
+  dbEvents.emit('new-message', chatJid);
 }
 
 export function getNewMessages(

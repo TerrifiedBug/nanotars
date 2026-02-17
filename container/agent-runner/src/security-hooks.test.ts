@@ -43,6 +43,18 @@ describe('createSanitizeBashHook', () => {
     expect(output.permissionDecision).toBe('deny');
   });
 
+  it('blocks commands reading .credentials.json via cat', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'cat /home/node/.claude/.credentials.json' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks commands piping .credentials.json', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'jq .accessToken < /home/node/.claude/.credentials.json' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
   it('ignores non-Bash tools', async () => {
     const result = await hook(makePreToolUseInput('Read', { file_path: '/etc/passwd' }));
     expect(result).toEqual({});
@@ -71,6 +83,18 @@ describe('createSecretPathBlockHook', () => {
 
   it('blocks reading /tmp/input.json', async () => {
     const result = await hook(makePreToolUseInput('Read', { file_path: '/tmp/input.json' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks reading .credentials.json directly', async () => {
+    const result = await hook(makePreToolUseInput('Read', { file_path: '/home/node/.claude/.credentials.json' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks reading .credentials.json at any path', async () => {
+    const result = await hook(makePreToolUseInput('Read', { file_path: '/some/other/path/.credentials.json' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
   });
