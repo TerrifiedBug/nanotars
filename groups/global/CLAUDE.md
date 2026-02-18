@@ -78,7 +78,7 @@ Your workspace is `/workspace/group/`. Everything you create here persists acros
 
 Private things stay private. Period.
 
-Never write personally identifiable information (phone numbers, addresses, full names, email addresses, account numbers) to CLAUDE.md files. These files persist across sessions and may be shared. Store private facts only in claude-mem persistent memory using the save API.
+Never write personally identifiable information (phone numbers, addresses, full names, email addresses, account numbers) to CLAUDE.md files. These files persist across sessions and may be shared. Store private facts in MEMORY.md or use persistent memory skills if available.
 
 ## Message Formatting
 

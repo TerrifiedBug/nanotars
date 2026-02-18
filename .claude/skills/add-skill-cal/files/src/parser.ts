@@ -21,15 +21,17 @@ export function parseICS(
   const events: CalendarEvent[] = [];
 
   for (const [key, component] of Object.entries(parsed)) {
-    if (component.type !== 'VEVENT') continue;
+    if (!component || component.type !== 'VEVENT') continue;
     const vevent = component as ical.VEvent;
+    const loc = vevent.location as unknown;
+    const desc = vevent.description as unknown;
     events.push({
       uid: vevent.uid || key,
-      summary: vevent.summary || '(no title)',
+      summary: String(vevent.summary || '(no title)'),
       start: vevent.start instanceof Date ? vevent.start : new Date(vevent.start as unknown as string),
       end: vevent.end instanceof Date ? vevent.end : new Date(vevent.end as unknown as string),
-      location: vevent.location || undefined,
-      description: vevent.description || undefined,
+      location: loc ? String(typeof loc === 'object' && loc !== null && 'val' in loc ? (loc as {val: string}).val : loc) : undefined,
+      description: desc ? String(typeof desc === 'object' && desc !== null && 'val' in desc ? (desc as {val: string}).val : desc) : undefined,
       allDay: vevent.datetype === 'date',
       calendar: calendarName,
       account: accountName,
