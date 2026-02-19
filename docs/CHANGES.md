@@ -2,7 +2,7 @@
 
 This document describes all changes made in this fork compared to the upstream [qwibitai/nanoclaw](https://github.com/qwibitai/nanoclaw) repository. It's intended to give the upstream maintainer a clear picture of what this fork does differently, why, and which changes might be worth upstreaming.
 
-**Source diff vs upstream:** 26 files changed, +2,113 / -1,967 lines (`src/` + `container/agent-runner/src/` only)
+**Source diff vs upstream:** 28 files changed, +2,250 / -1,980 lines (`src/` + `container/agent-runner/src/` only)
 
 ---
 
@@ -15,7 +15,7 @@ This document describes all changes made in this fork compared to the upstream [
 5. [Media Pipeline](#5-media-pipeline) — Image/video/audio/document downloads
 6. [Task Scheduler Improvements](#6-task-scheduler-improvements) — Model selection, error notifications
 7. [Bug Fixes](#7-bug-fixes) — Submitted as PRs
-8. [New Skills](#8-new-skills) — 25+ integration skills
+8. [New Skills](#8-new-skills) — 27 integration, channel, and meta skills
 9. [Documentation](#9-documentation) — Plugin guides, channel plugin architecture
 10. [Code Quality & Refactoring](#10-code-quality--refactoring) — Module decomposition, dead code removal
 11. [Minor Improvements](#11-minor-improvements) — Typing indicators, read receipts
@@ -95,7 +95,7 @@ Plugins integrate deeply with the container system at build time and runtime:
 - **Container mounts** — Plugin manifests declare `containerMounts` which are injected alongside core mounts. Skills go to `/workspace/.claude/skills/{plugin}/`, hooks to `/workspace/plugin-hooks/`.
 - **MCP merging** — Each plugin can provide an `mcp.json`. Per-group scoped configs are merged and written to `data/env/{groupFolder}/merged-mcp.json`, mounted at `/workspace/.mcp.json` in that group's container.
 - **Env var collection** — Plugin-declared `containerEnvVars` are filtered from `.env` and written to `data/env/` for container access.
-- **Scoping** — Plugins declare which channels and groups they apply to (`"channels": ["whatsapp"]`, `"groups": ["main"]`), so a Discord-only plugin won't load in WhatsApp containers.
+- **Scoping** — Plugins declare which channels and groups they apply to (`"channels": ["whatsapp"]`, `"groups": ["main"]`), so a Discord-only plugin won't load in WhatsApp containers. All plugins now include explicit `"channels": ["*"], "groups": ["*"]` in their `plugin.json` for visibility (previously implicit defaults). Sensitive plugin installers (homeassistant, gmail, imap-read, notion, github, n8n, calendar) prompt users to choose group restrictions during installation.
 
 ### Why this matters
 
@@ -116,7 +116,8 @@ Upstream has WhatsApp hardcoded throughout. This fork extracted WhatsApp into a 
 | Change | Details |
 |--------|---------|
 | **WhatsApp extracted** | `src/channels/whatsapp.ts` → `plugins/channels/whatsapp/index.js` |
-| **Channel plugin interface** | Any channel implements `connect()`, `sendMessage()`, `sendMedia()`, `getGroups()` |
+| **Channel plugin interface** | Any channel implements `connect()`, `sendMessage()`, `sendMedia()`, `getGroups()`, optional `sendFile()` |
+| **File sending** | `sendFile(jid, buffer, mime, fileName, caption)` — agents can send files back to users via IPC. Router delegates to channel plugin. 64MB limit |
 | **Router made generic** | `src/router.ts` routes to any channel based on JID prefix (`wa:`, `dc:`, `tg:`) |
 | **Group registration** | `src/db.ts` tracks which channel each group belongs to |
 | **WhatsApp tests removed from core** | `src/channels/whatsapp.test.ts` deleted (tests live with plugin now) |
@@ -142,11 +143,15 @@ await channel.sendMessage(jid, text);
 
 Each channel plugin registers which JID patterns it owns (e.g., WhatsApp owns `*@s.whatsapp.net`, Discord owns `dc:*`). The database tracks which channel each registered group belongs to.
 
+### Channel capability awareness
+
+Each channel plugin template now includes a `container-skills/SKILL.md` that tells agents what the channel can and can't do (file sending support, media types, size limits). This means agents know at runtime whether they can send files, what formats are supported, and what the limitations are — without hardcoding channel knowledge into the core.
+
 ### Channel-agnostic changes
 
 - `groups/main/CLAUDE.md` — Anti-prompt-injection rules, generic trigger examples
 - `groups/global/CLAUDE.md` — References `$ASSISTANT_NAME` env var instead of hardcoded "TARS"
-- `container/agent-runner/src/ipc-mcp-stdio.ts` — Tool descriptions say "message" not "WhatsApp message"
+- `container/agent-runner/src/ipc-mcp-stdio.ts` — Tool descriptions say "message" not "WhatsApp message"; `send_file` tool with channel capability note
 - Setup skill — Detects installed channels, doesn't assume WhatsApp
 - All skill templates — Use generic "channel" language
 
@@ -204,6 +209,12 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 |------|------|
 | `container/agent-runner/src/index.ts` | Secret scrubbing from agent output, security hook loading |
 | `src/container-runner.ts` + `src/container-mounts.ts` | Secrets passed via stdin JSON (not written to files in container), OAuth token sync |
+| `src/container-runtime.ts` | Container resource limits: `--cpus=2`, `--memory=4g`, `--pids-limit=256` (prevents fork bombs and runaway agents) |
+| `src/router.ts` | `stripInternalTags()` handles unclosed `<internal>` tags (prevents agent reasoning from leaking to users) |
+| `src/ipc.ts` | Folder name allowlist validation (`/^[a-z0-9][a-z0-9_-]*$/i`) — blocks path traversal via `../../` in group folder names |
+| `src/container-mounts.ts` | `assertPathWithin()` defense-in-depth — validates resolved paths stay within expected directories |
+| `src/db.ts` | Folder validation on database retrieval — rejects rows with invalid folder names |
+| `container/agent-runner/src/ipc-mcp-stdio.ts` | MCP schema allowlist for folder names (Zod regex + max length) |
 | `CLAUDE.md` | Added security section referencing SECURITY.md |
 | `groups/main/CLAUDE.md` | Anti-prompt-injection rules |
 
@@ -234,10 +245,13 @@ Upstream only handles text messages. This fork adds core support for media in th
 
 | File | What |
 |------|------|
-| `src/types.ts` | Added `mediaType`, `mediaPath`, `mediaHostPath` fields to `NewMessage` |
+| `src/types.ts` | Added `mediaType`, `mediaPath`, `mediaHostPath` fields to `NewMessage`; optional `sendFile()` on `Channel` interface |
+| `src/router.ts` | `routeOutboundFile()` — finds the owning channel and delegates file delivery |
+| `src/ipc.ts` | `send_file` IPC message type — translates container paths to host paths, validates size (64MB limit), calls router |
+| `container/agent-runner/src/ipc-mcp-stdio.ts` | `send_file` MCP tool — agents can send files from `/workspace/` back to the chat |
 | `container/agent-runner/src/index.ts` | Media files bind-mounted into container so agents can read/analyze them |
 
-### How it works
+### How media receiving works
 
 1. Channel plugin downloads media to host temp directory
 2. `mediaHostPath` is set on the message (host-side path for plugin hooks)
@@ -246,6 +260,14 @@ Upstream only handles text messages. This fork adds core support for media in th
 5. Agent can read the file (images are displayed, documents are parsed)
 
 Channel plugins implement the download logic. Host-side plugin hooks (`onInboundMessage`) can transform media before it reaches the agent (e.g., transcription).
+
+### How file sending works
+
+1. Agent calls `send_file` MCP tool with a path inside `/workspace/`
+2. IPC handler translates container path to host path, validates file exists and is ≤64MB
+3. Router finds the channel that owns the chat JID
+4. Channel plugin's `sendFile()` method delivers via the appropriate API (auto-selects image/video/audio/document based on MIME type)
+5. WhatsApp plugin unwraps nested message wrappers (viewOnce, ephemeral, documentWithCaption) for proper media display
 
 ---
 
@@ -259,6 +281,7 @@ Channel plugins implement the download logic. Host-side plugin hooks (`onInbound
 | **Error notifications** | When a scheduled task fails, the user gets a notification instead of silent failure |
 | **`claimTask()`** | Atomic task claiming to prevent double-execution in concurrent scenarios |
 | **Shorter idle timeout** | `SCHEDULED_TASK_IDLE_TIMEOUT` (configurable) for faster task completion |
+| **resumeAt persistence** | Persists the last assistant message UUID per group so the SDK can skip replay on container restart (in-memory, survives container restarts within the same process) |
 
 ### Supporting changes
 
@@ -267,7 +290,9 @@ Channel plugins implement the download logic. Host-side plugin hooks (`onInbound
 | `src/ipc.ts` | Model field in IPC messages, `authorizedTaskAction` helper for DRY task auth |
 | `src/db.ts` | `claimTask()` method, model column in tasks table |
 | `src/config.ts` | `SCHEDULED_TASK_IDLE_TIMEOUT` constant |
-| `container/agent-runner/src/index.ts` | Model selection when creating SDK client |
+| `src/orchestrator.ts` | `resumePositions` map — persists and passes `resumeAt` for each group's container sessions |
+| `src/container-runner.ts` | `resumeAt` field in ContainerInput/ContainerOutput interfaces |
+| `container/agent-runner/src/index.ts` | Model selection, resumeAt pass-through to SDK query, retry-without-session on failure |
 
 ---
 
@@ -284,11 +309,11 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 
 ---
 
-## 8. New Skills (25)
+## 8. New Skills (27)
 
 Claude Code skills (`.claude/skills/`) that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
 
-### Integration skills (17)
+### Integration skills (18)
 
 | Skill | What it adds |
 |-------|-------------|
@@ -306,6 +331,7 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `add-skill-norish` | Recipe import by URL |
 | `add-skill-notion` | Notion API for notes/project management |
 | `add-skill-parallel` | Parallel AI web research via MCP servers |
+| `add-skill-stocks` | Stock prices and financial data via Yahoo Finance |
 | `add-skill-trains` | UK National Rail departures (includes Python script) |
 | `add-skill-transcription` | Voice message transcription via OpenAI Whisper (channel-agnostic) |
 | `add-skill-weather` | Weather via wttr.in / Open-Meteo (no API key needed) |
@@ -321,7 +347,7 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `add-channel-telegram-swarm` | Agent Teams support for Telegram (pool bot identities) |
 | `nanoclaw-add-group` | Generic skill to register a group on any installed channel |
 
-### Meta skills (6)
+### Meta skills (8)
 
 | Skill | What it does |
 |-------|-------------|
@@ -329,9 +355,10 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `nanoclaw-customize` | Adding integrations, changing behavior |
 | `nanoclaw-debug` | Container issues, logs, troubleshooting |
 | `nanoclaw-set-model` | Change Claude model used by containers |
-| `create-skill-plugin` | Guided creation of new skill plugins from an idea |
-| `create-channel-plugin` | Guided creation of new channel plugins |
+| `create-skill-plugin` | Guided creation of new skill plugins from an idea (includes scoping guidance for sensitive plugins) |
+| `create-channel-plugin` | Guided creation of new channel plugins (includes container-skills template for capability awareness) |
 | `nanoclaw-update` | Manage upstream sync with selective cherry-pick |
+| `nanoclaw-security-audit` | Pre-installation security audit of skill plugins — purpose-based threat evaluation across 8 attack vectors |
 
 ### Rewritten upstream skills
 
@@ -475,8 +502,8 @@ The `nanoclaw-add-group` skill now offers optional per-group personality customi
 | Container runtime | Apple Container only | Docker + Apple Container via abstraction layer |
 | Extensibility | Skills only (SKILL.md files) | Runtime plugins with hooks, mounts, env vars, MCP, Dockerfile.partial |
 | Dependencies | All channel SDKs in root `package.json` | Per-plugin `package.json` (only installed plugins add deps) |
-| Media | Text only | Downloads images/video/audio/docs, mounts into container |
-| Security | Trust-based (one user) | Defense-in-depth (secret isolation, Bash hooks, IPC authorization) |
+| Media | Text only | Bidirectional: downloads into container + agents can send files back via `send_file` MCP tool |
+| Security | Trust-based (one user) | Defense-in-depth (secret isolation, Bash hooks, IPC auth, resource limits, path traversal defense, pre-install security audits) |
 | Setup | Shell scripts hardcoding WhatsApp | Channel-agnostic SKILL.md with plugin detection |
 | Scheduled tasks | Single model, silent failures | Per-task model selection, error notifications, atomic claiming |
 

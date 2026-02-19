@@ -25,22 +25,38 @@ If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
 
 ## Install
 
-1. Copy plugin files:
-   ```bash
-   cp -r .claude/skills/add-skill-notion/files/ plugins/notion/
-   ```
-2. Create a Notion internal integration:
+1. Create a Notion internal integration:
    - Go to https://www.notion.so/my-integrations
    - Click **New integration**
    - Select the workspace to connect
    - Enable capabilities: Read content, Update content, Insert content
    - Click **Submit** and copy the **Internal Integration Secret** (starts with `ntn_`)
    - For each page the agent should access: open page > **...** > **Connections** > add your integration
-3. Add to `.env`:
+2. Add to `.env`:
    ```bash
    echo 'NOTION_API_KEY=YOUR_KEY_HERE' >> .env
    ```
-4. Rebuild and restart:
+3. **Group Scoping** -- Ask the user which groups should have access to Notion:
+
+   - **All groups** (default) -- every group's agent can read and update Notion pages
+   - **Specific groups only** -- e.g., only `main`
+
+   If the user wants to restrict access, update `plugins/notion/plugin.json` after copying (step 4) to set `"groups"` to the list of group folder names:
+
+   ```json
+   "groups": ["main"]
+   ```
+
+   If all groups (or the user doesn't care), leave as `"groups": ["*"]`.
+
+   Restricting access means only those groups' agents will have Notion tools. Other groups won't see the Notion API or credentials.
+
+4. Copy plugin files:
+   ```bash
+   cp -r .claude/skills/add-skill-notion/files/ plugins/notion/
+   ```
+
+5. Rebuild and restart:
    ```bash
    npm run build
    systemctl restart nanoclaw  # or launchctl on macOS

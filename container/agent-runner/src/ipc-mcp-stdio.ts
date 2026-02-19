@@ -289,7 +289,9 @@ server.tool(
 
 Supported formats: images (jpg, png, gif, webp), videos (mp4, webm), audio (mp3, ogg, wav), documents (pdf, doc, txt, csv, json, zip).
 
-Maximum file size: 64 MB.`,
+Maximum file size: 64 MB.
+
+Note: File delivery depends on the channel plugin supporting file uploads. Not all channels implement this. The file is queued for delivery but may silently fail if the channel doesn't support it.`,
   {
     path: z.string().describe('Absolute path to the file inside the container (must start with /workspace/)'),
     caption: z.string().optional().describe('Optional caption/description to send with the file'),

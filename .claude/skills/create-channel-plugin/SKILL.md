@@ -144,7 +144,9 @@ This is both the **user-facing entry point** (shows up as `/add-channel-{name}` 
 └── files/                          # Template channel plugin (copied on install)
     ├── plugin.json                 # Manifest (always present)
     ├── index.js                    # Channel implementation (always present)
-    └── auth.js                     # Auth setup script (if interactive auth needed)
+    ├── auth.js                     # Auth setup script (if interactive auth needed)
+    └── container-skills/           # Agent-facing capability description
+        └── SKILL.md                # Tells the agent what this channel can/can't do
 ```
 
 The `add-channel-{name}` SKILL.md must:
@@ -174,6 +176,43 @@ When to use:
 When NOT to use:
 - Pure npm dependencies — use per-plugin `package.json` instead
 - Environment variables — use `.env` and `containerEnvVars`
+
+### Container Skills (Required)
+
+Every channel plugin **must** include a `container-skills/SKILL.md` that tells the agent what the channel can and can't do. This file is automatically mounted into agent containers scoped to groups on this channel.
+
+Create `files/container-skills/SKILL.md` with:
+
+```markdown
+# {Platform} Channel Capabilities
+
+You are communicating via {Platform}.
+
+## Sending files
+
+{If sendFile is implemented:}
+You can send files to the user using `mcp__nanoclaw__send_file`. Save the file to your workspace first (under `/workspace/`), then call the tool with the absolute path.
+Supported: images, videos, audio, documents. Maximum 64 MB.
+
+{If sendFile is NOT implemented:}
+File sending (`send_file`) is not supported on this channel. If the user asks for a file, provide the content inline in your message instead.
+
+## Receiving media
+
+{If downloadMedia is implemented:}
+When users send images, voice notes, videos, or documents, they appear as `[type: /workspace/group/media/filename]` in the message. The file is available at that path for you to read or process.
+
+{If NOT implemented:}
+Media attachments from users are not currently downloaded. You will see text placeholders but cannot access file contents.
+
+## Platform notes
+
+- {Message format capabilities: plain text, markdown, HTML, etc.}
+- {Message length limits}
+- {Any other platform-specific behavior the agent should know about}
+```
+
+This is how the agent knows whether to attempt `send_file` or fall back to inline content. Without this skill, the agent may try to send files on channels that don't support it.
 
 ## Channel Plugin Templates
 

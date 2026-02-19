@@ -109,7 +109,24 @@ sed -i '/^CALDAV_ACCOUNTS=/d' .env
 echo 'CALDAV_ACCOUNTS=[{"name":"iCloud","serverUrl":"https://caldav.icloud.com","user":"user@icloud.com","pass":"xxxx-xxxx-xxxx-xxxx"}]' >> .env
 ```
 
-### Step 4: Deploy Plugin
+### Step 4: Group Scoping
+
+Ask the user which groups should have access to Calendar:
+
+- **All groups** (default) -- every group's agent can read and manage calendar events
+- **Specific groups only** -- e.g., only `main` and `family-chat`
+
+If the user wants to restrict access, update `plugins/calendar/plugin.json` after copying (Step 5) to set `"groups"` to the list of group folder names:
+
+```json
+"groups": ["main", "family-chat"]
+```
+
+If all groups (or the user doesn't care), leave as `"groups": ["*"]`.
+
+Restricting access means only those groups' agents will have calendar tools. Other groups won't see calendar commands or credentials.
+
+### Step 5: Deploy Plugin
 
 Copy plugin files:
 ```bash
@@ -121,7 +138,7 @@ cp .claude/skills/add-skill-cal/files/package.json .claude/skills/add-skill-cal/
 cp .claude/skills/add-skill-cal/files/src/*.ts plugins/calendar/cal-cli/src/
 ```
 
-### Step 5: Configure Container Mounts
+### Step 6: Configure Container Mounts
 
 The only mount needed is the gogcli config directory so the container can access Google OAuth tokens:
 

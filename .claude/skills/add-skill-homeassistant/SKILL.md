@@ -107,13 +107,30 @@ echo "HA_URL=THE_URL_HERE" >> .env
 echo "HA_TOKEN=THE_TOKEN_HERE" >> .env
 ```
 
-## Step 6: Install Plugin
+## Step 6: Group Scoping
+
+Ask the user which groups should have access to Home Assistant:
+
+- **All groups** (default) -- every group's agent can control smart home devices
+- **Specific groups only** -- e.g., only `main` and `family-chat`
+
+If the user wants to restrict access, update `plugins/homeassistant/plugin.json` after copying (Step 7) to set `"groups"` to the list of group folder names:
+
+```json
+"groups": ["main", "family-chat"]
+```
+
+If all groups (or the user doesn't care), leave as `"groups": ["*"]`.
+
+Restricting access means only those groups' agents will have smart home controls. Other groups won't see the Home Assistant tools or credentials.
+
+## Step 7: Install Plugin
 
 ```bash
 cp -r .claude/skills/add-skill-homeassistant/files/ plugins/homeassistant/
 ```
 
-## Step 7: Build and Restart
+## Step 8: Build and Restart
 
 ```bash
 npm run build

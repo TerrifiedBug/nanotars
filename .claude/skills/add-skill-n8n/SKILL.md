@@ -91,13 +91,30 @@ sed -i '/^NANOCLAW_WEBHOOK_URL=/d' .env
 echo 'NANOCLAW_WEBHOOK_URL=THE_WEBHOOK_URL_HERE' >> .env
 ```
 
-## Step 5: Install Plugin
+## Step 5: Group Scoping
+
+Ask the user which groups should have access to n8n:
+
+- **All groups** (default) -- every group's agent can create and manage n8n workflows
+- **Specific groups only** -- e.g., only `main`
+
+If the user wants to restrict access, update `plugins/n8n/plugin.json` after copying (Step 6) to set `"groups"` to the list of group folder names:
+
+```json
+"groups": ["main"]
+```
+
+If all groups (or the user doesn't care), leave as `"groups": ["*"]`.
+
+Restricting access means only those groups' agents will have n8n workflow tools. Other groups won't see the n8n integration or credentials.
+
+## Step 6: Install Plugin
 
 ```bash
 cp -r .claude/skills/add-skill-n8n/files/ plugins/n8n/
 ```
 
-## Step 6: Test n8n API Connection
+## Step 7: Test n8n API Connection
 
 ```bash
 source .env
@@ -118,7 +135,7 @@ If the test fails:
 - **Connection refused**: Check n8n URL and that the instance is running
 - **Timeout**: Network/firewall issue between NanoClaw host and n8n
 
-## Step 7: Test Webhook Reachability from n8n's Perspective
+## Step 8: Test Webhook Reachability from n8n's Perspective
 
 **Skip if webhook was not configured in Step 3.**
 
@@ -134,7 +151,7 @@ print('OK' if r.get('ok') else f'FAILED - {json.dumps(r)}')
 "
 ```
 
-## Step 8: Build and Restart
+## Step 9: Build and Restart
 
 ```bash
 npm run build

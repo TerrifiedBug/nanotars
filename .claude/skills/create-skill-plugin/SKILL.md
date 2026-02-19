@@ -60,6 +60,7 @@ Ask about specifics based on the archetype(s) you determined. Again, **one quest
 - **For MCP integrations:** "Do you know the MCP server package or URL, or should I look it up?"
 - **For background processes:** "What port should it listen on?" or "How often should it check for updates?"
 - **For all plugins:** "What should I call this plugin?" — suggest a name based on the conversation (e.g., "How about `add-skill-weather`?")
+- **For sensitive plugins:** If the plugin handles personal data (email, calendar, financial), controls physical systems (home automation), or accesses private accounts (GitHub, Notion), add a **Group Scoping** step to the generated installation SKILL.md. This step asks the user whether all groups should have access or only specific ones, and sets the `"groups"` field in `plugin.json` accordingly. Informational plugins (weather, search, trains) don't need this — default `["*"]` is fine.
 
 ### Phase 4: Confirm and Generate
 
@@ -76,7 +77,9 @@ Before generating anything:
 
    **Important:** The generated SKILL.md MUST include the Preflight section. This is mandatory for all installation skills.
 
-5. **Offer to install immediately** — "Want me to install this plugin now?"
+5. **Run `/nanoclaw-security-audit`** on the generated files before offering to install. If the audit returns FAIL, fix the issues before proceeding. If REVIEW NEEDED, show the findings to the user.
+
+6. **Offer to install immediately** — "Want me to install this plugin now?"
 
 ### User-Facing Language
 
@@ -207,12 +210,18 @@ If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
 
 2. {If env vars needed: generate/collect API keys, add to .env}
 
-3. Copy plugin files:
+3. {If sensitive plugin — Group Scoping step:}
+   Ask the user: "This plugin can {capability}. Should all groups have access, or only specific ones?"
+   - If specific groups: update `plugins/{name}/plugin.json` to set `"groups": ["folder1", "folder2"]`
+   - If all groups: leave as `"groups": ["*"]` (the default)
+   {Skip this step for informational/utility plugins that don't handle personal data or control external systems.}
+
+4. Copy plugin files:
    ```bash
    cp -r .claude/skills/add-skill-{name}/files/ plugins/{name}/
    ```
 
-4. Rebuild and restart:
+5. Rebuild and restart:
    ```bash
    npm run build
    systemctl restart nanoclaw  # or launchctl on macOS
@@ -260,7 +269,9 @@ Reference templates for each plugin archetype. Use these as the structural found
   "name": "{name}",
   "description": "{DESCRIPTION}",
   "containerEnvVars": [],
-  "hooks": []
+  "hooks": [],
+  "channels": ["*"],
+  "groups": ["*"]
 }
 ```
 
@@ -309,7 +320,9 @@ Fallback: `curl -s "{ALTERNATE_API_ENDPOINT}"`
   "name": "{name}",
   "description": "{DESCRIPTION}",
   "containerEnvVars": ["{SERVICE_URL_VAR}", "{SERVICE_TOKEN_VAR}"],
-  "hooks": []
+  "hooks": [],
+  "channels": ["*"],
+  "groups": ["*"]
 }
 ```
 
@@ -396,7 +409,9 @@ curl -s -X POST "${SERVICE_URL_VAR}/api/{resource}" \
   "name": "{name}",
   "description": "{DESCRIPTION}",
   "containerEnvVars": ["{ENV_VARS_AGENTS_NEED}"],
-  "hooks": ["onStartup", "onShutdown"]
+  "hooks": ["onStartup", "onShutdown"],
+  "channels": ["*"],
+  "groups": ["*"]
 }
 ```
 
@@ -508,7 +523,9 @@ export async function onShutdown() {
   "description": "{DESCRIPTION}",
   "containerEnvVars": ["{SERVICE_URL_VAR}"],
   "containerHooks": ["hooks/{event-name}.js"],
-  "hooks": []
+  "hooks": [],
+  "channels": ["*"],
+  "groups": ["*"]
 }
 ```
 

@@ -25,22 +25,38 @@ If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
 
 ## Install
 
-1. Copy plugin files:
-   ```bash
-   cp -r .claude/skills/add-skill-github/files/ plugins/github/
-   ```
-2. Create a fine-grained Personal Access Token:
+1. Create a fine-grained Personal Access Token:
    - Go to https://github.com/settings/tokens?type=beta
    - Click **Generate new token**
    - Set expiration (recommended: 90 days or longer)
    - Under **Repository access**, select repos to monitor
    - Under **Permissions**, enable read-only for: Contents, Pull requests, Issues, Actions
    - Click **Generate token** and copy it
-3. Add to `.env`:
+2. Add to `.env`:
    ```bash
    echo 'GH_TOKEN=YOUR_TOKEN_HERE' >> .env
    ```
-4. Rebuild and restart:
+3. **Group Scoping** -- Ask the user which groups should have access to GitHub:
+
+   - **All groups** (default) -- every group's agent can query repos, PRs, issues, and CI status
+   - **Specific groups only** -- e.g., only `main`
+
+   If the user wants to restrict access, update `plugins/github/plugin.json` after copying (step 4) to set `"groups"` to the list of group folder names:
+
+   ```json
+   "groups": ["main"]
+   ```
+
+   If all groups (or the user doesn't care), leave as `"groups": ["*"]`.
+
+   Restricting access means only those groups' agents will have GitHub tools. Other groups won't see the GitHub API or credentials.
+
+4. Copy plugin files:
+   ```bash
+   cp -r .claude/skills/add-skill-github/files/ plugins/github/
+   ```
+
+5. Rebuild and restart:
    ```bash
    npm run build
    systemctl restart nanoclaw  # or launchctl on macOS

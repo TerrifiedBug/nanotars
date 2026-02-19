@@ -127,13 +127,30 @@ cp -r ~/.config/gogcli/* data/gogcli/
 chown -R 1000:1000 data/gogcli
 ```
 
-## Step 5: Install Plugin
+## Step 5: Group Scoping
+
+Ask the user which groups should have access to Gmail:
+
+- **All groups** (default) -- every group's agent can read and send emails
+- **Specific groups only** -- e.g., only `main`
+
+If the user wants to restrict access, update `plugins/gmail/plugin.json` after copying (Step 6) to set `"groups"` to the list of group folder names:
+
+```json
+"groups": ["main"]
+```
+
+If all groups (or the user doesn't care), leave as `"groups": ["*"]`.
+
+Restricting access means only those groups' agents will have Gmail tools. Other groups won't see the email commands or credentials.
+
+## Step 6: Install Plugin
 
 ```bash
 cp -r .claude/skills/add-skill-gmail/files/ plugins/gmail/
 ```
 
-## Step 6: Build and Restart
+## Step 7: Build and Restart
 
 ```bash
 ./container/build.sh && npm run build

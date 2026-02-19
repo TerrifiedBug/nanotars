@@ -89,12 +89,27 @@ If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
    "
    ```
 
-5. Copy plugin files:
+5. **Group Scoping** -- Ask the user which groups should have access to email reading:
+
+   - **All groups** (default) -- every group's agent can read emails
+   - **Specific groups only** -- e.g., only `main`
+
+   If the user wants to restrict access, update `plugins/imap-read/plugin.json` after copying (step 6) to set `"groups"` to the list of group folder names:
+
+   ```json
+   "groups": ["main"]
+   ```
+
+   If all groups (or the user doesn't care), leave as `"groups": ["*"]`.
+
+   Restricting access means only those groups' agents will have email reading tools. Other groups won't see the IMAP tools or credentials.
+
+6. Copy plugin files:
    ```bash
    cp -r .claude/skills/add-skill-imap-read/files/ plugins/imap-read/
    ```
 
-6. Rebuild and restart:
+7. Rebuild and restart:
    ```bash
    npm run build
    systemctl restart nanoclaw  # or launchctl on macOS
