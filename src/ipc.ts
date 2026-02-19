@@ -365,10 +365,12 @@ export async function processTaskIpc(
         const task = getTaskById(data.taskId);
         if (task && (isMain || task.group_folder === sourceGroup)) {
           const updates: { prompt?: string; schedule_type?: 'cron' | 'interval' | 'once'; schedule_value?: string; next_run?: string | null; model?: string | null } = {};
-          if (data.prompt) updates.prompt = data.prompt as string;
+          const trimmedPrompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
+          if (trimmedPrompt) updates.prompt = trimmedPrompt;
           if (data.model) updates.model = data.model as string;
 
           // If schedule changed, recompute next_run
+          let scheduleValid = true;
           if (data.schedule_type && data.schedule_value) {
             updates.schedule_type = data.schedule_type as 'cron' | 'interval' | 'once';
             updates.schedule_value = data.schedule_value as string;
@@ -381,19 +383,29 @@ export async function processTaskIpc(
                 );
                 updates.next_run = interval.next().toISOString();
               } catch {
-                logger.warn({ scheduleValue: data.schedule_value }, 'Invalid cron in update_task');
-                break;
+                logger.warn({ taskId: data.taskId, scheduleValue: data.schedule_value }, 'Invalid cron in update_task, update rejected');
+                scheduleValid = false;
               }
             } else if (schedType === 'interval') {
               const ms = parseInt(data.schedule_value as string, 10);
-              if (isNaN(ms) || ms <= 0) break;
-              updates.next_run = new Date(Date.now() + ms).toISOString();
+              if (isNaN(ms) || ms <= 0) {
+                logger.warn({ taskId: data.taskId, scheduleValue: data.schedule_value }, 'Invalid interval in update_task, update rejected');
+                scheduleValid = false;
+              } else {
+                updates.next_run = new Date(Date.now() + ms).toISOString();
+              }
             } else if (schedType === 'once') {
               const scheduled = new Date(data.schedule_value as string);
-              if (isNaN(scheduled.getTime())) break;
-              updates.next_run = scheduled.toISOString();
+              if (isNaN(scheduled.getTime())) {
+                logger.warn({ taskId: data.taskId, scheduleValue: data.schedule_value }, 'Invalid timestamp in update_task, update rejected');
+                scheduleValid = false;
+              } else {
+                updates.next_run = scheduled.toISOString();
+              }
             }
           }
+
+          if (!scheduleValid) break;
 
           updateTask(data.taskId, updates);
           logger.info(

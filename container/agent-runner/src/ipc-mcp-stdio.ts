@@ -232,7 +232,7 @@ server.tool(
 Use this instead of cancel + schedule when modifying a task. The task ID stays the same, avoiding duplicates.`,
   {
     task_id: z.string().describe('The task ID to update'),
-    prompt: z.string().optional().describe('New prompt (what the agent should do)'),
+    prompt: z.string().min(1).optional().describe('New prompt (what the agent should do)'),
     schedule_type: z.enum(['cron', 'interval', 'once']).optional().describe('New schedule type'),
     schedule_value: z.string().optional().describe('New schedule value (must match schedule_type format)'),
     model: z.string().optional().describe('New Claude model'),
