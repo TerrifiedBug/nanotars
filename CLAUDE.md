@@ -31,6 +31,18 @@ Single Node.js process that connects to messaging channels via plugins, routes m
 
 Agents run in containers with explicit mount boundaries. Before modifying files that handle mounts, paths, credentials, or IPC authorization, read [docs/SECURITY.md](docs/SECURITY.md) and consider the security implications.
 
+## Plugin Boundary
+
+NanoClaw's plugin system is designed so that all capabilities are added through defined interfaces — never by modifying core source code. When creating, installing, or modifying plugins (via `/create-skill-plugin`, `/create-channel-plugin`, `/add-skill-*`, `/add-channel-*`), you MUST NOT modify:
+
+- `src/` — no TypeScript source changes
+- `container/agent-runner/` — no agent runner changes
+- `container/Dockerfile` — use `Dockerfile.partial` in the plugin directory instead
+- Root `package.json` or `package-lock.json` — plugin deps go in per-plugin packages
+- Existing plugins under `plugins/` — no cross-plugin modifications
+
+All capabilities must be achieved through the plugin interface: `plugin.json`, `index.js` hooks, `container-skills/`, `mcp.json`, `containerHooks`, and `Dockerfile.partial`. If a plugin idea genuinely requires core code changes, say so clearly and stop — do not attempt workarounds.
+
 ## Skills
 
 | Skill | When to Use |
