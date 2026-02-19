@@ -360,6 +360,55 @@ export async function processTaskIpc(
         (id) => updateTask(id, { status: 'active' }));
       break;
 
+    case 'update_task':
+      if (data.taskId) {
+        const task = getTaskById(data.taskId);
+        if (task && (isMain || task.group_folder === sourceGroup)) {
+          const updates: { prompt?: string; schedule_type?: 'cron' | 'interval' | 'once'; schedule_value?: string; next_run?: string | null; model?: string | null } = {};
+          if (data.prompt) updates.prompt = data.prompt as string;
+          if (data.model) updates.model = data.model as string;
+
+          // If schedule changed, recompute next_run
+          if (data.schedule_type && data.schedule_value) {
+            updates.schedule_type = data.schedule_type as 'cron' | 'interval' | 'once';
+            updates.schedule_value = data.schedule_value as string;
+            const schedType = data.schedule_type as string;
+            if (schedType === 'cron') {
+              try {
+                const interval = CronExpressionParser.parse(
+                  data.schedule_value as string,
+                  { tz: TIMEZONE },
+                );
+                updates.next_run = interval.next().toISOString();
+              } catch {
+                logger.warn({ scheduleValue: data.schedule_value }, 'Invalid cron in update_task');
+                break;
+              }
+            } else if (schedType === 'interval') {
+              const ms = parseInt(data.schedule_value as string, 10);
+              if (isNaN(ms) || ms <= 0) break;
+              updates.next_run = new Date(Date.now() + ms).toISOString();
+            } else if (schedType === 'once') {
+              const scheduled = new Date(data.schedule_value as string);
+              if (isNaN(scheduled.getTime())) break;
+              updates.next_run = scheduled.toISOString();
+            }
+          }
+
+          updateTask(data.taskId, updates);
+          logger.info(
+            { taskId: data.taskId, sourceGroup, updates: Object.keys(updates) },
+            'Task updated via IPC',
+          );
+        } else {
+          logger.warn(
+            { taskId: data.taskId, sourceGroup },
+            'Unauthorized or unknown task update attempt',
+          );
+        }
+      }
+      break;
+
     case 'cancel_task':
       authorizedTaskAction(data.taskId, sourceGroup, isMain, 'cancelled',
         (id) => deleteTask(id));

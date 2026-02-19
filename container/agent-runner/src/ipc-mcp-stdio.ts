@@ -66,7 +66,7 @@ server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools.
 
-IMPORTANT: When MODIFYING an existing task, you MUST cancel the old task first using cancel_task, then create the new one. Otherwise you'll end up with duplicate tasks. Always call list_tasks first to find the old task ID, then cancel_task, then schedule_task.
+To MODIFY an existing task (change schedule, prompt, or model), use update_task instead — it keeps the same task ID and avoids duplicates. Only use cancel_task + schedule_task if you need to change the target group.
 
 CONTEXT MODE - Choose based on task type:
 \u2022 "group": Task runs in the group's conversation context, with access to chat history. Use for tasks that need context about ongoing discussions, user preferences, or recent interactions.
@@ -226,8 +226,83 @@ server.tool(
 );
 
 server.tool(
+  'update_task',
+  `Update an existing scheduled task's prompt, schedule, or model without deleting and recreating it.
+
+Use this instead of cancel + schedule when modifying a task. The task ID stays the same, avoiding duplicates.`,
+  {
+    task_id: z.string().describe('The task ID to update'),
+    prompt: z.string().optional().describe('New prompt (what the agent should do)'),
+    schedule_type: z.enum(['cron', 'interval', 'once']).optional().describe('New schedule type'),
+    schedule_value: z.string().optional().describe('New schedule value (must match schedule_type format)'),
+    model: z.string().optional().describe('New Claude model'),
+  },
+  async (args) => {
+    if (!args.prompt && !args.schedule_type && !args.schedule_value && !args.model) {
+      return {
+        content: [{ type: 'text' as const, text: 'Nothing to update — provide at least one field to change.' }],
+        isError: true,
+      };
+    }
+
+    // If changing schedule, validate the new values
+    const newType = args.schedule_type;
+    const newValue = args.schedule_value;
+    if (newType || newValue) {
+      if ((newType && !newValue) || (!newType && newValue)) {
+        return {
+          content: [{ type: 'text' as const, text: 'When changing the schedule, provide both schedule_type and schedule_value.' }],
+          isError: true,
+        };
+      }
+      if (newType === 'cron') {
+        try {
+          CronExpressionParser.parse(newValue!);
+        } catch {
+          return {
+            content: [{ type: 'text' as const, text: `Invalid cron: "${newValue}". Use format like "0 9 * * *" (daily 9am).` }],
+            isError: true,
+          };
+        }
+      } else if (newType === 'interval') {
+        const ms = parseInt(newValue!, 10);
+        if (isNaN(ms) || ms <= 0) {
+          return {
+            content: [{ type: 'text' as const, text: `Invalid interval: "${newValue}". Must be positive milliseconds.` }],
+            isError: true,
+          };
+        }
+      } else if (newType === 'once') {
+        if (isNaN(new Date(newValue!).getTime())) {
+          return {
+            content: [{ type: 'text' as const, text: `Invalid timestamp: "${newValue}". Use ISO 8601 format.` }],
+            isError: true,
+          };
+        }
+      }
+    }
+
+    const data: Record<string, unknown> = {
+      type: 'update_task',
+      taskId: args.task_id,
+      groupFolder,
+      isMain,
+      timestamp: new Date().toISOString(),
+    };
+    if (args.prompt) data.prompt = args.prompt;
+    if (args.schedule_type) data.schedule_type = args.schedule_type;
+    if (args.schedule_value) data.schedule_value = args.schedule_value;
+    if (args.model) data.model = args.model;
+
+    writeIpcFile(TASKS_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: `Task ${args.task_id} update requested.` }] };
+  },
+);
+
+server.tool(
   'cancel_task',
-  'Cancel and delete a scheduled task.',
+  'Cancel and delete a scheduled task. To modify a task instead, use update_task.',
   { task_id: z.string().describe('The task ID to cancel') },
   async (args) => {
     const data = {
