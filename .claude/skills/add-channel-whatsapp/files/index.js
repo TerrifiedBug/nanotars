@@ -150,6 +150,17 @@ class WhatsAppChannel {
         const rawJid = msg.key.remoteJid;
         if (!rawJid || rawJid === 'status@broadcast') continue;
 
+        // Unwrap WhatsApp message wrappers (viewOnce, ephemeral, documentWithCaption)
+        let inner = msg.message;
+        if (inner?.ephemeralMessage) inner = inner.ephemeralMessage.message;
+        if (inner?.viewOnceMessage) inner = inner.viewOnceMessage.message;
+        if (inner?.viewOnceMessageV2) inner = inner.viewOnceMessageV2.message;
+        if (inner?.documentWithCaptionMessage) inner = inner.documentWithCaptionMessage.message;
+        // Replace msg.message with unwrapped inner for downstream processing
+        if (inner && inner !== msg.message) {
+          msg.message = inner;
+        }
+
         // Translate LID JID to phone JID if applicable
         const chatJid = await this.translateJid(rawJid);
 
@@ -256,6 +267,28 @@ class WhatsAppChannel {
       // If send fails, queue it for retry on reconnect
       this.outgoingQueue.push({ jid, text: prefixed });
       this.logger.warn({ jid, err, queueSize: this.outgoingQueue.length }, 'Failed to send, message queued');
+    }
+  }
+
+  async sendFile(jid, buffer, mime, fileName, caption) {
+    if (!this.connected) {
+      this.logger.warn({ jid, fileName }, 'WA disconnected, cannot send file');
+      return;
+    }
+    try {
+      if (mime.startsWith('image/')) {
+        await this.sock.sendMessage(jid, { image: buffer, caption });
+      } else if (mime.startsWith('video/')) {
+        await this.sock.sendMessage(jid, { video: buffer, caption });
+      } else if (mime.startsWith('audio/')) {
+        await this.sock.sendMessage(jid, { audio: buffer });
+      } else {
+        await this.sock.sendMessage(jid, { document: buffer, mimetype: mime, fileName, caption });
+      }
+      this.logger.info({ jid, fileName, mime }, 'File sent');
+    } catch (err) {
+      this.logger.error({ jid, fileName, err }, 'Failed to send file');
+      throw err;
     }
   }
 

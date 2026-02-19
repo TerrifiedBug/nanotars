@@ -230,6 +230,17 @@ class {Name}Channel {
     // from a distinct identity. Channels that don't support this can ignore it.
   }
 
+  // Optional: send files (images, videos, documents, audio) to the platform
+  // Agents call this via the send_file MCP tool. If not implemented, send_file
+  // returns an error to the agent.
+  async sendFile(jid, buffer, mime, fileName, caption) {
+    // Route by MIME type to platform-appropriate API:
+    // - image/* → image upload API
+    // - video/* → video upload API
+    // - audio/* → audio upload API
+    // - default → document/file upload API
+  }
+
   isConnected() {
     return this.#connected;
   }
@@ -293,7 +304,25 @@ export async function onChannel(ctx, config) {
 
 6. **Assistant Name Prefix**: Most platforms display bot names already (Telegram, Discord, Slack). WhatsApp is special because it shares a phone number, so it prefixes `AssistantName: `. New channels typically do NOT need this prefix.
 
-7. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
+7. **Media Download** (optional but recommended): When your channel receives images, voice notes, videos, or documents, download the media using the platform SDK, save to `groups/{folder}/media/`, and set the three media fields on the message:
+   ```javascript
+   // Download media using platform SDK (e.g., bot.api.getFile() for Telegram)
+   const buffer = await platformSdk.downloadMedia(message);
+   const filename = `${messageId}.${ext}`;
+   const mediaDir = path.join(config.paths.groupsDir, groupFolder, 'media');
+   fs.mkdirSync(mediaDir, { recursive: true });
+   const filePath = path.join(mediaDir, filename);
+   fs.writeFileSync(filePath, buffer);
+   // Set on NewMessage:
+   mediaType = 'image';  // 'image' | 'video' | 'audio' | 'document'
+   mediaPath = `/workspace/group/media/${filename}`;  // container-relative
+   mediaHostPath = filePath;  // absolute host path
+   ```
+   Append the media reference to the message content so the agent knows a file is attached: `` content = `[${type}: ${mediaPath}]` ``. If download fails and there's no text content, use a placeholder like `[image: download failed]`.
+
+8. **File Sending** (optional): Implement `sendFile(jid, buffer, mime, fileName, caption)` to let agents send files back to users. The MIME type tells you which platform API to use (image upload vs document upload). Agents access this via the `send_file` MCP tool — the router calls `routeOutboundFile()` which dispatches to your channel. If not implemented, `send_file` returns an error to the agent.
+
+9. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
 
 ### auth.js Template (when needed)
 
@@ -459,4 +488,4 @@ To remove the {Platform} channel:
 - Data storage goes in `data/channels/{name}/`
 - The `onChannel(ctx, config)` hook receives a `PluginContext` (logger, insertMessage, sendMessage, getRegisteredGroups, getMainChannelJid) and `ChannelPluginConfig` (onMessage, onChatMetadata, registeredGroups, paths, assistantName, assistantHasOwnNumber, db)
 - Channels are initialized before other plugin hooks (`onStartup`)
-- The `Channel` interface: `name`, `connect()`, `sendMessage(jid, text, sender?)`, `isConnected()`, `ownsJid(jid)`, `disconnect()`, optional `refreshMetadata()`, optional `listAvailableGroups()`. The `sender` parameter carries the subagent's identity name — channels that support per-sender identities (bot pools, webhooks) can use it; others ignore it.
+- The `Channel` interface: `name`, `connect()`, `sendMessage(jid, text, sender?)`, `isConnected()`, `ownsJid(jid)`, `disconnect()`, optional `sendFile(jid, buffer, mime, fileName, caption?)`, optional `refreshMetadata()`, optional `listAvailableGroups()`. The `sender` parameter carries the subagent's identity name — channels that support per-sender identities (bot pools, webhooks) can use it; others ignore it. The `sendFile` method enables agents to send files back to users via the `send_file` MCP tool.

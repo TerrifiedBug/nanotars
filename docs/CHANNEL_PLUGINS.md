@@ -114,7 +114,7 @@ The order matters: channels connect before other plugins start, so plugins like 
 | `src/types.ts` | `Channel` interface, `NewMessage`, `OnInboundMessage`, `OnChatMetadata` |
 | `src/plugin-types.ts` | `PluginManifest`, `ChannelPluginConfig`, `PluginContext`, `PluginHooks` |
 | `src/plugin-loader.ts` | Discovery, loading, `PluginRegistry` with scoping methods |
-| `src/router.ts` | `routeOutbound()` — dispatches to correct channel by JID, forwards optional `sender` |
+| `src/router.ts` | `routeOutbound()` — dispatches text to correct channel by JID; `routeOutboundFile()` — dispatches files |
 | `src/index.ts` | Orchestrator: channel init loop (lines ~490–520), message polling |
 | `src/container-mounts.ts` | Scoped plugin injection per channel/group |
 | `src/container-runner.ts` | Container lifecycle (spawn, I/O, timeout) |
@@ -132,6 +132,7 @@ interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string, sender?: string): Promise<void>;
+  sendFile?(jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;
@@ -145,6 +146,7 @@ interface Channel {
 | `name` | Yes | Unique channel identifier (e.g. `"whatsapp"`, `"telegram"`). Must match the plugin directory name. |
 | `connect()` | Yes | Establish the network connection. Should resolve when the channel is ready to send/receive messages. |
 | `sendMessage(jid, text, sender?)` | Yes | Deliver a text message to the given JID. Must handle internal queuing if temporarily disconnected. The optional `sender` parameter carries the subagent's role/identity name (e.g. `"Researcher"`) — channels that support per-sender identities (e.g. Telegram bot pool, Discord webhooks) can use it to send from a distinct bot identity. Channels that don't support this can ignore the parameter. |
+| `sendFile(jid, buffer, mime, fileName, caption?)` | No | Send a file (image, video, audio, document) to the given JID. Agents call this via the `send_file` MCP tool. The router dispatches to `routeOutboundFile()` which finds the correct channel. Channels that don't implement this will cause `send_file` to return an error to the agent. MIME type is provided so the channel can route to the appropriate platform API (e.g. image vs document upload). |
 | `isConnected()` | Yes | Return `true` if the channel can currently send messages. |
 | `ownsJid(jid)` | Yes | Return `true` if this channel is responsible for routing to the given JID. Must be non-overlapping across all channels. |
 | `disconnect()` | Yes | Graceful shutdown. Called on SIGTERM/SIGINT. |
@@ -375,7 +377,7 @@ Platform network (WhatsApp/Telegram/etc.)
   → agent output written via IPC
 ```
 
-### Outbound (agent → platform)
+### Outbound text (agent → platform)
 
 ```
 Agent container writes response
@@ -390,6 +392,23 @@ Agent container writes response
 If no connected channel owns the JID, `routeOutbound` logs a warning and returns `false`. The message is dropped.
 
 If the channel is temporarily disconnected, the channel implementation should queue outbound messages internally and flush them on reconnect. The WhatsApp plugin does this with an `outgoingQueue` array.
+
+### Outbound file (agent → platform)
+
+```
+Agent calls send_file MCP tool (path, caption?, filename?)
+  → MCP validates path starts with /workspace/, file exists, ≤64MB
+  → writes IPC JSON: {type: 'send_file', chatJid, filePath, fileName, caption}
+  → IPC watcher reads file, translates container path to host path
+    → /workspace/group/... → groups/{folder}/...
+  → reads file from host, infers MIME from extension
+  → routeOutboundFile(channels, jid, buffer, mime, fileName, caption?)
+    → channels.find(c => c.ownsJid(jid) && c.isConnected() && c.sendFile)
+    → channel.sendFile(jid, buffer, mime, fileName, caption?)
+      → channel routes by MIME type to appropriate platform API
+```
+
+If no connected channel with `sendFile` support owns the JID, `routeOutboundFile` returns `false` and the agent receives an error. Channels that don't implement `sendFile` simply won't be selected.
 
 ---
 
@@ -484,7 +503,9 @@ The built-in WhatsApp plugin at `plugins/channels/whatsapp/` is the reference im
 
 **Group metadata sync:** Calls `sock.groupFetchAllParticipating()` periodically (24h throttle) and writes group names via `config.db.updateChatName()`. The `refreshMetadata()` method bypasses the throttle for IPC-triggered syncs.
 
-**Media handling:** Downloads images, audio, video, and documents to `groups/{folder}/media/` and sets `mediaPath` (container-relative) and `mediaHostPath` (absolute host path) on the `NewMessage`.
+**Media handling (inbound):** Downloads images, audio, video, and documents to `groups/{folder}/media/` and sets `mediaPath` (container-relative) and `mediaHostPath` (absolute host path) on the `NewMessage`. Unwraps WhatsApp message wrappers (viewOnce, ephemeral, documentWithCaption) before extracting content, so these special message types are handled transparently.
+
+**Media handling (outbound):** Implements `sendFile()` to send images, videos, audio, and documents back to users. Routes by MIME type: `image/*` uses Baileys' image API, `video/*` uses video API, `audio/*` uses audio API, everything else sends as a document with the original MIME type and filename.
 
 **Message prefixing:** In shared-account mode (`assistantHasOwnNumber: false`), outbound messages are prefixed with `AssistantName: ` so users can distinguish bot messages from human ones. In own-account mode, messages are sent as-is.
 
@@ -565,6 +586,7 @@ plugins/channels/telegram/
 - Handle reconnection internally — the orchestrator won't retry for you
 - Queue outbound messages during disconnection, flush on reconnect
 - Store all persistent data under `config.paths.channelsDir + '/telegram/'`
+- (Optional) Implement `sendFile(jid, buffer, mime, fileName, caption?)` to support agent file uploads via the `send_file` MCP tool. Route by MIME type to the appropriate platform API.
 
 ### 4. Implement `auth.js`
 
@@ -616,6 +638,7 @@ Each channel plugin manages its own `node_modules`, keeping the core installatio
 - [ ] Register a group with `channel: 'telegram'` in the database
 - [ ] Send a message through your channel — verify the agent spawns and responds
 - [ ] Verify `routeOutbound` delivers responses back through your channel
+- [ ] (If `sendFile` implemented) Verify agent can send files via `send_file` MCP tool and they arrive in the chat
 - [ ] Check plugin scoping: channel-specific plugins only inject into matching containers
 - [ ] Graceful shutdown: `disconnect()` is called on SIGTERM
 

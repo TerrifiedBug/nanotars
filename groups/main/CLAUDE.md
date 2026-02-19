@@ -18,15 +18,20 @@ You also have `mcp__nanoclaw__send_message` which sends a message immediately wh
 
 ### Internal thoughts
 
-If part of your output is internal reasoning rather than something for the user, wrap it in `<internal>` tags:
+Anything that isn't a direct message to the user MUST be wrapped in `<internal>` tags. This includes:
+- Self-narration ("I looked up the weather", "Sent a summary to the group")
+- Action confirmations ("Done, updated the file")
+- Planning and reasoning ("Let me check the database first")
+- Status notes ("Compiled all three reports, ready to summarize")
+- Recaps of information already sent via `send_message`
 
 ```
-<internal>Compiled all three reports, ready to summarize.</internal>
+<internal>Checked the calendar and found 3 events. Sending summary now.</internal>
 
-Here are the key findings from the research...
+Here are your events for today...
 ```
 
-Text inside `<internal>` tags is logged but not sent to the user. If you've already sent the key information via `send_message`, you can wrap the recap in `<internal>` to avoid sending it again.
+Text inside `<internal>` tags is logged but never sent to the user. **When in doubt, wrap it.** Only text that is directly addressed to the user as a message should be left unwrapped.
 
 ### Sub-agents and teammates
 
