@@ -185,6 +185,26 @@ describe('stripInternalTags', () => {
   it('returns empty string when text is only internal tags', () => {
     expect(stripInternalTags('<internal>only this</internal>')).toBe('');
   });
+
+  it('strips unclosed internal tag at end of text', () => {
+    expect(stripInternalTags('hello <internal>secret reasoning')).toBe(
+      'hello',
+    );
+  });
+
+  it('strips unclosed internal tag with newlines', () => {
+    expect(
+      stripInternalTags('hello <internal>\nsecret\nreasoning\nstuff'),
+    ).toBe('hello');
+  });
+
+  it('strips closed tags first, then unclosed remainder', () => {
+    expect(
+      stripInternalTags(
+        'before <internal>closed</internal> middle <internal>unclosed tail',
+      ),
+    ).toBe('before  middle');
+  });
 });
 
 // --- Trigger gating with requiresTrigger flag ---

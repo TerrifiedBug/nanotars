@@ -636,6 +636,9 @@ function mapRegisteredGroupRow(row: RegisteredGroupRow): RegisteredGroup {
   };
 }
 
+/** Validate folder name from DB to prevent path traversal from corrupted data. */
+const SAFE_FOLDER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+
 export function getRegisteredGroup(
   jid: string,
 ): (RegisteredGroup & { jid: string }) | undefined {
@@ -643,6 +646,10 @@ export function getRegisteredGroup(
     .prepare('SELECT * FROM registered_groups WHERE jid = ?')
     .get(jid) as RegisteredGroupRow | undefined;
   if (!row) return undefined;
+  if (!SAFE_FOLDER_RE.test(row.folder)) {
+    logger.warn({ jid, folder: row.folder }, 'Skipping registered group with invalid folder name');
+    return undefined;
+  }
   return { jid: row.jid, ...mapRegisteredGroupRow(row) };
 }
 
@@ -672,6 +679,10 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     .all() as RegisteredGroupRow[];
   const result: Record<string, RegisteredGroup> = {};
   for (const row of rows) {
+    if (!SAFE_FOLDER_RE.test(row.folder)) {
+      logger.warn({ jid: row.jid, folder: row.folder }, 'Skipping registered group with invalid folder name');
+      continue;
+    }
     result[row.jid] = mapRegisteredGroupRow(row);
   }
   return result;

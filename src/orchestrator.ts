@@ -38,6 +38,7 @@ export interface OrchestratorDeps {
     input: {
       prompt: string;
       sessionId?: string;
+      resumeAt?: string;
       groupFolder: string;
       chatJid: string;
       isMain: boolean;
@@ -76,6 +77,7 @@ const MAX_CONSECUTIVE_ERRORS = 3;
 export class MessageOrchestrator {
   private lastTimestamp = '';
   sessions: Record<string, string> = {};
+  resumePositions: Record<string, string> = {};
   registeredGroups: Record<string, RegisteredGroup> = {};
   private lastAgentTimestamp: Record<string, string> = {};
   private consecutiveErrors: Record<string, number> = {};
@@ -285,6 +287,9 @@ export class MessageOrchestrator {
             this.sessions[group.folder] = output.newSessionId;
             this.deps.setSession(group.folder, output.newSessionId);
           }
+          if (output.resumeAt) {
+            this.resumePositions[group.folder] = output.resumeAt;
+          }
           await onOutput(output);
         }
       : undefined;
@@ -295,6 +300,7 @@ export class MessageOrchestrator {
         {
           prompt,
           sessionId,
+          resumeAt: this.resumePositions[group.folder],
           groupFolder: group.folder,
           chatJid,
           isMain,
@@ -307,18 +313,23 @@ export class MessageOrchestrator {
         this.sessions[group.folder] = output.newSessionId;
         this.deps.setSession(group.folder, output.newSessionId);
       }
+      if (output.resumeAt) {
+        this.resumePositions[group.folder] = output.resumeAt;
+      }
 
       if (output.status === 'error') {
         this.deps.logger.error(
           { group: group.name, error: output.error },
           'Container agent error',
         );
+        delete this.resumePositions[group.folder];
         return 'error';
       }
 
       return 'success';
     } catch (err) {
       this.deps.logger.error({ group: group.name, err }, 'Agent error');
+      delete this.resumePositions[group.folder];
       return 'error';
     }
   }

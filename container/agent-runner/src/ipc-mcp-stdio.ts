@@ -252,7 +252,10 @@ Use available_groups.json to find the JID for a group. The folder name should be
   {
     jid: z.string().describe('The group JID identifier (e.g., "120363336345536173@g.us" for WhatsApp, "dc:123456789" for Discord)'),
     name: z.string().describe('Display name for the group'),
-    folder: z.string().describe('Folder name for group files (lowercase, hyphens, e.g., "family-chat")'),
+    folder: z.string()
+      .regex(/^[a-z0-9][a-z0-9_-]*$/, 'Folder must be lowercase alphanumeric with hyphens/underscores')
+      .max(64, 'Folder name must be 64 characters or fewer')
+      .describe('Folder name for group files (lowercase, hyphens, e.g., "family-chat")'),
     trigger: z.string().describe('Trigger word (e.g., "@TARS")'),
   },
   async (args) => {
@@ -277,6 +280,66 @@ Use available_groups.json to find the JID for a group. The folder name should be
     return {
       content: [{ type: 'text' as const, text: `Group "${args.name}" registered. It will start receiving messages immediately.` }],
     };
+  },
+);
+
+server.tool(
+  'send_file',
+  `Send a file to the user or group. The file must exist in your workspace.
+
+Supported formats: images (jpg, png, gif, webp), videos (mp4, webm), audio (mp3, ogg, wav), documents (pdf, doc, txt, csv, json, zip).
+
+Maximum file size: 64 MB.`,
+  {
+    path: z.string().describe('Absolute path to the file inside the container (must start with /workspace/)'),
+    caption: z.string().optional().describe('Optional caption/description to send with the file'),
+    filename: z.string().optional().describe('Override the filename shown to the recipient'),
+  },
+  async (args) => {
+    // Security: file must be under /workspace/
+    if (!args.path.startsWith('/workspace/')) {
+      return {
+        content: [{ type: 'text' as const, text: 'Error: path must start with /workspace/' }],
+        isError: true,
+      };
+    }
+
+    // Verify file exists and is a regular file
+    try {
+      const stat = fs.statSync(args.path);
+      if (!stat.isFile()) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: ${args.path} is not a regular file` }],
+          isError: true,
+        };
+      }
+      if (stat.size > 64 * 1024 * 1024) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: file too large (${(stat.size / 1024 / 1024).toFixed(1)} MB, max 64 MB)` }],
+          isError: true,
+        };
+      }
+    } catch {
+      return {
+        content: [{ type: 'text' as const, text: `Error: file not found at ${args.path}` }],
+        isError: true,
+      };
+    }
+
+    const fileName = args.filename || path.basename(args.path);
+    const data: Record<string, string | undefined> = {
+      type: 'send_file',
+      chatJid,
+      filePath: args.path,
+      fileName,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: `File "${fileName}" queued for sending.` }] };
   },
 );
 

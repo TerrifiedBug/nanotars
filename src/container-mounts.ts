@@ -13,6 +13,15 @@ import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 import type { PluginRegistry } from './plugin-loader.js';
 
+/** Verify that a resolved path stays within the expected parent directory. */
+function assertPathWithin(resolved: string, parent: string, label: string): void {
+  const normalizedResolved = path.resolve(resolved);
+  const normalizedParent = path.resolve(parent);
+  if (!normalizedResolved.startsWith(normalizedParent + path.sep) && normalizedResolved !== normalizedParent) {
+    throw new Error(`Path traversal blocked: ${label} resolved to ${normalizedResolved} outside ${normalizedParent}`);
+  }
+}
+
 let pluginRegistry: PluginRegistry | null = null;
 
 /** Set the plugin registry for dynamic env vars and skill mounting */
@@ -130,15 +139,19 @@ export function buildVolumeMounts(
     });
 
     // Main also gets its group folder as the working directory
+    const mainGroupPath = path.join(GROUPS_DIR, group.folder);
+    assertPathWithin(mainGroupPath, GROUPS_DIR, 'main group mount');
     mounts.push({
-      hostPath: path.join(GROUPS_DIR, group.folder),
+      hostPath: mainGroupPath,
       containerPath: '/workspace/group',
       readonly: false,
     });
   } else {
     // Other groups only get their own folder
+    const groupPath = path.join(GROUPS_DIR, group.folder);
+    assertPathWithin(groupPath, GROUPS_DIR, 'group mount');
     mounts.push({
-      hostPath: path.join(GROUPS_DIR, group.folder),
+      hostPath: groupPath,
       containerPath: '/workspace/group',
       readonly: false,
     });
@@ -156,12 +169,13 @@ export function buildVolumeMounts(
 
   // Per-group Claude sessions directory (isolated from other groups)
   // Each group gets their own .claude/ to prevent cross-group session access
+  const sessionsBase = path.join(DATA_DIR, 'sessions');
   const groupSessionsDir = path.join(
-    DATA_DIR,
-    'sessions',
+    sessionsBase,
     group.folder,
     '.claude',
   );
+  assertPathWithin(groupSessionsDir, sessionsBase, 'sessions dir');
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
@@ -203,7 +217,9 @@ export function buildVolumeMounts(
 
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', group.folder);
+  const ipcBase = path.join(DATA_DIR, 'ipc');
+  const groupIpcDir = path.join(ipcBase, group.folder);
+  assertPathWithin(groupIpcDir, ipcBase, 'IPC dir');
   fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });

@@ -38,7 +38,7 @@ import {
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
-import { formatMessages, routeOutbound, stripInternalTags } from './router.js';
+import { formatMessages, routeOutbound, routeOutboundFile, stripInternalTags } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
@@ -166,6 +166,7 @@ async function main(): Promise<void> {
   startSchedulerLoop({
     registeredGroups: () => orchestrator.registeredGroups,
     getSessions: () => orchestrator.sessions,
+    getResumePositions: () => orchestrator.resumePositions,
     queue,
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
@@ -175,6 +176,7 @@ async function main(): Promise<void> {
   });
   startIpcWatcher({
     sendMessage: (jid, text, sender) => routeOutbound(orchestrator.channels, jid, text, sender).then(() => {}),
+    sendFile: (jid, buffer, mime, fileName, caption) => routeOutboundFile(orchestrator.channels, jid, buffer, mime, fileName, caption),
     registeredGroups: () => orchestrator.registeredGroups,
     registerGroup: (jid, group) => orchestrator.registerGroup(jid, group),
     syncGroupMetadata: async (_force) => {

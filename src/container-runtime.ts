@@ -165,6 +165,9 @@ export function extraRunArgs(): string[] {
       '--security-opt', `seccomp=${seccomp}`,
       '--shm-size=2g',
       '--init',
+      '--cpus=2',
+      '--memory=4g',
+      '--pids-limit=256',
     ];
   }
   return [];

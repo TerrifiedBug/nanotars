@@ -17,7 +17,11 @@ export function formatMessages(messages: NewMessage[]): string {
 }
 
 export function stripInternalTags(text: string): string {
-  return text.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+  // Strip properly closed <internal>...</internal> blocks
+  let result = text.replace(/<internal>[\s\S]*?<\/internal>/g, '');
+  // Strip unclosed <internal> tags (agent didn't close the tag)
+  result = result.replace(/<internal>[\s\S]*/g, '');
+  return result.trim();
 }
 
 export async function routeOutbound(
@@ -32,6 +36,23 @@ export async function routeOutbound(
     return false;
   }
   await channel.sendMessage(jid, text, sender);
+  return true;
+}
+
+export async function routeOutboundFile(
+  channels: Channel[],
+  jid: string,
+  buffer: Buffer,
+  mime: string,
+  fileName: string,
+  caption?: string,
+): Promise<boolean> {
+  const channel = channels.find((c) => c.ownsJid(jid) && c.isConnected());
+  if (!channel?.sendFile) {
+    logger.warn({ jid }, 'No connected channel with file support for JID');
+    return false;
+  }
+  await channel.sendFile(jid, buffer, mime, fileName, caption);
   return true;
 }
 

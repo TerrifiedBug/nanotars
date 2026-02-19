@@ -5,6 +5,7 @@ import { CronExpressionParser } from 'cron-parser';
 
 import {
   DATA_DIR,
+  GROUPS_DIR,
   IPC_POLL_INTERVAL,
   MAIN_GROUP_FOLDER,
   TIMEZONE,
@@ -14,8 +15,28 @@ import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 
+/** Max file size for send_file (64 MB) */
+const SEND_FILE_MAX_SIZE = 64 * 1024 * 1024;
+
+/** Infer MIME type from file extension */
+function mimeFromExtension(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const map: Record<string, string> = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+    '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+    '.pdf': 'application/pdf', '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.txt': 'text/plain', '.csv': 'text/csv', '.json': 'application/json',
+    '.zip': 'application/zip',
+  };
+  return map[ext] || 'application/octet-stream';
+}
+
 export interface IpcDeps {
   sendMessage: (jid: string, text: string, sender?: string) => Promise<void>;
+  sendFile: (jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string) => Promise<boolean>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroupMetadata: (force: boolean) => Promise<void>;
@@ -87,6 +108,46 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },
                     'Unauthorized IPC message attempt blocked',
+                  );
+                }
+              } else if (data.type === 'send_file' && data.chatJid && data.filePath) {
+                // Authorization: same as message
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  // Translate container path to host path
+                  // Container /workspace/group/... → host groups/{folder}/...
+                  let hostPath = data.filePath as string;
+                  if (hostPath.startsWith('/workspace/group/')) {
+                    hostPath = path.join(GROUPS_DIR, sourceGroup, hostPath.slice('/workspace/group/'.length));
+                  }
+
+                  if (!fs.existsSync(hostPath)) {
+                    logger.warn({ hostPath, sourceGroup }, 'send_file: file not found');
+                  } else {
+                    const stat = fs.statSync(hostPath);
+                    if (!stat.isFile()) {
+                      logger.warn({ hostPath, sourceGroup }, 'send_file: not a regular file');
+                    } else if (stat.size > SEND_FILE_MAX_SIZE) {
+                      logger.warn({ hostPath, size: stat.size, sourceGroup }, 'send_file: file too large (64MB limit)');
+                    } else {
+                      const buffer = fs.readFileSync(hostPath);
+                      const mime = mimeFromExtension(hostPath);
+                      const fileName = (data.fileName as string) || path.basename(hostPath);
+                      const caption = data.caption as string | undefined;
+                      await deps.sendFile(data.chatJid, buffer, mime, fileName, caption);
+                      logger.info(
+                        { chatJid: data.chatJid, fileName, mime, size: stat.size, sourceGroup },
+                        'IPC file sent',
+                      );
+                    }
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC send_file attempt blocked',
                   );
                 }
               }
@@ -338,8 +399,8 @@ export async function processTaskIpc(
         break;
       }
       if (data.jid && data.name && data.folder && data.trigger) {
-        // Validate folder name to prevent path traversal
-        if (/[\/\\]|\.\./.test(data.folder)) {
+        // Validate folder name: allowlist of safe characters only
+        if (!/^[a-z0-9][a-z0-9_-]*$/i.test(data.folder)) {
           logger.warn(
             { folder: data.folder },
             'Rejected register_group with invalid folder name (path traversal attempt)',

@@ -23,6 +23,7 @@ import { SECRET_ENV_VARS, createSanitizeBashHook, createSecretPathBlockHook } fr
 interface ContainerInput {
   prompt: string;
   sessionId?: string;
+  resumeAt?: string;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -34,6 +35,7 @@ interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
   newSessionId?: string;
+  resumeAt?: string;
   error?: string;
 }
 
@@ -536,7 +538,8 @@ async function runQuery(
         status: isError ? 'error' : 'success',
         result: textResult || null,
         error: errorText || undefined,
-        newSessionId
+        newSessionId,
+        resumeAt: lastAssistantUuid,
       });
     }
   }
@@ -592,7 +595,7 @@ async function main(): Promise<void> {
   }
 
   // Query loop: run query → wait for IPC message → run new query → repeat
-  let resumeAt: string | undefined;
+  let resumeAt: string | undefined = containerInput.resumeAt;
   try {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
@@ -614,7 +617,7 @@ async function main(): Promise<void> {
       }
 
       // Emit session update so host can track it
-      writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+      writeOutput({ status: 'success', result: null, newSessionId: sessionId, resumeAt });
 
       log('Query ended, waiting for next IPC message...');
 
@@ -631,13 +634,38 @@ async function main(): Promise<void> {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     log(`Agent error: ${errorMessage}`);
-    writeOutput({
-      status: 'error',
-      result: null,
-      newSessionId: sessionId,
-      error: errorMessage
-    });
-    process.exit(1);
+
+    // If we had a session/resumeAt, retry once without them (stale session recovery)
+    if (sessionId || resumeAt) {
+      log('Retrying without session/resumeAt (stale session recovery)...');
+      try {
+        sessionId = undefined;
+        resumeAt = undefined;
+        const retryResult = await runQuery(prompt, undefined, mcpServerPath, containerInput, sdkEnv, undefined);
+        if (retryResult.newSessionId) sessionId = retryResult.newSessionId;
+        if (retryResult.lastAssistantUuid) resumeAt = retryResult.lastAssistantUuid;
+        // If retry succeeded without throwing, exit cleanly
+        log('Retry succeeded');
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        log(`Retry also failed: ${retryMsg}`);
+        writeOutput({
+          status: 'error',
+          result: null,
+          newSessionId: sessionId,
+          error: retryMsg,
+        });
+        process.exit(1);
+      }
+    } else {
+      writeOutput({
+        status: 'error',
+        result: null,
+        newSessionId: sessionId,
+        error: errorMessage,
+      });
+      process.exit(1);
+    }
   }
 }
 

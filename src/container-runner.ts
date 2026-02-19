@@ -28,6 +28,7 @@ export { AvailableGroup, mapTasksToSnapshot, writeGroupsSnapshot, writeTasksSnap
 export interface ContainerInput {
   prompt: string;
   sessionId?: string;
+  resumeAt?: string;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -40,6 +41,7 @@ export interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
   newSessionId?: string;
+  resumeAt?: string;
   error?: string;
 }
 

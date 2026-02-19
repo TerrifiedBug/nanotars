@@ -52,6 +52,7 @@ beforeEach(() => {
 
   deps = {
     sendMessage: async () => {},
+    sendFile: async () => false,
     registeredGroups: () => groups,
     registerGroup: (jid, group) => {
       groups[jid] = group;
@@ -552,6 +553,79 @@ describe('schedule_task context_mode', () => {
 });
 
 // --- register_group success path ---
+
+// --- register_group path traversal ---
+
+describe('register_group path traversal', () => {
+  it('rejects folder with path traversal (../)', async () => {
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'evil@g.us',
+        name: 'Evil Group',
+        folder: '../../.ssh',
+        trigger: '@TARS',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    expect(groups['evil@g.us']).toBeUndefined();
+    expect(getRegisteredGroup('evil@g.us')).toBeUndefined();
+  });
+
+  it('rejects folder with slashes', async () => {
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'slash@g.us',
+        name: 'Slash Group',
+        folder: 'foo/bar',
+        trigger: '@TARS',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    expect(groups['slash@g.us']).toBeUndefined();
+  });
+
+  it('rejects folder starting with a dot', async () => {
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'dot@g.us',
+        name: 'Dot Group',
+        folder: '.hidden',
+        trigger: '@TARS',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    expect(groups['dot@g.us']).toBeUndefined();
+  });
+
+  it('allows valid folder names', async () => {
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'good@g.us',
+        name: 'Good Group',
+        folder: 'family-chat',
+        trigger: '@TARS',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    expect(groups['good@g.us']).toBeDefined();
+  });
+});
 
 describe('register_group success', () => {
   it('main group can register a new group', async () => {

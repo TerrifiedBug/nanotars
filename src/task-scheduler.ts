@@ -27,6 +27,7 @@ import { RegisteredGroup, ScheduledTask } from './types.js';
 export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSessions: () => Record<string, string>;
+  getResumePositions: () => Record<string, string>;
   queue: GroupQueue;
   onProcess: (groupJid: string, proc: ChildProcess, containerName: string, groupFolder: string) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -80,10 +81,13 @@ async function runTask(
   let error: string | null = null;
   let hadSuccessfulResponse = false;
 
-  // For group context mode, use the group's current session
+  // For group context mode, use the group's current session and resume position
   const sessions = deps.getSessions();
   const sessionId =
     task.context_mode === 'group' ? sessions[task.group_folder] : undefined;
+  const resumePositions = deps.getResumePositions();
+  const resumeAt =
+    task.context_mode === 'group' ? resumePositions[task.group_folder] : undefined;
 
   // Idle timer: writes _close sentinel after IDLE_TIMEOUT of no output,
   // so the container exits instead of hanging at waitForIpcMessage forever.
@@ -103,6 +107,7 @@ async function runTask(
       {
         prompt: task.prompt,
         sessionId,
+        resumeAt,
         groupFolder: task.group_folder,
         chatJid: task.chat_jid,
         isMain,
