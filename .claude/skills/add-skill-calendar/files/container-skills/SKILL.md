@@ -8,19 +8,22 @@ allowed-tools: Bash(gog:*,node:*,curl:*)
 
 ## Google Calendar (gog CLI)
 
+**IMPORTANT:** `gog calendar events` only queries ONE calendar at a time (defaults to primary). The user may have multiple calendars (e.g. F1 schedule, shared calendars). **Always query ALL calendars** when listing events:
+
+```bash
+for cal in $(gog calendar calendars --plain | tail -n+2 | cut -f1); do
+  gog calendar events --from today --to "+7d" "$cal" 2>/dev/null
+done
+```
+
 List calendars:
 ```bash
 gog calendar calendars
 ```
 
-List upcoming events (next 7 days):
+Query a specific calendar by ID:
 ```bash
-gog calendar events --from today --to "+7d"
-```
-
-Get events for a specific date:
-```bash
-gog calendar events --from "2025-01-15" --to "2025-01-16"
+gog calendar events --from "2025-01-15" --to "2025-01-16" "CALENDAR_ID"
 ```
 
 Create an event:
