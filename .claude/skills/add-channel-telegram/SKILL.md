@@ -93,7 +93,7 @@ The bot responds when:
 
 ## Agent Swarm Support
 
-After completing setup, ask the user if they want Agent Swarm (Teams) support. If yes, invoke `/add-channel-telegram-swarm`.
+After completing setup, ask the user if they want Agent Swarm (Teams) support. If yes, invoke `/add-skill-telegram-swarm`.
 
 The plugin has built-in bot pool support for agent teams. Each subagent appears as a different bot identity in Telegram.
 
@@ -103,7 +103,7 @@ To enable, create 3-5 additional bots via @BotFather and set:
 TELEGRAM_BOT_POOL=TOKEN1,TOKEN2,TOKEN3
 ```
 
-Pool bots are send-only (no polling). When a subagent calls `send_message` with a `sender` parameter, the host assigns a pool bot and renames it to match the sender's role. See `/add-channel-telegram-swarm` for full setup guide.
+Pool bots are send-only (no polling). When a subagent calls `send_message` with a `sender` parameter, the host assigns a pool bot and renames it to match the sender's role. See `/add-skill-telegram-swarm` for full setup guide.
 
 ## Commands
 

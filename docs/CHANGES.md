@@ -313,7 +313,7 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 
 Claude Code skills (`.claude/skills/`) that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
 
-### Integration skills (18)
+### Integration skills (19)
 
 | Skill | What it adds |
 |-------|-------------|
@@ -335,16 +335,16 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `add-skill-trains` | UK National Rail departures (includes Python script) |
 | `add-skill-transcription` | Voice message transcription via OpenAI Whisper (channel-agnostic) |
 | `add-skill-weather` | Weather via wttr.in / Open-Meteo (no API key needed) |
+| `add-skill-telegram-swarm` | Agent Teams support for Telegram (pool bot identities) |
 | `add-skill-webhook` | HTTP webhook endpoint for push events (Home Assistant, uptime monitors, etc.) |
 
-### Channel skills (5)
+### Channel skills (4)
 
 | Skill | What it adds |
 |-------|-------------|
 | `add-channel-whatsapp` | Install WhatsApp as a channel plugin |
 | `add-channel-discord` | Install Discord as a channel plugin |
 | `add-channel-telegram` | Install Telegram as a channel plugin |
-| `add-channel-telegram-swarm` | Agent Teams support for Telegram (pool bot identities) |
 | `nanoclaw-add-group` | Generic skill to register a group on any installed channel |
 
 ### Meta skills (7)
