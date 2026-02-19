@@ -1,5 +1,5 @@
 ---
-name: add-cal
+name: add-calendar
 description: Add calendar access to NanoClaw. Supports Google Calendar (gog CLI with OAuth) and CalDAV providers (iCloud, Nextcloud, Fastmail via cal CLI). Guides through authentication and configures environment variables. Triggers on "add calendar", "add caldav", "icloud calendar", "google calendar", "calendar setup".
 ---
 
@@ -131,11 +131,11 @@ Restricting access means only those groups' agents will have calendar tools. Oth
 Copy plugin files:
 ```bash
 mkdir -p plugins/calendar/container-skills plugins/calendar/cal-cli/src
-cp .claude/skills/add-skill-cal/files/plugin.json plugins/calendar/
-cp .claude/skills/add-skill-cal/files/container-skills/SKILL.md plugins/calendar/container-skills/
-cp .claude/skills/add-skill-cal/files/Dockerfile.partial plugins/calendar/
-cp .claude/skills/add-skill-cal/files/package.json .claude/skills/add-skill-cal/files/package-lock.json .claude/skills/add-skill-cal/files/tsconfig.json plugins/calendar/cal-cli/
-cp .claude/skills/add-skill-cal/files/src/*.ts plugins/calendar/cal-cli/src/
+cp .claude/skills/add-skill-calendar/files/plugin.json plugins/calendar/
+cp .claude/skills/add-skill-calendar/files/container-skills/SKILL.md plugins/calendar/container-skills/
+cp .claude/skills/add-skill-calendar/files/Dockerfile.partial plugins/calendar/
+cp .claude/skills/add-skill-calendar/files/package.json .claude/skills/add-skill-calendar/files/package-lock.json .claude/skills/add-skill-calendar/files/tsconfig.json plugins/calendar/cal-cli/
+cp .claude/skills/add-skill-calendar/files/src/*.ts plugins/calendar/cal-cli/src/
 ```
 
 ### Step 6: Configure Container Mounts

@@ -5,7 +5,7 @@ description: Add Gmail access to NanoClaw via gog CLI (Google Workspace CLI). Ag
 
 # Add Gmail (gog CLI)
 
-Configures Gmail access for agent containers using the `gog` CLI, the same tool used for Google Calendar. If the user already has Calendar set up via `/add-skill-cal`, Gmail just needs the scope added.
+Configures Gmail access for agent containers using the `gog` CLI, the same tool used for Google Calendar. If the user already has Calendar set up via `/add-skill-calendar`, Gmail just needs the scope added.
 
 **Mode:** Tool Mode only -- agents can read/send emails when triggered from a channel (e.g., "check my email", "send an email to..."). This is NOT a channel (emails don't trigger the agent).
 
@@ -34,7 +34,7 @@ grep "^GOG_KEYRING_PASSWORD=" .env 2>/dev/null && echo "GOG_CONFIGURED" || echo 
 [ -d data/gogcli ] && echo "GOG_CREDS_EXIST" || echo "GOG_CREDS_MISSING"
 ```
 
-**If gog is already installed and configured** (Calendar is set up via `/add-skill-cal`):
+**If gog is already installed and configured** (Calendar is set up via `/add-skill-calendar`):
 - Skip to Step 3 to add Gmail scopes
 - The same OAuth credentials and gog config are reused
 
@@ -43,7 +43,7 @@ grep "^GOG_KEYRING_PASSWORD=" .env 2>/dev/null && echo "GOG_CONFIGURED" || echo 
 
 ## Step 2: Install gog and Set Up OAuth
 
-**Only needed if `/add-skill-cal` hasn't been run yet.**
+**Only needed if `/add-skill-calendar` hasn't been run yet.**
 
 Install gog:
 ```bash

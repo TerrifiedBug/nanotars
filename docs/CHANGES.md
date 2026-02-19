@@ -318,7 +318,7 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | Skill | What it adds |
 |-------|-------------|
 | `add-skill-brave-search` | Web search via Brave Search API |
-| `add-skill-cal` | Google Calendar + CalDAV (includes TypeScript CLI baked into image via Dockerfile.partial) |
+| `add-skill-calendar` | Google Calendar + CalDAV (includes TypeScript CLI baked into image via Dockerfile.partial) |
 | `add-skill-changedetection` | changedetection.io website monitoring |
 | `add-skill-claude-mem` | Persistent cross-session memory for agents |
 | `add-skill-commute` | Travel times via Waze API |
