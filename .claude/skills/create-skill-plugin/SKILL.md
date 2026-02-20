@@ -366,11 +366,14 @@ python3 /workspace/.claude/skills/{name}/scripts/{name}.py [args]
   "name": "{name}",
   "description": "{DESCRIPTION}",
   "containerEnvVars": ["{SERVICE_URL_VAR}", "{SERVICE_TOKEN_VAR}"],
+  "publicEnvVars": ["{SERVICE_URL_VAR}"],
   "hooks": [],
   "channels": ["*"],
   "groups": ["*"]
 }
 ```
+
+**Note:** `publicEnvVars` lists env vars whose values are safe to appear in outbound messages (URLs, hostnames). Everything else in `containerEnvVars` is automatically redacted from outbound messages and logs to prevent secret leakage.
 
 #### mcp.json
 
@@ -550,6 +553,7 @@ export async function onShutdown() {
 - Available hooks: `onStartup(ctx)`, `onShutdown()`, `onInboundMessage(msg, channel)`, `onChannel(ctx)`
 - The `ctx` (PluginContext) provides: `insertMessage(jid, messageId, sender, senderName, text)`, `sendMessage(jid, text)`, `getRegisteredGroups()`, `getMainChannelJid()`, `logger`
 - `containerEnvVars` lists env vars that agents need (e.g., a webhook URL so they can tell other services where to send data) — these are separate from `process.env` vars the host hook itself reads
+- If any `containerEnvVars` are non-secret (URLs, hostnames), list them in `publicEnvVars` to exempt them from outbound secret redaction
 - Always guard with early return if required env vars are missing
 - Always clean up resources (close servers, clear intervals) in `onShutdown()`
 
@@ -705,6 +709,7 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
   "name": "string (required) — plugin identifier, used for directory and logging",
   "description": "string — human-readable description",
   "containerEnvVars": ["string — env var NAMES from .env to pass into agent containers"],
+  "publicEnvVars": ["string — subset of containerEnvVars whose values are safe to appear in chat (exempt from secret redaction). Defaults to [] — all values redacted. Use for non-secret config like URLs."],
   "hooks": ["string — host-side hook function names exported from index.js. Valid: onStartup, onShutdown, onInboundMessage, onChannel"],
   "containerHooks": ["string — relative paths to JS files loaded as SDK hooks inside agent containers. E.g., hooks/post-tool-use.js"],
   "containerMounts": [{"hostPath": "string", "containerPath": "string — additional read-only mounts for agent containers"}],

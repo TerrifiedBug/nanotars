@@ -17,6 +17,7 @@ import {
 import { buildVolumeMounts, getHomeDir, readSecrets, VolumeMount } from './container-mounts.js';
 import * as containerRuntime from './container-runtime.js';
 import { logger } from './logger.js';
+import { redactSecrets } from './secret-redact.js';
 import { RegisteredGroup } from './types.js';
 
 import { createOutputParser, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
@@ -343,7 +344,7 @@ export async function runContainerAgent(
         );
       }
 
-      fs.writeFileSync(logFile, logLines.join('\n'));
+      fs.writeFileSync(logFile, redactSecrets(logLines.join('\n')));
       logger.debug({ logFile, verbose: isVerbose }, 'Container log written');
 
       if (code !== 0) {

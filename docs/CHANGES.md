@@ -203,6 +203,8 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 
 | File | Purpose |
 |------|---------|
+| `src/secret-redact.ts` | Outbound secret redaction — loads all `.env` values, strips them from outbound messages and container logs |
+| `src/secret-redact.test.ts` | Tests for secret redaction (24 tests) |
 | `container/agent-runner/src/security-hooks.ts` | Bash command sanitization, `/proc/*/environ` blocking, `/tmp/input.json` blocking |
 | `container/agent-runner/src/security-hooks.test.ts` | Tests for security hooks |
 | `docs/SECURITY.md` | Security model documentation (referenced from CLAUDE.md) |
@@ -212,7 +214,9 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 | File | What |
 |------|------|
 | `container/agent-runner/src/index.ts` | Secret scrubbing from agent output, security hook loading |
-| `src/container-runner.ts` + `src/container-mounts.ts` | Secrets passed via stdin JSON (not written to files in container), OAuth token sync |
+| `src/container-runner.ts` + `src/container-mounts.ts` | Secrets passed via stdin JSON (not written to files in container), OAuth token sync, container logs redacted |
+| `src/router.ts` | `redactSecrets()` applied in `routeOutbound()` before channel delivery |
+| `src/index.ts` | `loadSecrets()` called at startup |
 | `src/container-runtime.ts` | Container resource limits: `--cpus=2`, `--memory=4g`, `--pids-limit=256` (prevents fork bombs and runaway agents) |
 | `src/router.ts` | `stripInternalTags()` handles unclosed `<internal>` tags (prevents agent reasoning from leaking to users) |
 | `src/ipc.ts` | Folder name allowlist validation (`/^[a-z0-9][a-z0-9_-]*$/i`) — blocks path traversal via `../../` in group folder names |
@@ -230,6 +234,7 @@ Upstream passes secrets via environment variables, which are visible to `env` an
 2. They never appear in `process.env`, on the filesystem, or in logs
 3. Security hooks block Bash commands and Read tool calls that try to access `/proc/*/environ` or `/tmp/input.json`
 4. Agent output is scrubbed for leaked secret values before routing to the user
+5. **Outbound redaction** (`src/secret-redact.ts`) — reads ALL `.env` values at startup and strips them from outbound messages and container log files. Auto-detects secrets (no hardcoded list) — only a small safe-list of non-secret config vars like `ASSISTANT_NAME` and `CLAUDE_MODEL` is exempted
 
 ### What's protected
 

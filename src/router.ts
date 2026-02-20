@@ -1,5 +1,6 @@
 import { logger } from './logger.js';
 import type { PluginRegistry } from './plugin-loader.js';
+import { redactSecrets } from './secret-redact.js';
 import { Channel, NewMessage } from './types.js';
 
 export function escapeXml(s: string): string {
@@ -56,7 +57,8 @@ export async function routeOutbound(
     }
   }
 
-  await channel.sendMessage(jid, outText, sender, replyTo);
+  const safeText = redactSecrets(outText);
+  await channel.sendMessage(jid, safeText, sender, replyTo);
   return true;
 }
 

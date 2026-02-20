@@ -45,6 +45,7 @@ import { formatMessages, routeOutbound, routeOutboundFile, stripInternalTags } f
 import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
+import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
 import { MessageOrchestrator } from './orchestrator.js';
 import type { ChannelPluginConfig, PluginContext } from './plugin-types.js';
@@ -139,6 +140,9 @@ async function main(): Promise<void> {
   // Load plugins (env vars, hooks, channels, MCP configs)
   plugins = await loadPlugins();
   setPluginRegistry(plugins);
+
+  // Load secret redaction AFTER plugins so publicEnvVars are available
+  loadSecrets(plugins.getPublicEnvVars());
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {

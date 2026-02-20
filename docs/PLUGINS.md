@@ -29,6 +29,7 @@ Only `plugin.json` is required. Everything else is optional depending on what th
 | `name` | `string` | Yes | Unique plugin identifier |
 | `description` | `string` | No | Human-readable description |
 | `containerEnvVars` | `string[]` | No | Env var names from `.env` to pass into agent containers |
+| `publicEnvVars` | `string[]` | No | Subset of `containerEnvVars` whose values are safe to appear in outbound messages (exempt from secret redaction). Defaults to `[]` — all values redacted by default. |
 | `hooks` | `string[]` | No | Host-side hook function names exported by `index.js` |
 | `containerHooks` | `string[]` | No | JS files (relative paths) loaded as SDK hooks inside containers |
 | `containerMounts` | `Array<{hostPath, containerPath}>` | No | Additional read-only mounts for containers |
@@ -175,6 +176,8 @@ Plugins affect agent containers through six mechanisms, all managed by the `Plug
 ### Environment Variables
 
 Each plugin declares which env var names from the host `.env` should be passed into containers via `containerEnvVars`. These are merged with the core set (`ANTHROPIC_API_KEY`, `ASSISTANT_NAME`, `CLAUDE_MODEL`) and deduplicated. Only lines matching declared var names are extracted from `.env` and written to a filtered env file mounted into the container.
+
+**Secret redaction:** All `.env` values are automatically redacted from outbound messages and container logs to prevent accidental leakage. If your plugin has env vars whose values are safe to appear in chat (e.g., URLs like `FRESHRSS_URL`), list them in `publicEnvVars`. Vars not in `publicEnvVars` are treated as secrets and their values will be replaced with `[REDACTED]` in any outbound message.
 
 ### Container Skills (`container-skills/`)
 

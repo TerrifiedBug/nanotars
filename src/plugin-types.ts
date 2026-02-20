@@ -7,6 +7,8 @@ export interface PluginManifest {
   description?: string;
   /** Env var names from .env to pass into agent containers */
   containerEnvVars?: string[];
+  /** Env vars whose values are safe to appear in outbound messages (exempt from secret redaction) */
+  publicEnvVars?: string[];
   /** Hook functions this plugin exports */
   hooks?: string[];
   /** JS files to load as SDK hooks inside agent containers (paths relative to plugin dir) */
