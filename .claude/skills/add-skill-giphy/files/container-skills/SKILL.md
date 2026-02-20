@@ -25,22 +25,22 @@ Returns JSON array with gif and mp4 URLs and descriptions. Pick the most relevan
 
 ## How to Send
 
-Download the GIF and send via IPC:
+Download the file and send via IPC. The search returns both `gif_url` and `mp4_url` — pick the right format for your channel (check your channel's platform notes for guidance).
 
 ```bash
-curl -sL "<gif_url>" -o /workspace/group/media/reaction.gif
+curl -sL "<url>" -o /workspace/group/media/reaction.mp4
 ```
 
 Then write a send_file IPC message:
 
 ```bash
 cat > /workspace/ipc/messages/gif-$(date +%s).json << 'GIFJSON'
-{"type":"send_file","chatJid":"CHAT_JID","filePath":"/workspace/group/media/reaction.gif","caption":""}
+{"type":"send_file","chatJid":"CHAT_JID","filePath":"/workspace/group/media/reaction.mp4","caption":""}
 GIFJSON
 ```
 
 ## Tips
 
 - Use specific search terms ("mind blown explosion" not "funny")
-- Prefer the `gif_url` — it works across all channels. Use `mp4_url` only if GIF is unavailable.
+- Use `gif_url` for platforms with native GIF support, `mp4_url` for platforms that handle video better (check your channel's platform notes)
 - If the search returns no results, don't mention it — just skip the GIF

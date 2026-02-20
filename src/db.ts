@@ -435,6 +435,21 @@ export function getMessagesSince(
   }));
 }
 
+/**
+ * Look up a message's sender and fromMe status for reaction routing.
+ * Returns null if the message isn't found.
+ */
+export function getMessageMeta(
+  messageId: string,
+  chatJid: string,
+): { sender: string; isFromMe: boolean } | null {
+  const row = db
+    .prepare('SELECT sender, is_from_me FROM messages WHERE id = ? AND chat_jid = ?')
+    .get(messageId, chatJid) as { sender: string; is_from_me: number } | undefined;
+  if (!row) return null;
+  return { sender: row.sender, isFromMe: row.is_from_me === 1 };
+}
+
 export function createTask(
   task: Omit<ScheduledTask, 'last_run' | 'last_result'>,
 ): void {

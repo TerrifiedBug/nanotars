@@ -284,9 +284,12 @@ class {Name}Channel {
   }
 
   // Optional: react to a message with an emoji
-  async react(jid, messageId, emoji) {
+  // participant = sender JID of the message being reacted to (needed for group reactions)
+  // fromMe = true if the message being reacted to was sent by the bot
+  async react(jid, messageId, emoji, participant, fromMe) {
     // Send emoji reaction to a specific message on the platform
     // Platform-specific: use the platform's reaction API
+    // For group chats, the participant field is often required by the platform
   }
 
   isConnected() {
@@ -383,12 +386,16 @@ export async function onChannel(ctx, config) {
    ```
    How to detect replies varies by platform — WhatsApp uses `contextInfo.quotedMessage`, Telegram uses `reply_to_message`, Discord uses `message.reference`. If the platform doesn't support reply threading, omit the field.
 
-10. **Reactions & Reply-Quoting** (optional but recommended): The `react(jid, messageId, emoji)` method sends an emoji reaction to a specific message. The `replyTo` parameter on `sendMessage` is a platform message ID — when provided, the message should be sent as a reply/quote to the referenced message. Both are optional and should degrade gracefully (silently skip if the platform doesn't support them). Platform implementations:
-    - WhatsApp: `{ react: { text: emoji, key: { remoteJid, id, fromMe } } }` and `{ quoted: { key: { remoteJid, id, fromMe } } }`
+10. **Reactions & Reply-Quoting** (optional but recommended): The `react(jid, messageId, emoji, participant, fromMe)` method sends an emoji reaction to a specific message. The host looks up the message sender from the DB and passes `participant` (sender JID) and `fromMe` (boolean). For group chats, many platforms require the participant/sender to route the reaction correctly. The `replyTo` parameter on `sendMessage` is a platform message ID — when provided, the message should be sent as a reply/quote to the referenced message. Both are optional and should degrade gracefully (silently skip if the platform doesn't support them). Platform implementations:
+    - WhatsApp: `{ react: { text: emoji, key: { remoteJid, id, fromMe, participant } } }` — `participant` is required for group reactions
     - Discord: `message.react(emoji)` and `refMsg.reply(text)`
     - Telegram: `bot.api.setMessageReaction(chatId, msgId, [{ type: 'emoji', emoji }])` and `reply_parameters: { message_id }`
 
-11. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
+11. **Reply-to-Bot Triggering**: In group chats with `requiresTrigger`, the orchestrator also triggers when a user quote-replies to the bot's message (no `@mention` needed). To support this, set `reply_context.sender_name` to `config.assistantName` when the quoted message was sent by the bot. This is how the orchestrator detects it's a reply to itself.
+
+12. **Mention Translation** (important for group triggers): If the platform encodes @mentions using internal IDs (phone numbers, user IDs) instead of display names, translate bot mentions to `@{assistantName}` in the message content before passing to `onMessage`. The orchestrator's trigger pattern matches against the display name (e.g. `@TARS`), not internal IDs. Example: WhatsApp uses LID numbers (`@280217272750304`), which must be translated to `@TARS`.
+
+13. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
 
 ### auth.js Template (when needed)
 

@@ -179,7 +179,11 @@ export class MessageOrchestrator {
       const hasTrigger = missedMessages.some((m) =>
         pattern.test(m.content.trim()),
       );
-      if (!hasTrigger) return true;
+      // Also trigger on replies to the bot's messages
+      const hasReplyToBot = missedMessages.some((m) =>
+        m.reply_context?.sender_name === this.deps.assistantName,
+      );
+      if (!hasTrigger && !hasReplyToBot) return true;
     }
 
     const prompt = this.deps.formatMessages(missedMessages);
@@ -392,7 +396,11 @@ export class MessageOrchestrator {
               const hasTrigger = groupMessages.some((m) =>
                 pattern.test(m.content.trim()),
               );
-              if (!hasTrigger) continue;
+              // Also trigger on replies to the bot's messages
+              const hasReplyToBot = groupMessages.some((m) =>
+                m.reply_context?.sender_name === this.deps.assistantName,
+              );
+              if (!hasTrigger && !hasReplyToBot) continue;
             }
 
             const allPending = this.deps.getMessagesSince(

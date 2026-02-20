@@ -224,8 +224,14 @@ class WhatsAppChannel {
               || null;
             const rawQuotedSender = ctxInfo.participant || '';
             const quotedSender = rawQuotedSender ? await this.translateJid(rawQuotedSender) : '';
+            // Use assistant name if replying to the bot's own message
+            const myPhone = this.sock?.user?.id?.split(':')[0];
+            const quotedPhone = quotedSender?.split('@')[0];
+            const quotedName = (myPhone && quotedPhone === myPhone)
+              ? this.config.assistantName
+              : (quotedSender ? quotedSender.split('@')[0] : 'unknown');
             replyContext = {
-              sender_name: quotedSender ? quotedSender.split('@')[0] : 'unknown',
+              sender_name: quotedName,
               text: quotedText,
             };
           }
@@ -334,16 +340,19 @@ class WhatsAppChannel {
     }
   }
 
-  async react(jid, messageId, emoji) {
+  async react(jid, messageId, emoji, participant, fromMe) {
     if (!this.connected) {
       this.logger.warn({ jid, messageId }, 'WA disconnected, cannot react');
       return;
     }
     try {
-      await this.sock.sendMessage(jid, {
-        react: { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } },
-      });
-      this.logger.info({ jid, messageId, emoji }, 'Reaction sent');
+      const key = { remoteJid: jid, id: messageId, fromMe: fromMe ?? false };
+      // Group reactions require participant (sender JID) in the key
+      if (participant && jid.endsWith('@g.us')) {
+        key.participant = participant;
+      }
+      await this.sock.sendMessage(jid, { react: { text: emoji, key } });
+      this.logger.info({ jid, messageId, emoji, participant, fromMe }, 'Reaction sent');
     } catch (err) {
       this.logger.error({ jid, messageId, emoji, err }, 'Failed to send reaction');
     }

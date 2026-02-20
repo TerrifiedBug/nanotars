@@ -38,6 +38,7 @@ import {
   storeMessage,
   insertExternalMessage,
   updateChatName,
+  getMessageMeta,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
@@ -233,7 +234,8 @@ async function main(): Promise<void> {
     react: async (jid, messageId, emoji) => {
       const channel = orchestrator.channels.find((c) => c.ownsJid(jid) && c.isConnected());
       if (channel?.react) {
-        await channel.react(jid, messageId, emoji);
+        const meta = getMessageMeta(messageId, jid);
+        await channel.react(jid, messageId, emoji, meta?.sender, meta?.isFromMe);
       } else {
         logger.warn({ jid }, 'No connected channel with react support for JID');
       }
