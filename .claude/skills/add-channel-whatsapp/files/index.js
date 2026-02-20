@@ -180,6 +180,22 @@ class WhatsAppChannel {
             msg.message?.imageMessage?.caption ||
             msg.message?.videoMessage?.caption ||
             '';
+
+          // Translate @mention IDs to @DisplayName so trigger patterns match.
+          // WhatsApp encodes mentions as @LID or @phonenumber in the text,
+          // not the display name shown in the UI.
+          const mentionedJids = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+          if (mentionedJids.length > 0 && content) {
+            const myPhone = this.sock?.user?.id?.split(':')[0];
+            const myLid = this.sock?.user?.lid?.split(':')[0];
+            for (const jid of mentionedJids) {
+              const id = jid.split('@')[0];
+              if ((myPhone && id === myPhone) || (myLid && id === myLid)) {
+                content = content.replace(new RegExp(`@${id}\\b`, 'g'), `@${this.config.assistantName}`);
+              }
+            }
+          }
+
           const rawSender = msg.key.participant || msg.key.remoteJid || '';
           const sender = await this.translateJid(rawSender);
           const senderName = msg.pushName || sender.split('@')[0];
