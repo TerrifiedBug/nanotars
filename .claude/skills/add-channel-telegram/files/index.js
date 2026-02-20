@@ -216,7 +216,7 @@ class TelegramChannel {
     });
   }
 
-  async sendMessage(jid, text, sender) {
+  async sendMessage(jid, text, sender, replyTo) {
     if (!this.bot) {
       this.logger.warn('Telegram bot not initialized');
       return;
@@ -233,16 +233,32 @@ class TelegramChannel {
 
       // Telegram has a 4096 character limit per message — split if needed
       const MAX_LENGTH = 4096;
+      const replyParams = replyTo ? { reply_parameters: { message_id: parseInt(replyTo, 10) } } : {};
       if (text.length <= MAX_LENGTH) {
-        await this.bot.api.sendMessage(numericId, text);
+        await this.bot.api.sendMessage(numericId, text, replyParams);
       } else {
         for (let i = 0; i < text.length; i += MAX_LENGTH) {
-          await this.bot.api.sendMessage(numericId, text.slice(i, i + MAX_LENGTH));
+          const params = i === 0 ? replyParams : {};
+          await this.bot.api.sendMessage(numericId, text.slice(i, i + MAX_LENGTH), params);
         }
       }
       this.logger.info({ jid, length: text.length }, 'Telegram message sent');
     } catch (err) {
       this.logger.error({ jid, err }, 'Failed to send Telegram message');
+    }
+  }
+
+  async react(jid, messageId, emoji) {
+    if (!this.bot) {
+      this.logger.warn('Telegram bot not initialized');
+      return;
+    }
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+      await this.bot.api.setMessageReaction(numericId, parseInt(messageId, 10), [{ type: 'emoji', emoji }]);
+      this.logger.info({ jid, messageId, emoji }, 'Telegram reaction sent');
+    } catch (err) {
+      this.logger.error({ jid, messageId, emoji, err }, 'Failed to send Telegram reaction');
     }
   }
 
