@@ -1,0 +1,8 @@
+{
+  "name": "cs2-esports",
+  "description": "CS2 esports match tracker — upcoming Counter-Strike 2 matches from Liquipedia",
+  "containerEnvVars": [],
+  "hooks": [],
+  "channels": ["*"],
+  "groups": ["*"]
+}

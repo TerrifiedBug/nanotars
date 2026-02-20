@@ -214,6 +214,8 @@ Media attachments from users are not currently downloaded. You will see text pla
 
 This is how the agent knows whether to attempt `send_file` or fall back to inline content. Without this skill, the agent may try to send files on channels that don't support it.
 
+**Code separation convention:** container-skills/SKILL.md files are for agent instructions only — never embed multi-line code. Simple CLI examples (curl one-liners, tool invocations) are fine. Any data processing logic belongs in standalone scripts under `files/scripts/`, referenced by path from the SKILL.md.
+
 ## Channel Plugin Templates
 
 ### plugin.json
