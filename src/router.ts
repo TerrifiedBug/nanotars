@@ -1,4 +1,6 @@
 import { logger } from './logger.js';
+import type { PluginRegistry } from './plugin-loader.js';
+import { redactSecrets } from './secret-redact.js';
 import { Channel, NewMessage } from './types.js';
 
 export function escapeXml(s: string): string {
@@ -19,7 +21,7 @@ export function formatMessages(messages: NewMessage[]): string {
       inner += `<reply to="${escapeXml(m.reply_context.sender_name)}">${replyText}</reply>`;
     }
     inner += escapeXml(m.content);
-    return `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${inner}</message>`;
+    return `<message id="${escapeXml(m.id)}" sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${inner}</message>`;
   });
   return `<messages>\n${lines.join('\n')}\n</messages>`;
 }
@@ -37,13 +39,26 @@ export async function routeOutbound(
   jid: string,
   text: string,
   sender?: string,
+  replyTo?: string,
+  pluginRegistry?: PluginRegistry,
 ): Promise<boolean> {
   const channel = channels.find((c) => c.ownsJid(jid) && c.isConnected());
   if (!channel) {
     logger.warn({ jid }, 'No connected channel for JID, message dropped');
     return false;
   }
-  await channel.sendMessage(jid, text, sender);
+
+  let outText = text;
+  if (pluginRegistry) {
+    outText = await pluginRegistry.runOutboundHooks(outText, jid, channel.name);
+    if (!outText) {
+      logger.debug({ jid }, 'Outbound message suppressed by plugin hook');
+      return true;
+    }
+  }
+
+  const safeText = redactSecrets(outText);
+  await channel.sendMessage(jid, safeText, sender, replyTo);
   return true;
 }
 

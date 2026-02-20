@@ -68,7 +68,24 @@ Messages and task operations are verified against group identity:
 
 **Input Validation:** Group folder names are validated on registration to reject path traversal characters (`/`, `\`, `..`). This prevents a compromised main-group agent from registering groups with folder names that escape the intended directory hierarchy.
 
-### 5. Credential Handling
+### 5. Outbound Secret Redaction
+
+All outbound messages and container log files are run through `redactSecrets()` (`src/secret-redact.ts`) before leaving the host process. This prevents accidental leakage of API keys via social engineering (e.g., agent tricked into running `env` or `echo $ANTHROPIC_API_KEY`).
+
+**How it works:**
+- At startup, `loadSecrets()` reads ALL key-value pairs from `.env`
+- Values >= 8 characters are stored as secrets to redact (shorter values skipped to avoid false positives)
+- A small safe-list of known non-secret config vars is exempted (`ASSISTANT_NAME`, `CLAUDE_MODEL`, `LOG_LEVEL`, etc.)
+- Everything else is treated as potentially sensitive — new secrets are automatically protected
+- `redactSecrets()` uses literal `split().join('[REDACTED]')` — no regex, so special characters in API keys don't cause issues
+
+**Where it's applied:**
+- `routeOutbound()` in `src/router.ts` — catches ALL outbound message paths (orchestrator, IPC, scheduler)
+- Container log writes in `src/container-runner.ts` — prevents secrets from persisting on disk
+
+This is a programmatic safety net, not a policy-based one. Even if the agent is tricked into outputting a secret value, the redaction strips it before it reaches the channel.
+
+### 6. Credential Handling
 
 **Mounted Credentials:**
 - Claude auth tokens (filtered from `.env`, read-only)

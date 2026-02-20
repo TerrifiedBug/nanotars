@@ -264,7 +264,7 @@ class WhatsAppChannel {
     });
   }
 
-  async sendMessage(jid, text) {
+  async sendMessage(jid, text, sender, replyTo) {
     // Prefix bot messages with assistant name so users know who's speaking.
     // On a shared number, prefix is also needed in DMs (including self-chat)
     // to distinguish bot output from user messages.
@@ -278,16 +278,20 @@ class WhatsAppChannel {
         const dropped = this.outgoingQueue.shift();
         this.logger.warn({ jid: dropped.jid, queueSize: this.outgoingQueue.length }, 'Outgoing queue full, dropped oldest message');
       }
-      this.outgoingQueue.push({ jid, text: prefixed });
+      this.outgoingQueue.push({ jid, text: prefixed, replyTo });
       this.logger.info({ jid, length: prefixed.length, queueSize: this.outgoingQueue.length }, 'WA disconnected, message queued');
       return;
     }
     try {
-      await this.sock.sendMessage(jid, { text: prefixed });
+      const msg = { text: prefixed };
+      if (replyTo) {
+        msg.quoted = { key: { remoteJid: jid, id: replyTo, fromMe: false } };
+      }
+      await this.sock.sendMessage(jid, msg);
       this.logger.info({ jid, length: prefixed.length }, 'Message sent');
     } catch (err) {
       // If send fails, queue it for retry on reconnect
-      this.outgoingQueue.push({ jid, text: prefixed });
+      this.outgoingQueue.push({ jid, text: prefixed, replyTo });
       this.logger.warn({ jid, err, queueSize: this.outgoingQueue.length }, 'Failed to send, message queued');
     }
   }
@@ -311,6 +315,21 @@ class WhatsAppChannel {
     } catch (err) {
       this.logger.error({ jid, fileName, err }, 'Failed to send file');
       throw err;
+    }
+  }
+
+  async react(jid, messageId, emoji) {
+    if (!this.connected) {
+      this.logger.warn({ jid, messageId }, 'WA disconnected, cannot react');
+      return;
+    }
+    try {
+      await this.sock.sendMessage(jid, {
+        react: { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } },
+      });
+      this.logger.info({ jid, messageId, emoji }, 'Reaction sent');
+    } catch (err) {
+      this.logger.error({ jid, messageId, emoji, err }, 'Failed to send reaction');
     }
   }
 
@@ -468,7 +487,11 @@ class WhatsAppChannel {
       this.logger.info({ count: this.outgoingQueue.length }, 'Flushing outgoing message queue');
       while (this.outgoingQueue.length > 0) {
         const item = this.outgoingQueue[0];
-        await this.sock.sendMessage(item.jid, { text: item.text });
+        const msg = { text: item.text };
+        if (item.replyTo) {
+          msg.quoted = { key: { remoteJid: item.jid, id: item.replyTo, fromMe: false } };
+        }
+        await this.sock.sendMessage(item.jid, msg);
         this.outgoingQueue.shift();
         this.logger.info({ jid: item.jid, length: item.text.length }, 'Queued message sent');
       }

@@ -29,6 +29,9 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
     containerEnvVars: Array.isArray(raw.containerEnvVars)
       ? raw.containerEnvVars.filter((v): v is string => typeof v === 'string')
       : [],
+    publicEnvVars: Array.isArray(raw.publicEnvVars)
+      ? raw.publicEnvVars.filter((v): v is string => typeof v === 'string')
+      : [],
     hooks: Array.isArray(raw.hooks)
       ? raw.hooks.filter((v): v is string => typeof v === 'string')
       : [],
@@ -170,6 +173,17 @@ export class PluginRegistry {
     return current;
   }
 
+  /** Run all onOutboundMessage hooks in sequence */
+  async runOutboundHooks(text: string, jid: string, channel: string): Promise<string> {
+    let current = text;
+    for (const plugin of this.plugins) {
+      if (plugin.hooks.onOutboundMessage) {
+        current = await plugin.hooks.onOutboundMessage(current, jid, channel);
+      }
+    }
+    return current;
+  }
+
   /** Get plugins that declare channelPlugin: true */
   getChannelPlugins(): LoadedPlugin[] {
     return this.plugins.filter(p => p.manifest.channelPlugin);
@@ -220,6 +234,17 @@ export class PluginRegistry {
       if (gr && !gr.includes('*') && groupFolder && !gr.includes(groupFolder)) return false;
       return true;
     });
+  }
+
+  /** Collect all publicEnvVars across loaded plugins (safe for secret redaction exemption) */
+  getPublicEnvVars(): string[] {
+    const vars = new Set<string>();
+    for (const plugin of this.plugins) {
+      for (const v of plugin.manifest.publicEnvVars || []) {
+        vars.add(v);
+      }
+    }
+    return [...vars];
   }
 
   getContainerEnvVars(channel?: string, groupFolder?: string): string[] {

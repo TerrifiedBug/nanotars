@@ -263,12 +263,13 @@ class {Name}Channel {
     // Call this.#config.onChatMetadata() for chat discovery
   }
 
-  async sendMessage(jid, text, sender) {
+  async sendMessage(jid, text, sender, replyTo) {
     // Send message to the platform
     // Extract platform-native ID from JID: jid.replace(/^{prefix}:/, '')
     // Optional: if sender is provided and the platform supports per-sender
     // identities (e.g. webhook display names, bot pools), use it to send
     // from a distinct identity. Channels that don't support this can ignore it.
+    // Optional: if replyTo is provided, send as a reply to that message ID.
   }
 
   // Optional: send files (images, videos, documents, audio) to the platform
@@ -280,6 +281,12 @@ class {Name}Channel {
     // - video/* → video upload API
     // - audio/* → audio upload API
     // - default → document/file upload API
+  }
+
+  // Optional: react to a message with an emoji
+  async react(jid, messageId, emoji) {
+    // Send emoji reaction to a specific message on the platform
+    // Platform-specific: use the platform's reaction API
   }
 
   isConnected() {
@@ -376,7 +383,12 @@ export async function onChannel(ctx, config) {
    ```
    How to detect replies varies by platform — WhatsApp uses `contextInfo.quotedMessage`, Telegram uses `reply_to_message`, Discord uses `message.reference`. If the platform doesn't support reply threading, omit the field.
 
-10. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
+10. **Reactions & Reply-Quoting** (optional but recommended): The `react(jid, messageId, emoji)` method sends an emoji reaction to a specific message. The `replyTo` parameter on `sendMessage` is a platform message ID — when provided, the message should be sent as a reply/quote to the referenced message. Both are optional and should degrade gracefully (silently skip if the platform doesn't support them). Platform implementations:
+    - WhatsApp: `{ react: { text: emoji, key: { remoteJid, id, fromMe } } }` and `{ quoted: { key: { remoteJid, id, fromMe } } }`
+    - Discord: `message.react(emoji)` and `refMsg.reply(text)`
+    - Telegram: `bot.api.setMessageReaction(chatId, msgId, [{ type: 'emoji', emoji }])` and `reply_parameters: { message_id }`
+
+11. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
 
 ### auth.js Template (when needed)
 
@@ -542,4 +554,4 @@ To remove the {Platform} channel:
 - Data storage goes in `data/channels/{name}/`
 - The `onChannel(ctx, config)` hook receives a `PluginContext` (logger, insertMessage, sendMessage, getRegisteredGroups, getMainChannelJid) and `ChannelPluginConfig` (onMessage, onChatMetadata, registeredGroups, paths, assistantName, assistantHasOwnNumber, db)
 - Channels are initialized before other plugin hooks (`onStartup`)
-- The `Channel` interface: `name`, `connect()`, `sendMessage(jid, text, sender?)`, `isConnected()`, `ownsJid(jid)`, `disconnect()`, optional `sendFile(jid, buffer, mime, fileName, caption?)`, optional `refreshMetadata()`, optional `listAvailableGroups()`. The `sender` parameter carries the subagent's identity name — channels that support per-sender identities (bot pools, webhooks) can use it; others ignore it. The `sendFile` method enables agents to send files back to users via the `send_file` MCP tool.
+- The `Channel` interface: `name`, `connect()`, `sendMessage(jid, text, sender?, replyTo?)`, `isConnected()`, `ownsJid(jid)`, `disconnect()`, optional `sendFile(jid, buffer, mime, fileName, caption?)`, optional `react(jid, messageId, emoji)`, optional `refreshMetadata()`, optional `listAvailableGroups()`. The `sender` parameter carries the subagent's identity name — channels that support per-sender identities (bot pools, webhooks) can use it; others ignore it. The `replyTo` parameter is a platform message ID for quote-replies — channels should send the message as a reply to the referenced message. The `sendFile` method enables agents to send files back to users via the `send_file` MCP tool. The `react` method enables emoji reactions on specific messages.

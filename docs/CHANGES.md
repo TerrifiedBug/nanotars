@@ -82,6 +82,7 @@ The plugin loader:
 | `src/config.ts` | `createTriggerPattern()` for per-group custom triggers, `SCHEDULED_TASK_IDLE_TIMEOUT` |
 | `src/db.ts` | `insertExternalMessage()` for plugins to inject messages, `channel` column (no backfill) |
 | `src/types.ts` | `OnInboundMessage` is now async, added `channel` field |
+| **Outbound hooks** | `onOutboundMessage(text, jid, channel)` on PluginHooks — transforms outbound text before channel delivery. Return empty to suppress. Pipeline pattern matching `onInboundMessage` |
 | `container/Dockerfile` | Added `jq`, skills directory, env-dir sourcing in entrypoint |
 | `container/build.sh` | Auto-detects Docker vs Apple Container, merges `Dockerfile.partial` files from plugins, uses project-root build context |
 | `container/agent-runner/src/index.ts` | Plugin hook loading, model selection, error detection |
@@ -121,6 +122,9 @@ Upstream has WhatsApp hardcoded throughout. This fork extracted WhatsApp into a 
 | **Router made generic** | `src/router.ts` routes to any channel based on JID prefix (`wa:`, `dc:`, `tg:`) |
 | **Group registration** | `src/db.ts` tracks which channel each group belongs to |
 | **WhatsApp tests removed from core** | `src/channels/whatsapp.test.ts` deleted (tests live with plugin now) |
+| **Reactions** | `react?(jid, messageId, emoji)` — optional emoji reaction method on Channel interface. WhatsApp (Baileys react), Discord (message.react), Telegram (setMessageReaction) |
+| **Reply-quoting** | `sendMessage` gains `replyTo` parameter — orchestrator automatically quotes the triggering message. IPC `send_message` also supports `replyTo` |
+| **Message IDs in prompts** | Agent XML now includes `id` attribute: `<message id="MSG_ID" sender="..." time="...">` — enables agents to reference specific messages |
 
 ### Channel plugins available
 
@@ -199,6 +203,8 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 
 | File | Purpose |
 |------|---------|
+| `src/secret-redact.ts` | Outbound secret redaction — loads all `.env` values, strips them from outbound messages and container logs |
+| `src/secret-redact.test.ts` | Tests for secret redaction (24 tests) |
 | `container/agent-runner/src/security-hooks.ts` | Bash command sanitization, `/proc/*/environ` blocking, `/tmp/input.json` blocking |
 | `container/agent-runner/src/security-hooks.test.ts` | Tests for security hooks |
 | `docs/SECURITY.md` | Security model documentation (referenced from CLAUDE.md) |
@@ -208,7 +214,9 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 | File | What |
 |------|------|
 | `container/agent-runner/src/index.ts` | Secret scrubbing from agent output, security hook loading |
-| `src/container-runner.ts` + `src/container-mounts.ts` | Secrets passed via stdin JSON (not written to files in container), OAuth token sync |
+| `src/container-runner.ts` + `src/container-mounts.ts` | Secrets passed via stdin JSON (not written to files in container), OAuth token sync, container logs redacted |
+| `src/router.ts` | `redactSecrets()` applied in `routeOutbound()` before channel delivery |
+| `src/index.ts` | `loadSecrets()` called at startup |
 | `src/container-runtime.ts` | Container resource limits: `--cpus=2`, `--memory=4g`, `--pids-limit=256` (prevents fork bombs and runaway agents) |
 | `src/router.ts` | `stripInternalTags()` handles unclosed `<internal>` tags (prevents agent reasoning from leaking to users) |
 | `src/ipc.ts` | Folder name allowlist validation (`/^[a-z0-9][a-z0-9_-]*$/i`) — blocks path traversal via `../../` in group folder names |
@@ -226,6 +234,7 @@ Upstream passes secrets via environment variables, which are visible to `env` an
 2. They never appear in `process.env`, on the filesystem, or in logs
 3. Security hooks block Bash commands and Read tool calls that try to access `/proc/*/environ` or `/tmp/input.json`
 4. Agent output is scrubbed for leaked secret values before routing to the user
+5. **Outbound redaction** (`src/secret-redact.ts`) — reads ALL `.env` values at startup and strips them from outbound messages and container log files. Auto-detects secrets (no hardcoded list) — only a small safe-list of non-secret config vars like `ASSISTANT_NAME` and `CLAUDE_MODEL` is exempted
 
 ### What's protected
 
@@ -432,6 +441,8 @@ Re-exports preserve backward compatibility — no consumer import changes needed
 | **Per-group webhook routing** | `plugins/webhook/` | Each group gets its own webhook path + token (upstream uses single global secret) |
 | **Agent browser as plugin** | `plugins/agent-browser/` | Moved from `container/skills/` to plugin system |
 | **Token count badge** | `repo-tokens/badge.svg` | Auto-updated context window usage badge |
+| **React IPC + MCP tool** | `src/ipc.ts`, `container/agent-runner/src/ipc-mcp-stdio.ts` | Agents can send emoji reactions via IPC. Host-side handler + agent-side `react` MCP tool. Same authorization as `send_message`. Channel skills document when to use reactions |
+| **GIF search skill** | `plugins/gif-search/` | Giphy API GIF search — returns both gif and mp4 URLs, defaults to GIF format for channel-agnostic compatibility |
 
 ---
 

@@ -45,6 +45,7 @@ import { formatMessages, routeOutbound, routeOutboundFile, stripInternalTags } f
 import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
+import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
 import { MessageOrchestrator } from './orchestrator.js';
 import type { ChannelPluginConfig, PluginContext } from './plugin-types.js';
@@ -140,6 +141,9 @@ async function main(): Promise<void> {
   plugins = await loadPlugins();
   setPluginRegistry(plugins);
 
+  // Load secret redaction AFTER plugins so publicEnvVars are available
+  loadSecrets(plugins.getPublicEnvVars());
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
@@ -156,7 +160,7 @@ async function main(): Promise<void> {
   // Create pluginCtx first — channels array populated later but closure captures reference
   const pluginCtx: PluginContext = {
     insertMessage: insertExternalMessage,
-    sendMessage: (jid, text) => routeOutbound(orchestrator.channels, jid, text).then(() => {}),
+    sendMessage: (jid, text) => routeOutbound(orchestrator.channels, jid, text, undefined, undefined, plugins).then(() => {}),
     getRegisteredGroups: () => orchestrator.registeredGroups,
     getMainChannelJid: () => {
       const mainEntry = Object.entries(orchestrator.registeredGroups).find(
@@ -220,12 +224,20 @@ async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
       const text = stripInternalTags(rawText);
-      if (text) await routeOutbound(orchestrator.channels, jid, text);
+      if (text) await routeOutbound(orchestrator.channels, jid, text, undefined, undefined, plugins);
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text, sender) => routeOutbound(orchestrator.channels, jid, text, sender).then(() => {}),
+    sendMessage: (jid, text, sender, replyTo) => routeOutbound(orchestrator.channels, jid, text, sender, replyTo, plugins).then(() => {}),
     sendFile: (jid, buffer, mime, fileName, caption) => routeOutboundFile(orchestrator.channels, jid, buffer, mime, fileName, caption),
+    react: async (jid, messageId, emoji) => {
+      const channel = orchestrator.channels.find((c) => c.ownsJid(jid) && c.isConnected());
+      if (channel?.react) {
+        await channel.react(jid, messageId, emoji);
+      } else {
+        logger.warn({ jid }, 'No connected channel with react support for JID');
+      }
+    },
     registeredGroups: () => orchestrator.registeredGroups,
     registerGroup: (jid, group) => orchestrator.registerGroup(jid, group),
     syncGroupMetadata: async (_force) => {

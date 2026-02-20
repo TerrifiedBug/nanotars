@@ -135,7 +135,7 @@ class DiscordChannel {
     });
   }
 
-  async sendMessage(jid, text) {
+  async sendMessage(jid, text, sender, replyTo) {
     if (!this.client) {
       this.logger.warn('Discord client not initialized');
       return;
@@ -152,7 +152,16 @@ class DiscordChannel {
 
       // Discord has a 2000 character limit per message — split if needed
       if (text.length <= MESSAGE_MAX_LENGTH) {
-        await channel.send(text);
+        if (replyTo) {
+          try {
+            const refMsg = channel.messages.cache.get(replyTo) || await channel.messages.fetch(replyTo);
+            await refMsg.reply(text);
+          } catch {
+            await channel.send(text);
+          }
+        } else {
+          await channel.send(text);
+        }
       } else {
         for (let i = 0; i < text.length; i += MESSAGE_MAX_LENGTH) {
           await channel.send(text.slice(i, i + MESSAGE_MAX_LENGTH));
@@ -162,6 +171,23 @@ class DiscordChannel {
       this.logger.info({ jid, length: text.length }, 'Discord message sent');
     } catch (err) {
       this.logger.error({ jid, err }, 'Failed to send Discord message');
+    }
+  }
+
+  async react(jid, messageId, emoji) {
+    if (!this.client) {
+      this.logger.warn('Discord client not initialized');
+      return;
+    }
+    const channelId = jid.replace(/^dc:/, '');
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel?.isTextBased()) return;
+      const message = channel.messages.cache.get(messageId) || await channel.messages.fetch(messageId);
+      await message.react(emoji);
+      this.logger.info({ jid, messageId, emoji }, 'Discord reaction sent');
+    } catch (err) {
+      this.logger.error({ jid, messageId, emoji, err }, 'Failed to send Discord reaction');
     }
   }
 

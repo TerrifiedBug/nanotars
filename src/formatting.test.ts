@@ -61,7 +61,7 @@ describe('formatMessages', () => {
     const result = formatMessages([makeMsg()]);
     expect(result).toBe(
       '<messages>\n' +
-        '<message sender="Alice" time="2024-01-01T00:00:00.000Z">hello</message>\n' +
+        '<message id="1" sender="Alice" time="2024-01-01T00:00:00.000Z">hello</message>\n' +
         '</messages>',
     );
   });
@@ -125,6 +125,16 @@ describe('formatMessages', () => {
   it('omits reply element when no reply context', () => {
     const result = formatMessages([makeMsg()]);
     expect(result).not.toContain('<reply');
+  });
+
+  it('includes message id attribute', () => {
+    const result = formatMessages([makeMsg({ id: 'MSG_ABC123' })]);
+    expect(result).toContain('id="MSG_ABC123"');
+  });
+
+  it('escapes special characters in message id', () => {
+    const result = formatMessages([makeMsg({ id: 'id"with<special>' })]);
+    expect(result).toContain('id="id&quot;with&lt;special&gt;"');
   });
 });
 

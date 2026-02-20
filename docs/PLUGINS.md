@@ -29,6 +29,7 @@ Only `plugin.json` is required. Everything else is optional depending on what th
 | `name` | `string` | Yes | Unique plugin identifier |
 | `description` | `string` | No | Human-readable description |
 | `containerEnvVars` | `string[]` | No | Env var names from `.env` to pass into agent containers |
+| `publicEnvVars` | `string[]` | No | Subset of `containerEnvVars` whose values are safe to appear in outbound messages (exempt from secret redaction). Defaults to `[]` — all values redacted by default. |
 | `hooks` | `string[]` | No | Host-side hook function names exported by `index.js` |
 | `containerHooks` | `string[]` | No | JS files (relative paths) loaded as SDK hooks inside containers |
 | `containerMounts` | `Array<{hostPath, containerPath}>` | No | Additional read-only mounts for containers |
@@ -132,6 +133,26 @@ Called for every inbound message before it reaches the agent. Hooks run in plugi
 
 The `InboundMessage` has the same shape as `NewMessage`: `id`, `chat_jid`, `sender`, `sender_name`, `content`, `timestamp`, plus optional `is_from_me`, `is_bot_message`, `mediaType`, `mediaPath`, and `reply_context`.
 
+### `onOutboundMessage(text: string, jid: string, channel: string)`
+
+Called for every outbound message before it is sent to the channel. Hooks run in plugin load order. Each hook receives the text and returns a (potentially modified) text. Return empty string to suppress the message entirely. This enables message transformation, formatting, filtering, or logging of outgoing messages.
+
+### IPC Extensions
+
+Plugins and agents can send reactions via IPC by writing a JSON file to the group's messages directory:
+
+```json
+{"type": "react", "chatJid": "group@g.us", "messageId": "MSG_ID", "emoji": "👍"}
+```
+
+The `send_message` IPC type now also accepts an optional `replyTo` field for quote-replies:
+
+```json
+{"type": "message", "chatJid": "group@g.us", "text": "Hello", "replyTo": "MSG_ID"}
+```
+
+Both follow the same authorization rules as existing IPC messages — main group can target any chat, non-main groups can only target their own chat.
+
 ### `onChannel(ctx: PluginContext, config: ChannelPluginConfig)`
 
 Return a `Channel` object to register a messaging channel (WhatsApp, Telegram, etc.). Channel plugins are a specialized plugin type with their own directory convention, interfaces, and lifecycle. See **[Channel Plugins](CHANNEL_PLUGINS.md)** for the full guide.
@@ -155,6 +176,8 @@ Plugins affect agent containers through six mechanisms, all managed by the `Plug
 ### Environment Variables
 
 Each plugin declares which env var names from the host `.env` should be passed into containers via `containerEnvVars`. These are merged with the core set (`ANTHROPIC_API_KEY`, `ASSISTANT_NAME`, `CLAUDE_MODEL`) and deduplicated. Only lines matching declared var names are extracted from `.env` and written to a filtered env file mounted into the container.
+
+**Secret redaction:** All `.env` values are automatically redacted from outbound messages and container logs to prevent accidental leakage. If your plugin has env vars whose values are safe to appear in chat (e.g., URLs like `FRESHRSS_URL`), list them in `publicEnvVars`. Vars not in `publicEnvVars` are treated as secrets and their values will be replaced with `[REDACTED]` in any outbound message.
 
 ### Container Skills (`container-skills/`)
 
@@ -352,6 +375,8 @@ The plugin system adds two new files and modifies five existing files. Total foo
 
 **`src/types.ts`** — Type changes:
 - `OnInboundMessage` callback made `async` (returns `Promise`) to support async plugin hooks
+- `react?(jid: string, messageId: string, emoji: string): Promise<void>` — optional emoji reaction method on `Channel` interface
+- `sendMessage` now accepts optional `replyTo?: string` as 4th parameter for quote-replies
 
 **`container/Dockerfile`** — Container image:
 - Added `jq` to system packages (used by some plugin skills)

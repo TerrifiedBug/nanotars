@@ -7,6 +7,8 @@ export interface PluginManifest {
   description?: string;
   /** Env var names from .env to pass into agent containers */
   containerEnvVars?: string[];
+  /** Env vars whose values are safe to appear in outbound messages (exempt from secret redaction) */
+  publicEnvVars?: string[];
   /** Hook functions this plugin exports */
   hooks?: string[];
   /** JS files to load as SDK hooks inside agent containers (paths relative to plugin dir) */
@@ -68,6 +70,7 @@ export interface PluginHooks {
   onStartup?(ctx: PluginContext): Promise<void>;
   onShutdown?(): Promise<void>;
   onInboundMessage?(msg: InboundMessage, channel: string): Promise<InboundMessage>;
+  onOutboundMessage?(text: string, jid: string, channel: string): Promise<string>;
   onChannel?(ctx: PluginContext, config: ChannelPluginConfig): Promise<Channel>;
 }
 

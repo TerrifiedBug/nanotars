@@ -420,6 +420,36 @@ Note: File delivery depends on the channel plugin supporting file uploads. Not a
   },
 );
 
+server.tool(
+  'react',
+  `React to a message with an emoji. Use message IDs from the conversation (the "id" attribute on <message> tags).
+
+Use reactions to:
+- Acknowledge a message quickly without a full reply (thumbs up, checkmark)
+- Express emotion or humor (laughing, heart, fire)
+- Confirm you've seen a request before working on it
+
+Keep it natural — one reaction at a time, not every message.`,
+  {
+    message_id: z.string().describe('The message ID to react to (from the "id" attribute on <message> tags)'),
+    emoji: z.string().describe('A single emoji character (e.g. "👍", "😂", "❤️", "🔥")'),
+  },
+  async (args) => {
+    const data = {
+      type: 'react',
+      chatJid,
+      messageId: args.message_id,
+      emoji: args.emoji,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: `Reacted with ${args.emoji}` }] };
+  },
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

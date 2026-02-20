@@ -28,7 +28,7 @@ export interface OrchestratorDeps {
 
   // Routing
   formatMessages: (messages: NewMessage[]) => string;
-  routeOutbound: (channels: Channel[], jid: string, text: string, sender?: string) => Promise<boolean>;
+  routeOutbound: (channels: Channel[], jid: string, text: string, sender?: string, replyTo?: string, pluginRegistry?: import('./plugin-loader.js').PluginRegistry) => Promise<boolean>;
   stripInternalTags: (text: string) => string;
   createTriggerPattern: (trigger: string) => RegExp;
 
@@ -171,6 +171,8 @@ export class MessageOrchestrator {
 
     if (missedMessages.length === 0) return true;
 
+    const lastTriggerMessageId = missedMessages[missedMessages.length - 1]?.id;
+
     // For non-main groups, check if trigger is required and present
     if (!isMainGroup && group.requiresTrigger !== false) {
       const pattern = this.deps.createTriggerPattern(group.trigger);
@@ -219,7 +221,7 @@ export class MessageOrchestrator {
         const text = this.deps.stripInternalTags(raw);
         this.deps.logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
         if (text) {
-          await this.deps.routeOutbound(this.channels, chatJid, text);
+          await this.deps.routeOutbound(this.channels, chatJid, text, undefined, lastTriggerMessageId);
           outputSentToUser = true;
         }
         resetIdleTimer();

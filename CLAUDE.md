@@ -24,6 +24,7 @@ Single Node.js process that connects to messaging channels via plugins, routes m
 | `src/plugin-types.ts` | Plugin system type definitions |
 | `src/container-mounts.ts` | Volume mount construction, env files, secrets |
 | `src/snapshots.ts` | Task/group snapshot utilities for IPC |
+| `src/secret-redact.ts` | Outbound secret redaction (strips .env values from messages/logs) |
 | `plugins/channels/*/index.js` | Channel plugins (WhatsApp, Discord, etc.) |
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
 

@@ -35,8 +35,9 @@ function mimeFromExtension(filePath: string): string {
 }
 
 export interface IpcDeps {
-  sendMessage: (jid: string, text: string, sender?: string) => Promise<void>;
+  sendMessage: (jid: string, text: string, sender?: string, replyTo?: string) => Promise<void>;
   sendFile: (jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string) => Promise<boolean>;
+  react: (jid: string, messageId: string, emoji: string) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroupMetadata: (force: boolean) => Promise<void>;
@@ -99,7 +100,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
-                  await deps.sendMessage(data.chatJid, data.text, data.sender);
+                  await deps.sendMessage(data.chatJid, data.text, data.sender, data.replyTo as string | undefined);
                   logger.info(
                     { chatJid: data.chatJid, sourceGroup },
                     'IPC message sent',
@@ -148,6 +149,23 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },
                     'Unauthorized IPC send_file attempt blocked',
+                  );
+                }
+              } else if (data.type === 'react' && data.chatJid && data.messageId && data.emoji) {
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  await deps.react(data.chatJid, data.messageId as string, data.emoji as string);
+                  logger.info(
+                    { chatJid: data.chatJid, messageId: data.messageId, sourceGroup },
+                    'IPC react sent',
+                  );
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC react attempt blocked',
                   );
                 }
               }

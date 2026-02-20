@@ -2,5 +2,6 @@
   "name": "freshrss",
   "description": "FreshRSS feed reader integration",
   "containerEnvVars": ["FRESHRSS_URL", "FRESHRSS_USER", "FRESHRSS_API_KEY"],
+  "publicEnvVars": ["FRESHRSS_URL"],
   "hooks": []
 }

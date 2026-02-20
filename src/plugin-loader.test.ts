@@ -27,9 +27,19 @@ describe('parseManifest', () => {
   it('defaults optional fields', () => {
     const manifest = parseManifest({ name: 'test' });
     expect(manifest.containerEnvVars).toEqual([]);
+    expect(manifest.publicEnvVars).toEqual([]);
     expect(manifest.hooks).toEqual([]);
     expect(manifest.containerHooks).toEqual([]);
     expect(manifest.dependencies).toBe(false);
+  });
+
+  it('parses publicEnvVars field', () => {
+    const manifest = parseManifest({
+      name: 'freshrss',
+      containerEnvVars: ['FRESHRSS_URL', 'FRESHRSS_API_KEY'],
+      publicEnvVars: ['FRESHRSS_URL'],
+    });
+    expect(manifest.publicEnvVars).toEqual(['FRESHRSS_URL']);
   });
 
   it('parses containerHooks field', () => {
@@ -179,6 +189,78 @@ describe('PluginRegistry.getPluginsForGroup', () => {
     const registry = new PluginRegistry();
     registry.add({ manifest: { name: 'wildcard', channels: ['*'], groups: ['*'] } as any, dir: '', hooks: {} });
     expect(registry.getPluginsForGroup('telegram', 'family')).toHaveLength(1);
+  });
+});
+
+describe('PluginRegistry.runOutboundHooks', () => {
+  it('returns text unchanged when no plugins have outbound hooks', async () => {
+    const registry = new PluginRegistry();
+    registry.add({ manifest: { name: 'no-hook' } as any, dir: '', hooks: {} });
+    const result = await registry.runOutboundHooks('hello', 'group@g.us', 'whatsapp');
+    expect(result).toBe('hello');
+  });
+
+  it('transforms text through outbound hooks in sequence', async () => {
+    const registry = new PluginRegistry();
+    registry.add({
+      manifest: { name: 'upper' } as any, dir: '', hooks: {
+        onOutboundMessage: async (text: string) => text.toUpperCase(),
+      },
+    });
+    registry.add({
+      manifest: { name: 'exclaim' } as any, dir: '', hooks: {
+        onOutboundMessage: async (text: string) => text + '!',
+      },
+    });
+    const result = await registry.runOutboundHooks('hello', 'group@g.us', 'whatsapp');
+    expect(result).toBe('HELLO!');
+  });
+
+  it('returns empty string when hook suppresses message', async () => {
+    const registry = new PluginRegistry();
+    registry.add({
+      manifest: { name: 'suppress' } as any, dir: '', hooks: {
+        onOutboundMessage: async () => '',
+      },
+    });
+    const result = await registry.runOutboundHooks('hello', 'group@g.us', 'whatsapp');
+    expect(result).toBe('');
+  });
+});
+
+describe('PluginRegistry.getPublicEnvVars', () => {
+  it('collects publicEnvVars from all plugins', () => {
+    const registry = new PluginRegistry();
+    registry.add({
+      manifest: { name: 'freshrss', publicEnvVars: ['FRESHRSS_URL'] } as any,
+      dir: '', hooks: {},
+    });
+    registry.add({
+      manifest: { name: 'claude-mem', publicEnvVars: ['CLAUDE_MEM_URL'] } as any,
+      dir: '', hooks: {},
+    });
+    expect(registry.getPublicEnvVars()).toEqual(
+      expect.arrayContaining(['FRESHRSS_URL', 'CLAUDE_MEM_URL']),
+    );
+  });
+
+  it('returns empty array when no plugins declare publicEnvVars', () => {
+    const registry = new PluginRegistry();
+    registry.add({ manifest: { name: 'basic' } as any, dir: '', hooks: {} });
+    expect(registry.getPublicEnvVars()).toEqual([]);
+  });
+
+  it('deduplicates publicEnvVars across plugins', () => {
+    const registry = new PluginRegistry();
+    registry.add({
+      manifest: { name: 'a', publicEnvVars: ['SHARED_URL'] } as any,
+      dir: '', hooks: {},
+    });
+    registry.add({
+      manifest: { name: 'b', publicEnvVars: ['SHARED_URL'] } as any,
+      dir: '', hooks: {},
+    });
+    expect(registry.getPublicEnvVars()).toEqual(['SHARED_URL']);
   });
 });
 
