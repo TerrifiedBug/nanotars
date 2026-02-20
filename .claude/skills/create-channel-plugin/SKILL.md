@@ -214,6 +214,8 @@ Media attachments from users are not currently downloaded. You will see text pla
 
 This is how the agent knows whether to attempt `send_file` or fall back to inline content. Without this skill, the agent may try to send files on channels that don't support it.
 
+**Code separation convention:** container-skills/SKILL.md files are for agent instructions only — never embed multi-line code. Simple CLI examples (curl one-liners, tool invocations) are fine. Any data processing logic belongs in standalone scripts under `files/scripts/`, referenced by path from the SKILL.md.
+
 ## Channel Plugin Templates
 
 ### plugin.json
@@ -328,6 +330,9 @@ export async function onChannel(ctx, config) {
      // mediaType: 'image' | 'video' | 'audio' | 'document',
      // mediaPath: '/workspace/group/media/xyz.ogg',       // container-relative path
      // mediaHostPath: '/absolute/host/path/to/media/file', // host-side path (for host hooks)
+     // Optional reply context (when user replies to a specific message):
+     // reply_context: { sender_name: 'Alice', text: 'the quoted text' },
+     //   text is null for non-text messages (photos, stickers, voice notes)
    });
    ```
 
@@ -361,7 +366,17 @@ export async function onChannel(ctx, config) {
 
 8. **File Sending** (optional): Implement `sendFile(jid, buffer, mime, fileName, caption)` to let agents send files back to users. The MIME type tells you which platform API to use (image upload vs document upload). Agents access this via the `send_file` MCP tool — the router calls `routeOutboundFile()` which dispatches to your channel. If not implemented, `send_file` returns an error to the agent.
 
-9. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
+9. **Reply Context** (optional but recommended): When users reply to a specific message, extract the quoted message's sender and text and pass as `reply_context` on the `NewMessage`. The agent sees this as `<reply to="sender">text</reply>` inside the message XML.
+   ```javascript
+   // Platform-specific: extract quoted message info from the reply
+   const quotedSender = getQuotedSenderName(msg);  // platform SDK method
+   const quotedText = getQuotedText(msg);            // null for non-text (photos, stickers)
+   // Set on NewMessage:
+   reply_context = { sender_name: quotedSender, text: quotedText };
+   ```
+   How to detect replies varies by platform — WhatsApp uses `contextInfo.quotedMessage`, Telegram uses `reply_to_message`, Discord uses `message.reference`. If the platform doesn't support reply threading, omit the field.
+
+10. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
 
 ### auth.js Template (when needed)
 

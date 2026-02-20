@@ -96,6 +96,36 @@ describe('formatMessages', () => {
     const result = formatMessages([]);
     expect(result).toBe('<messages>\n\n</messages>');
   });
+
+  it('includes reply context with text', () => {
+    const result = formatMessages([makeMsg({
+      content: 'I agree',
+      reply_context: { sender_name: 'Bob', text: 'Should we deploy?' },
+    })]);
+    expect(result).toContain('<reply to="Bob">Should we deploy?</reply>I agree</message>');
+  });
+
+  it('includes reply context with null text (non-text message)', () => {
+    const result = formatMessages([makeMsg({
+      content: 'Nice photo',
+      reply_context: { sender_name: 'Carol', text: null },
+    })]);
+    expect(result).toContain('<reply to="Carol">[non-text message]</reply>Nice photo</message>');
+  });
+
+  it('escapes special characters in reply context', () => {
+    const result = formatMessages([makeMsg({
+      content: 'ok',
+      reply_context: { sender_name: 'A & B', text: '<script>' },
+    })]);
+    expect(result).toContain('to="A &amp; B"');
+    expect(result).toContain('&lt;script&gt;</reply>');
+  });
+
+  it('omits reply element when no reply context', () => {
+    const result = formatMessages([makeMsg()]);
+    expect(result).not.toContain('<reply');
+  });
 });
 
 // --- TRIGGER_PATTERN ---

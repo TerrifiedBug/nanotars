@@ -10,9 +10,17 @@ export function escapeXml(s: string): string {
 }
 
 export function formatMessages(messages: NewMessage[]): string {
-  const lines = messages.map((m) =>
-    `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(m.content)}</message>`,
-  );
+  const lines = messages.map((m) => {
+    let inner = '';
+    if (m.reply_context) {
+      const replyText = m.reply_context.text !== null
+        ? escapeXml(m.reply_context.text)
+        : '[non-text message]';
+      inner += `<reply to="${escapeXml(m.reply_context.sender_name)}">${replyText}</reply>`;
+    }
+    inner += escapeXml(m.content);
+    return `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${inner}</message>`;
+  });
   return `<messages>\n${lines.join('\n')}\n</messages>`;
 }
 

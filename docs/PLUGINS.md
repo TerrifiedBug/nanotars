@@ -130,7 +130,7 @@ Called during graceful shutdown. Clean up servers, connections, timers. Errors a
 
 Called for every inbound message before it reaches the agent. Hooks run in plugin load order (alphabetical by directory name). Each hook receives the message and returns a (potentially modified) message. This enables message transformation, filtering, enrichment, or logging.
 
-The `InboundMessage` has the same shape as `NewMessage`: `id`, `chat_jid`, `sender`, `sender_name`, `content`, `timestamp`, plus optional `is_from_me`, `is_bot_message`, `mediaType`, and `mediaPath`.
+The `InboundMessage` has the same shape as `NewMessage`: `id`, `chat_jid`, `sender`, `sender_name`, `content`, `timestamp`, plus optional `is_from_me`, `is_bot_message`, `mediaType`, `mediaPath`, and `reply_context`.
 
 ### `onChannel(ctx: PluginContext, config: ChannelPluginConfig)`
 

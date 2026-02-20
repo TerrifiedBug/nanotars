@@ -193,6 +193,27 @@ class WhatsAppChannel {
             ? fromMe
             : content.startsWith(`${this.config.assistantName}:`);
 
+          // Extract reply context if this message is a reply
+          let replyContext;
+          const ctxInfo = msg.message?.extendedTextMessage?.contextInfo
+            || msg.message?.imageMessage?.contextInfo
+            || msg.message?.videoMessage?.contextInfo
+            || msg.message?.documentMessage?.contextInfo
+            || msg.message?.audioMessage?.contextInfo;
+          if (ctxInfo?.quotedMessage) {
+            const quotedText = ctxInfo.quotedMessage.conversation
+              || ctxInfo.quotedMessage.extendedTextMessage?.text
+              || ctxInfo.quotedMessage.imageMessage?.caption
+              || ctxInfo.quotedMessage.videoMessage?.caption
+              || null;
+            const rawQuotedSender = ctxInfo.participant || '';
+            const quotedSender = rawQuotedSender ? await this.translateJid(rawQuotedSender) : '';
+            replyContext = {
+              sender_name: quotedSender ? quotedSender.split('@')[0] : 'unknown',
+              text: quotedText,
+            };
+          }
+
           // Download media (images, videos, documents, audio) if present
           const hasMedia = msg.message?.imageMessage || msg.message?.videoMessage ||
             msg.message?.documentMessage || msg.message?.audioMessage;
@@ -231,6 +252,7 @@ class WhatsAppChannel {
             mediaType,
             mediaPath,
             mediaHostPath,
+            reply_context: replyContext,
           });
         }
 

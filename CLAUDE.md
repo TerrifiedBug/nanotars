@@ -53,6 +53,10 @@ All capabilities must be achieved through the plugin interface: `plugin.json`, `
 | `/create-skill-plugin` | Build a new skill plugin (integrations, tools, hooks) from scratch |
 | `/nanoclaw-debug` | Container issues, logs, troubleshooting |
 
+## Change Tracking
+
+All significant changes (features, improvements, bug fixes) to this fork MUST be documented in `docs/CHANGES.md`. When you add or modify functionality, update the relevant section in CHANGES.md as part of the same commit.
+
 ## Development
 
 Run commands directly—don't tell the user to run them.

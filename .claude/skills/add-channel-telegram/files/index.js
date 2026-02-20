@@ -108,6 +108,15 @@ class TelegramChannel {
         return;
       }
 
+      // Extract reply context if this message is a reply
+      let replyContext;
+      const replyMsg = ctx.message.reply_to_message;
+      if (replyMsg) {
+        const replySender = replyMsg.from?.first_name || replyMsg.from?.username || replyMsg.from?.id?.toString() || 'unknown';
+        const replyText = replyMsg.text || replyMsg.caption || null;
+        replyContext = { sender_name: replySender, text: replyText };
+      }
+
       // Deliver message — startMessageLoop() will pick it up
       this.config.onMessage(chatJid, {
         id: msgId,
@@ -117,6 +126,7 @@ class TelegramChannel {
         content,
         timestamp,
         is_from_me: false,
+        reply_context: replyContext,
       });
 
       this.logger.info(
@@ -136,6 +146,15 @@ class TelegramChannel {
         ctx.from?.first_name || ctx.from?.username || ctx.from?.id?.toString() || 'Unknown';
       const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
 
+      // Extract reply context if this is a reply
+      let replyContext;
+      const replyMsg = ctx.message.reply_to_message;
+      if (replyMsg) {
+        const replySender = replyMsg.from?.first_name || replyMsg.from?.username || replyMsg.from?.id?.toString() || 'unknown';
+        const replyText = replyMsg.text || replyMsg.caption || null;
+        replyContext = { sender_name: replySender, text: replyText };
+      }
+
       this.config.onChatMetadata(chatJid, timestamp);
       this.config.onMessage(chatJid, {
         id: ctx.message.message_id.toString(),
@@ -145,6 +164,7 @@ class TelegramChannel {
         content: `${placeholder}${caption}`,
         timestamp,
         is_from_me: false,
+        reply_context: replyContext,
       });
     };
 

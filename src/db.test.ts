@@ -380,9 +380,9 @@ describe('task CRUD', () => {
 describe('schema_version', () => {
   it('creates version table with all migrations applied', () => {
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(4);
+    expect(versions.length).toBe(5);
     expect(versions[0].version).toBe('001_add_context_mode');
-    expect(versions[3].version).toBe('004_add_is_bot_message');
+    expect(versions[4].version).toBe('005_add_reply_context');
   });
 
   it('is idempotent on re-init', () => {
@@ -439,9 +439,9 @@ describe('schema_version', () => {
     _initTestDatabaseFrom(partialDb);
 
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(4);
+    expect(versions.length).toBe(5);
     expect(versions.map((v) => v.version)).toEqual([
-      '001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message',
+      '001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message', '005_add_reply_context',
     ]);
   });
 });

@@ -141,7 +141,9 @@ This skill generates the following file tree:
 └── files/                          # Template files, copied to plugins/{name}/ on install
     ├── plugin.json                 # Plugin manifest (always present)
     ├── container-skills/
-    │   └── SKILL.md                # Agent-facing instructions (if needed)
+    │   ├── SKILL.md                # Agent-facing instructions (if needed)
+    │   └── scripts/                # Standalone scripts called by the agent (if needed)
+    │       └── {script}.py         # Python, Bash, etc.
     ├── mcp.json                    # MCP server config (if needed)
     ├── index.js                    # Host process hooks (if needed)
     └── hooks/
@@ -151,6 +153,19 @@ This skill generates the following file tree:
 - **`files/`** contains the actual plugin — everything the agent or NanoClaw needs at runtime. When the generated `add-skill-*` skill runs, this entire directory is copied to `plugins/{name}/`.
 - **`SKILL.md`** contains the installation instructions — what runs when someone invokes `/add-skill-{name}`. It handles env vars, copying files, rebuilding, and verification.
 - Only **`plugin.json`** is always present. Everything else is included based on the plugin's needs. A simple skill-only plugin might have just `plugin.json` and a `container-skills/SKILL.md`. A complex integration might include all of the above.
+
+### Code Separation Convention
+
+**container-skills/SKILL.md must never contain inline code blocks with logic.** The SKILL.md is for agent instructions — usage docs, not code. If the plugin needs scripts (Python, Bash, etc.), put them in `files/container-skills/scripts/` and have the SKILL.md reference them by path.
+
+- **OK in SKILL.md**: Simple `curl` one-liners, CLI command examples, tool invocation syntax
+- **NOT OK in SKILL.md**: Multi-line Python/Bash scripts, data parsing logic, anything over ~3 lines of code
+
+The entire `container-skills/` directory is mounted into the container at `/workspace/.claude/skills/{name}/`. So `container-skills/scripts/foo.py` on the host becomes `/workspace/.claude/skills/{name}/scripts/foo.py` inside the container:
+
+```bash
+python3 /workspace/.claude/skills/{name}/scripts/{script}.py [args]
+```
 
 ### Dockerfile.partial (Optional)
 
@@ -277,6 +292,8 @@ Reference templates for each plugin archetype. Use these as the structural found
 
 #### container-skills/SKILL.md
 
+For simple one-liner APIs (just curl):
+
 ```markdown
 ---
 name: {name}
@@ -286,8 +303,6 @@ allowed-tools: Bash(curl:*)
 
 # {Title}
 
-Use curl for quick lookups (no API key needed):
-
 \```bash
 curl -s "{API_ENDPOINT}/{parameter}?format=json"
 \```
@@ -295,15 +310,46 @@ curl -s "{API_ENDPOINT}/{parameter}?format=json"
 Tips:
 - {Usage tip 1}
 - {Usage tip 2}
+```
 
-Fallback: `curl -s "{ALTERNATE_API_ENDPOINT}"`
+For anything requiring data processing, use a separate script file:
+
+#### container-skills/scripts/{name}.py (or .sh)
+
+Put all logic in a standalone script under `files/container-skills/scripts/`. The SKILL.md just documents how to call it.
+
+#### container-skills/SKILL.md (with script)
+
+```markdown
+---
+name: {name}
+description: {AGENT_FACING_DESCRIPTION}. Use whenever {TRIGGER_CONTEXT}.
+allowed-tools: Bash(python3:*,curl:*)
+---
+
+# {Title}
+
+{Brief description of what this does.}
+
+## Usage
+
+\```bash
+python3 /workspace/.claude/skills/{name}/scripts/{name}.py [args]
+\```
+
+{Explain the arguments and output format.}
+
+## Notes
+
+- {Relevant notes about the data source, limitations, etc.}
 ```
 
 **Notes:**
 - `containerEnvVars` is empty — skill-only plugins don't need credentials
 - `hooks` is empty — nothing runs in the host process or container hooks
 - The `allowed-tools` frontmatter in SKILL.md controls which tools the agent can use (e.g., `Bash(curl:*)` for curl commands)
-- Keep agent instructions concise — show exact commands the agent should run, not explanations of how the API works
+- **SKILL.md is for instructions, not code.** Simple curl one-liners are fine inline. Anything more complex (parsing, filtering, multi-step logic) must go in `scripts/` as a standalone file
+- Scripts are mounted at `/workspace/.claude/skills/{name}/scripts/` inside the container
 
 ---
 

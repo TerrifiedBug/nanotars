@@ -42,6 +42,11 @@ export interface RegisteredGroup {
   requiresTrigger?: boolean; // Default: true for groups, false for solo chats
 }
 
+export interface ReplyContext {
+  sender_name: string;
+  text: string | null; // null = non-text message (photo, sticker, etc.)
+}
+
 export interface NewMessage {
   id: string;
   chat_jid: string;
@@ -57,6 +62,8 @@ export interface NewMessage {
   mediaPath?: string;
   /** Absolute host path where media file was saved (for host-side hooks) */
   mediaHostPath?: string;
+  /** Context about the message being replied to, if this is a reply */
+  reply_context?: ReplyContext;
 }
 
 export interface ScheduledTask {

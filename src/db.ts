@@ -116,6 +116,10 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       db.prepare(`UPDATE messages SET is_bot_message = 1 WHERE content LIKE ?`).run(`${ASSISTANT_NAME}:%`);
     },
   },
+  {
+    name: '005_add_reply_context',
+    up: (db) => safeAddColumn(db, `ALTER TABLE messages ADD COLUMN reply_context TEXT`),
+  },
 ];
 
 function runMigrations(database: Database.Database): void {
@@ -140,17 +144,20 @@ function runMigrations(database: Database.Database): void {
       taskCols.some((c) => c.name === 'model') &&
       groupCols.some((c) => c.name === 'channel');
     if (hasAllMigrated) {
-      // Mark all existing migrations as already applied
+      // Mark only pre-migration-system migrations (001–004) as already applied.
+      // Newer migrations (005+) must still run through the normal path.
+      const PRE_MIGRATION_SYSTEM = ['001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message'];
       const now = new Date().toISOString();
       const stmt = database.prepare('INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)');
-      for (const m of MIGRATIONS) {
-        stmt.run(m.name, now);
+      for (const name of PRE_MIGRATION_SYSTEM) {
+        stmt.run(name, now);
       }
-      return;
     }
   }
 
-  const appliedSet = new Set(applied.map((r) => r.version));
+  // Re-query after potential sentinel detection inserts
+  const currentApplied = database.prepare('SELECT version FROM schema_version').all() as Array<{ version: string }>;
+  const appliedSet = new Set(currentApplied.map((r) => r.version));
   const now = new Date().toISOString();
 
   for (const migration of MIGRATIONS) {
@@ -327,7 +334,7 @@ export function setLastGroupSync(): void {
  */
 export function storeMessage(msg: NewMessage): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -337,6 +344,7 @@ export function storeMessage(msg: NewMessage): void {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
+    msg.reply_context ? JSON.stringify(msg.reply_context) : null,
   );
   dbEvents.emit('new-message', msg.chat_jid);
 }
@@ -376,7 +384,7 @@ export function getNewMessages(
   // Use >= so that messages arriving in the same second as the cursor are
   // not permanently skipped. Callers must track processed IDs to deduplicate.
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, reply_context
     FROM messages
     WHERE timestamp >= ? AND chat_jid IN (${placeholders})
       AND is_bot_message = 0 AND content NOT LIKE ?
@@ -385,14 +393,21 @@ export function getNewMessages(
 
   const rows = db
     .prepare(sql)
-    .all(lastTimestamp, ...jids, `${botPrefix}:%`) as NewMessage[];
+    .all(lastTimestamp, ...jids, `${botPrefix}:%`) as Array<
+      Omit<NewMessage, 'reply_context'> & { reply_context: string | null }
+    >;
+
+  const messages: NewMessage[] = rows.map((row) => ({
+    ...row,
+    reply_context: row.reply_context ? JSON.parse(row.reply_context) : undefined,
+  }));
 
   let newTimestamp = lastTimestamp;
-  for (const row of rows) {
+  for (const row of messages) {
     if (row.timestamp > newTimestamp) newTimestamp = row.timestamp;
   }
 
-  return { messages: rows, newTimestamp };
+  return { messages, newTimestamp };
 }
 
 export function getMessagesSince(
@@ -403,15 +418,21 @@ export function getMessagesSince(
   // Filter bot messages using both the is_bot_message flag AND the content
   // prefix as a backstop for messages written before the migration ran.
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, reply_context
     FROM messages
     WHERE chat_jid = ? AND timestamp > ?
       AND is_bot_message = 0 AND content NOT LIKE ?
     ORDER BY timestamp
   `;
-  return db
+  const rows = db
     .prepare(sql)
-    .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
+    .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as Array<
+      Omit<NewMessage, 'reply_context'> & { reply_context: string | null }
+    >;
+  return rows.map((row) => ({
+    ...row,
+    reply_context: row.reply_context ? JSON.parse(row.reply_context) : undefined,
+  }));
 }
 
 export function createTask(

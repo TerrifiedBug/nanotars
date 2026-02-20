@@ -424,6 +424,8 @@ Re-exports preserve backward compatibility — no consumer import changes needed
 
 | Feature | Files | What |
 |---------|-------|------|
+| **Reply context** | `src/types.ts`, `src/router.ts`, `src/db.ts`, `plugins/channels/whatsapp/index.js` | When a user replies to a specific message, the agent sees `<reply to="sender">quoted text</reply>` inside the message XML. Stored as JSON in SQLite, extracted from Baileys `contextInfo` |
+| **Singleton PID guard** | `src/index.ts` | Prevents running duplicate instances (e.g. `npm run dev` while systemd service is active). Writes `host.pid`, checks if existing PID is alive, cleans up on exit |
 | **Heartbeat typing indicator** | `src/index.ts` | Shows typing indicator on every message, not just the first |
 | **Read receipts** | `plugins/channels/whatsapp/index.js` | Marks messages as read after processing |
 | **Presence management** | `src/index.ts` | Sends `available` presence on connect for consistent typing indicators |
