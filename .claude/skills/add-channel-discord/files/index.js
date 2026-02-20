@@ -98,7 +98,9 @@ class DiscordChannel {
         let replyContext;
         if (message.reference?.messageId) {
           try {
-            const refMsg = await message.channel.messages.fetch(message.reference.messageId);
+            // Try cache first to avoid network round-trip, fall back to fetch
+            const refMsg = message.channel.messages.cache.get(message.reference.messageId)
+              || await message.channel.messages.fetch(message.reference.messageId);
             const replySender = refMsg.member?.displayName || refMsg.author?.displayName || refMsg.author?.username || 'unknown';
             const replyText = refMsg.content || null;
             replyContext = { sender_name: replySender, text: replyText };
