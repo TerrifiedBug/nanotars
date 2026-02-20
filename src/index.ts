@@ -224,8 +224,16 @@ async function main(): Promise<void> {
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text, sender) => routeOutbound(orchestrator.channels, jid, text, sender, undefined, plugins).then(() => {}),
+    sendMessage: (jid, text, sender, replyTo) => routeOutbound(orchestrator.channels, jid, text, sender, replyTo, plugins).then(() => {}),
     sendFile: (jid, buffer, mime, fileName, caption) => routeOutboundFile(orchestrator.channels, jid, buffer, mime, fileName, caption),
+    react: async (jid, messageId, emoji) => {
+      const channel = orchestrator.channels.find((c) => c.ownsJid(jid) && c.isConnected());
+      if (channel?.react) {
+        await channel.react(jid, messageId, emoji);
+      } else {
+        logger.warn({ jid }, 'No connected channel with react support for JID');
+      }
+    },
     registeredGroups: () => orchestrator.registeredGroups,
     registerGroup: (jid, group) => orchestrator.registerGroup(jid, group),
     syncGroupMetadata: async (_force) => {

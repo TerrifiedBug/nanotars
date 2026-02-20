@@ -53,6 +53,7 @@ beforeEach(() => {
   deps = {
     sendMessage: async () => {},
     sendFile: async () => false,
+    react: async () => {},
     registeredGroups: () => groups,
     registerGroup: (jid, group) => {
       groups[jid] = group;
@@ -624,6 +625,30 @@ describe('register_group path traversal', () => {
     );
 
     expect(groups['good@g.us']).toBeDefined();
+  });
+});
+
+describe('react authorization', () => {
+  function isReactAuthorized(
+    sourceGroup: string,
+    isMain: boolean,
+    targetChatJid: string,
+    registeredGroups: Record<string, RegisteredGroup>,
+  ): boolean {
+    const targetGroup = registeredGroups[targetChatJid];
+    return isMain || (!!targetGroup && targetGroup.folder === sourceGroup);
+  }
+
+  it('main group can react in any group', () => {
+    expect(isReactAuthorized('main', true, 'other@g.us', groups)).toBe(true);
+  });
+
+  it('non-main group can react in own chat', () => {
+    expect(isReactAuthorized('other-group', false, 'other@g.us', groups)).toBe(true);
+  });
+
+  it('non-main group cannot react in another groups chat', () => {
+    expect(isReactAuthorized('other-group', false, 'main@g.us', groups)).toBe(false);
   });
 });
 
