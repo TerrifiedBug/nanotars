@@ -347,11 +347,11 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 
 ---
 
-## 8. New Skills (28)
+## 8. New Skills (35)
 
 Claude Code skills (`.claude/skills/`) that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
 
-### Integration skills (20)
+### Integration skills (23)
 
 | Skill | What it adds |
 |-------|-------------|
@@ -360,8 +360,10 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `add-skill-changedetection` | changedetection.io website monitoring |
 | `add-skill-claude-mem` | Persistent cross-session memory for agents |
 | `add-skill-commute` | Travel times via Waze API |
+| `add-skill-cs2-esports` | CS2 esports match tracking via Liquipedia |
 | `add-skill-dashboard` | Admin dashboard — web UI for monitoring and management (see [§12](#12-admin-dashboard)) |
 | `add-skill-freshrss` | Self-hosted RSS feed reader |
+| `add-skill-giphy` | GIF search and sending via Giphy API |
 | `add-skill-github` | GitHub API access (PRs, issues, commits) |
 | `add-skill-gmail` | Gmail access via gog CLI (search, read, send) |
 | `add-skill-homeassistant` | Home Assistant smart home control via MCP |

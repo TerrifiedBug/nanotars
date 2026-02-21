@@ -3,109 +3,133 @@
 </p>
 
 <p align="center">
-  My personal Claude assistant that runs securely in containers. Lightweight and built to be understood and customized for your own needs.
+  A personal Claude assistant built on <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>. Multi-channel, plugin-based, container-isolated.
 </p>
 
-<p align="center">
-  <a href="https://discord.gg/VGWXrf8x"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord&v=2" alt="Discord" valign="middle"></a>
-</p>
+## What This Is
 
-**New:** First AI assistant to support [Agent Swarms](https://code.claude.com/docs/en/agent-teams). Spin up teams of agents that collaborate in your chat.
+A heavily customized fork of [NanoClaw](https://github.com/qwibitai/nanoclaw) — a lightweight Claude assistant that runs agents in Linux containers. This fork adds a plugin architecture, multi-channel support, Docker/Linux hosting, security hardening, an admin dashboard, agent teams, and 35 installation skills. The core philosophy remains: small enough to understand, secure by OS-level isolation.
 
-## Why I Built This
+## What It Does
 
-[OpenClaw](https://github.com/openclaw/openclaw) is an impressive project with a great vision. But I can't sleep well running software I don't understand with access to my life. OpenClaw has 52+ modules, 8 config management files, 45+ dependencies, and abstractions for 15 channel providers. Security is application-level (allowlists, pairing codes) rather than OS isolation. Everything runs in one Node process with shared memory.
+**Channels** — Connect via WhatsApp, Discord, Telegram, or build your own channel plugin. Each channel is a plugin; the core is channel-agnostic.
 
-NanoClaw gives you the same core functionality in a codebase you can understand in 8 minutes. One process. A handful of files. Agents run in actual Linux containers with filesystem isolation, not behind permission checks.
+**Plugin System** — All capabilities are runtime-loaded plugins with hooks, env vars, MCP configs, container mounts, and `Dockerfile.partial` support. Plugins are installed via Claude Code skills and gitignored per-deployment.
 
-## Quick Start
+**Container Isolation** — Agents run in Docker (Linux) or Apple Container (macOS) with explicit mount boundaries, resource limits (`--cpus=2`, `--memory=4g`, `--pids-limit=256`), and no host access beyond what's mounted.
+
+**Security** — Secrets passed via stdin (never in env/filesystem), Bash command sanitization, `/proc/*/environ` blocking, outbound secret redaction, IPC authorization per group, path traversal defense, pre-install security audits.
+
+**Media Pipeline** — Bidirectional media: images/video/audio/documents download into containers for agent analysis, agents send files back via `send_file` MCP tool (64MB limit). Video thumbnail extraction via ffmpeg.
+
+**Agent Teams** — Persistent agent definitions per group (`agents/{name}/IDENTITY.md` + `CLAUDE.md`). The lead agent spawns specialized subagents via Claude's Agent Teams. WhatsApp shows each agent's name as a bold prefix.
+
+**Admin Dashboard** — Server-rendered web UI (htmx + Tailwind) with system health, queue status, task management, message viewer, group inspection, plugin list, system logs, and dark/light toggle. Bearer token auth.
+
+**Scheduled Tasks** — Recurring jobs with per-task model selection, error notifications, atomic claiming, and configurable idle timeouts.
+
+**Agent Identity** — `IDENTITY.md` files give agents personality, separate from operational `CLAUDE.md` instructions. Per-group overrides with global fallback.
+
+**Per-Group Credentials** — Groups can have their own `.env` overrides for isolated credentials (e.g., personal vs team calendar).
+
+**Plugin Versioning** — Semver tracking on all plugins. The update skill compares template versions vs installed versions and offers guided upgrades.
+
+## Architecture
+
+```
+Channel Plugins ──> SQLite ──> Polling Loop ──> Container (Claude Agent SDK) ──> Response
+  (WhatsApp,         (messages,    (2s interval,     (Docker or Apple Container,    (routed back
+   Discord,           groups,       dedup, trigger     security-validated mounts,     to channel)
+   Telegram)          tasks)        matching)          stdin secrets, IPC polling)
+```
+
+Single Node.js process. Channel plugins deliver messages to SQLite. A polling loop feeds them to agents running in isolated containers. Per-group message queue with concurrency control (default 5 containers). IPC via filesystem.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | Orchestrator: state, plugin lifecycle, message loop, agent invocation |
+| `src/plugin-loader.ts` | Plugin discovery, manifest parsing, env/MCP/mount collection |
+| `src/plugin-types.ts` | Plugin system type definitions |
+| `src/container-runner.ts` | Spawns streaming agent containers |
+| `src/container-mounts.ts` | Volume mount construction, env files, secrets |
+| `src/container-runtime.ts` | Runtime abstraction (Docker / Apple Container) |
+| `src/mount-security.ts` | Mount path validation and allowlist |
+| `src/router.ts` | Message formatting and outbound routing to channels |
+| `src/ipc.ts` | IPC watcher, task processing, cross-group authorization |
+| `src/group-queue.ts` | Per-group queue with global concurrency limit |
+| `src/task-scheduler.ts` | Scheduled task execution with model selection |
+| `src/secret-redact.ts` | Outbound secret redaction |
+| `src/db.ts` | SQLite operations (messages, groups, sessions, state) |
+| `groups/*/CLAUDE.md` | Per-group agent instructions (isolated) |
+| `groups/*/IDENTITY.md` | Per-group agent personality (optional) |
+| `plugins/channels/*/` | Channel plugins (WhatsApp, Discord, Telegram) |
+| `plugins/*/` | Skill plugins (search, calendar, dashboard, etc.) |
+
+## Skills (35)
+
+Everything is installed via [Claude Code skills](https://code.claude.com/docs/en/skills). Run a skill, Claude does the work, you get a clean plugin tailored to your setup.
+
+### Integration Skills (23)
+
+| Skill | What it adds |
+|-------|-------------|
+| `/add-skill-brave-search` | Web search via Brave API |
+| `/add-skill-calendar` | Google Calendar + CalDAV |
+| `/add-skill-changedetection` | Website monitoring via changedetection.io |
+| `/add-skill-claude-mem` | Persistent cross-session memory |
+| `/add-skill-commute` | Travel times via Waze |
+| `/add-skill-cs2-esports` | CS2 esports match tracking |
+| `/add-skill-dashboard` | Admin web UI |
+| `/add-skill-freshrss` | Self-hosted RSS reader |
+| `/add-skill-giphy` | GIF search and sending |
+| `/add-skill-github` | GitHub API (PRs, issues, commits) |
+| `/add-skill-gmail` | Gmail (search, read, send) |
+| `/add-skill-homeassistant` | Smart home control via MCP |
+| `/add-skill-imap-read` | Read-only IMAP email |
+| `/add-skill-n8n` | n8n workflow automation |
+| `/add-skill-norish` | Recipe import by URL |
+| `/add-skill-notion` | Notion pages and databases |
+| `/add-skill-parallel` | Parallel AI web research |
+| `/add-skill-stocks` | Stock prices via Yahoo Finance |
+| `/add-skill-telegram-swarm` | Agent Teams for Telegram (bot pool) |
+| `/add-skill-trains` | UK National Rail departures |
+| `/add-skill-transcription` | Voice transcription via Whisper |
+| `/add-skill-weather` | Weather (no API key needed) |
+| `/add-skill-webhook` | HTTP webhook endpoint for push events |
+
+### Channel Skills (4)
+
+| Skill | What it adds |
+|-------|-------------|
+| `/add-channel-whatsapp` | WhatsApp via Baileys |
+| `/add-channel-discord` | Discord (servers + DMs) |
+| `/add-channel-telegram` | Telegram (bot API) |
+| `/nanoclaw-add-group` | Register a group on any channel |
+
+### Meta Skills (8)
+
+| Skill | What it does |
+|-------|-------------|
+| `/nanoclaw-setup` | First-time install, auth, service config |
+| `/nanoclaw-debug` | Container troubleshooting and health checks |
+| `/nanoclaw-set-model` | Change Claude model for containers |
+| `/nanoclaw-update` | Pull fork updates, compare plugin versions |
+| `/nanoclaw-add-agent` | Create agent definitions for a group |
+| `/nanoclaw-security-audit` | Pre-install security audit of skill plugins |
+| `/create-skill-plugin` | Build a new skill plugin from scratch |
+| `/create-channel-plugin` | Build a new channel plugin from scratch |
+
+## Getting Started
 
 ```bash
-git clone https://github.com/qwibitai/nanoclaw.git
-cd nanoclaw
+git clone https://github.com/TerrifiedBug/nanotars.git
+cd nanotars
 claude
 ```
 
-Then run `/setup`. Claude Code handles everything: dependencies, authentication, container setup, service configuration.
-
-## Philosophy
-
-**Small enough to understand.** One process, a few source files. No microservices, no message queues, no abstraction layers. Have Claude Code walk you through it.
-
-**Secure by isolation.** Agents run in Linux containers (Apple Container on macOS, or Docker). They can only see what's explicitly mounted. Bash access is safe because commands run inside the container, not on your host.
-
-**Built for your needs.** This isn't a framework. You fork it, install the channel and skill plugins you want, and end up with a clean system tailored to your exact needs.
-
-**Customization = Claude Code skills.** The core stays untouched. Everything is installed via [Claude Code skills](https://code.claude.com/docs/en/skills) — run `/add-channel-telegram` to add Telegram, `/add-skill-weather` to add weather lookups. Skills teach Claude Code how to create and configure plugins on your fork. Browse `.claude/skills/` for what's available, or run `/create-skill-plugin` and `/create-channel-plugin` to build your own.
-
-**AI-native.** No installation wizard; Claude Code guides setup. No monitoring dashboard; ask Claude what's happening. No debugging tools; describe the problem, Claude fixes it.
-
-**Skills over features.** Contributors don't add features to the core. They contribute [Claude Code skills](https://code.claude.com/docs/en/skills) that create plugins. A skill is a markdown file that teaches Claude Code how to build and configure a plugin on your fork. You run it, Claude does the work, and you end up with clean code that does exactly what you need.
-
-**Best harness, best model.** This runs on Claude Agent SDK, which means you're running Claude Code directly. The harness matters. A bad harness makes even smart models seem dumb, a good harness gives them superpowers. Claude Code is (IMO) the best harness available.
-
-## What It Supports
-
-- **Multi-channel messaging** - Connect via WhatsApp, Telegram, Discord, or build your own channel plugin (`/create-channel-plugin`)
-- **Isolated group context** - Each group has its own `CLAUDE.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted
-- **Main channel** - Your private channel (self-chat) for admin control; every other group is completely isolated
-- **Plugin system** - Add integrations via Claude Code skills — calendar, weather, search, home automation, and more. Each skill creates and configures a plugin on your fork
-- **Scheduled tasks** - Recurring jobs that run Claude and can message you back
-- **Web access** - Search and fetch content
-- **Container isolation** - Agents sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
-- **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks
-
-## Usage
-
-Talk to your assistant with the trigger word (default: `@TARS`):
-
-```
-@TARS send an overview of the sales pipeline every weekday morning at 9am (has access to my Obsidian vault folder)
-@TARS review the git history for the past week each Friday and update the README if there's drift
-@TARS every Monday at 8am, compile news on AI developments from Hacker News and TechCrunch and message me a briefing
-```
-
-From the main channel (your self-chat), you can manage groups and tasks:
-```
-@TARS list all scheduled tasks across groups
-@TARS pause the Monday briefing task
-@TARS join the Family Chat group
-```
-
-## Customizing
-
-There are no configuration files to learn. Just tell Claude Code what you want:
-
-- "Change the trigger word to @Bob"
-- "Remember in the future to make responses shorter and more direct"
-- "Add a custom greeting when I say good morning"
-- "Store conversation summaries weekly"
-
-Or run `/customize` for guided changes.
-
-The codebase is small enough that Claude can safely modify it.
-
-## Contributing
-
-**Don't add features. Add skills that install plugins.**
-
-Everything in NanoClaw is delivered as a Claude Code skill. Want to add Telegram support? Contribute a skill (`.claude/skills/add-channel-telegram/SKILL.md`) that teaches Claude Code how to create and configure a Telegram channel plugin. Want to add weather lookups? Contribute a skill that installs a weather skill plugin.
-
-Users run the skill on their fork and get clean, working code tailored to their setup. See [CONTRIBUTING.md](CONTRIBUTING.md) for details on contributing skills, channel plugins, and skill plugins.
-
-### RFS (Request for Skills)
-
-Skills we'd love the community to build:
-
-**Communication Channels**
-- `/add-channel-slack` - Add Slack as a channel plugin
-- `/add-channel-sms` - Add SMS via Twilio or similar
-
-**Platform Support**
-- `/setup-windows` - Windows via WSL2 + Docker
-
-**Session Management**
-- `/add-clear` - Add a `/clear` command that compacts the conversation (summarizes context while preserving critical information in the same session). Requires figuring out how to trigger compaction programmatically via the Claude Agent SDK.
+Then run `/nanoclaw-setup`. Claude handles dependencies, authentication, container build, and service configuration.
 
 ## Requirements
 
@@ -113,68 +137,27 @@ Skills we'd love the community to build:
 - Node.js 20+
 - [Claude Code](https://claude.ai/download)
 - [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
+- **Optional:** ffmpeg for video/GIF thumbnail extraction
 
-### Optional
+## Key Differences from Upstream
 
-- **ffmpeg** — High-quality video/GIF thumbnail extraction for channel plugins. Without it, low-res previews from channel metadata are used.
-  - macOS: `brew install ffmpeg`
-  - Ubuntu/Debian: `sudo apt install ffmpeg`
+| Aspect | Upstream NanoClaw | This Fork |
+|--------|-------------------|-----------|
+| Channels | WhatsApp hardcoded | Plugin-based: WhatsApp, Discord, Telegram, extensible |
+| Container runtime | Apple Container only | Docker + Apple Container via abstraction layer |
+| Extensibility | Skills only | Runtime plugins with hooks, mounts, env vars, MCP, Dockerfile.partial |
+| Dependencies | All channel SDKs in root package.json | Per-plugin packages |
+| Media | Text only | Bidirectional media + video thumbnails |
+| Security | Trust-based | Defense-in-depth (secret isolation, Bash hooks, IPC auth, resource limits) |
+| Scheduled tasks | Single model, silent failures | Per-task model, error notifications, atomic claiming |
+| Monitoring | None | Admin dashboard with live system status |
+| Agent identity | None | IDENTITY.md personality system |
+| Agent teams | Basic support | Persistent per-group agent definitions with channel display |
+| Updates | Manual git pull | Fetch-then-assess with plugin version comparison |
 
-## Architecture
+## Credits
 
-```
-Channel Plugins --> SQLite --> Polling loop --> Container (Claude Agent SDK) --> Response
-```
-
-Single Node.js process. Channel plugins deliver messages; agents execute in isolated Linux containers with mounted directories. Per-group message queue with concurrency control. IPC via filesystem. Plugins are installed via Claude Code skills.
-
-Key files:
-- `src/index.ts` - Orchestrator: state, message loop, agent invocation
-- `src/plugin-loader.ts` - Plugin discovery, loading, and registry
-- `src/ipc.ts` - IPC watcher and task processing
-- `src/router.ts` - Message formatting and outbound routing
-- `src/group-queue.ts` - Per-group queue with global concurrency limit
-- `src/container-runner.ts` - Spawns streaming agent containers
-- `src/container-mounts.ts` - Volume mount construction, env files, secrets
-- `src/container-runtime.ts` - Container runtime abstraction (Docker/Apple Container)
-- `src/mount-security.ts` - Mount path validation and allowlist
-- `src/task-scheduler.ts` - Runs scheduled tasks
-- `src/db.ts` - SQLite operations (messages, groups, sessions, state)
-- `groups/*/CLAUDE.md` - Per-group memory
-
-## FAQ
-
-**How do I add a channel?**
-
-Run a channel installation skill. For example, `/add-channel-telegram` or `/add-channel-discord`. Each skill guides you through setup, authentication, and group registration. To build a channel for a platform that doesn't have a skill yet, run `/create-channel-plugin`.
-
-**Is this secure?**
-
-Agents run in containers, not behind application-level permission checks. They can only access explicitly mounted directories. You should still review what you're running, but the codebase is small enough that you actually can. See [docs/SECURITY.md](docs/SECURITY.md) for the full security model.
-
-**Why no configuration files?**
-
-We don't want configuration sprawl. Every user should customize it to so that the code matches exactly what they want rather than configuring a generic system. If you like having config files, tell Claude to add them.
-
-**How do I debug issues?**
-
-Ask Claude Code. "Why isn't the scheduler running?" "What's in the recent logs?" "Why did this message not get a response?" That's the AI-native approach.
-
-**Why isn't the setup working for me?**
-
-I don't know. Run `claude`, then run `/debug`. If claude finds an issue that is likely affecting other users, open a PR to modify the setup SKILL.md.
-
-**What changes will be accepted into the codebase?**
-
-Security fixes, bug fixes, and clear improvements to the base configuration. That's it.
-
-Everything else (new capabilities, OS compatibility, hardware support, enhancements) should be contributed as skills.
-
-This keeps the base system minimal and lets every user customize their installation without inheriting features they don't want.
-
-## Community
-
-Questions? Ideas? [Join the Discord](https://discord.gg/VGWXrf8x).
+Built on [NanoClaw](https://github.com/qwibitai/nanoclaw) by [qwibitai](https://github.com/qwibitai). See [docs/CHANGES.md](docs/CHANGES.md) for the full fork changelog.
 
 ## License
 

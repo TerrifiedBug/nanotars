@@ -118,6 +118,7 @@ Each subdirectory is an agent:
 When a user's request matches an agent's specialty, create a team using `TeamCreate`:
 - Read the agent's IDENTITY.md and CLAUDE.md from `/workspace/group/agents/{name}/`
 - Use the folder name as the `sender` parameter so their messages appear with their identity
+- Instruct subagents to send their findings directly to the user via `send_message` (with their `sender` name). This preserves their identity in the chat. Only suppress subagent messaging when you need to aggregate results from multiple agents first.
 - You don't need agents for simple tasks — they're for when specialized focus helps
 
 To see what agents are available, list `/workspace/group/agents/` and read the first line of each IDENTITY.md.
