@@ -39,6 +39,13 @@ import {
   insertExternalMessage,
   updateChatName,
   getMessageMeta,
+  getTaskById,
+  getTasksForGroup,
+  createTask,
+  updateTask,
+  deleteTask,
+  getTaskRunLogs,
+  getRecentMessages,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
@@ -170,6 +177,38 @@ async function main(): Promise<void> {
       return mainEntry ? mainEntry[0] : null;
     },
     logger,
+
+    // Monitoring
+    getAllChats: () => getAllChats(),
+    getSessions: () => orchestrator.sessions,
+    getQueueStatus: () => queue.getStatus(),
+    getChannelStatus: () => orchestrator.channels.map(c => ({
+      name: c.name,
+      connected: c.isConnected(),
+    })),
+
+    // Plugins
+    getInstalledPlugins: () => plugins.loaded.map(p => ({
+      name: p.manifest.name,
+      description: p.manifest.description,
+      version: p.manifest.version,
+      channelPlugin: !!p.manifest.channelPlugin,
+      groups: p.manifest.groups,
+      channels: p.manifest.channels,
+      dir: p.dir,
+    })),
+
+    // Tasks
+    getAllTasks: () => getAllTasks(),
+    getTaskById: (id) => getTaskById(id),
+    getTasksForGroup: (folder) => getTasksForGroup(folder),
+    createTask: (task) => createTask(task),
+    updateTask: (id, updates) => updateTask(id, updates),
+    deleteTask: (id) => deleteTask(id),
+    getTaskRunLogs: (taskId, limit) => getTaskRunLogs(taskId, limit),
+
+    // Messages
+    getRecentMessages: (jid, limit) => getRecentMessages(jid, limit ?? 50),
   };
 
   // Initialize channel plugins

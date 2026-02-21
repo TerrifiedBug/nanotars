@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
-import type { Channel, NewMessage, OnInboundMessage, OnChatMetadata, RegisteredGroup } from './types.js';
+import type { Channel, NewMessage, OnInboundMessage, OnChatMetadata, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
+import type { ChatInfo } from './db.js';
 
 /** Plugin manifest (plugin.json) */
 export interface PluginManifest {
@@ -63,6 +64,30 @@ export interface PluginContext {
   getRegisteredGroups(): Record<string, RegisteredGroup>;
   getMainChannelJid(): string | null;
   logger: Logger;
+
+  /** All known chats ordered by recent activity */
+  getAllChats(): ChatInfo[];
+  /** Active session IDs keyed by group folder */
+  getSessions(): Record<string, string>;
+  /** Queue status: active containers, per-group state */
+  getQueueStatus(): { activeCount: number; groups: Array<{ jid: string; folder: string; active: boolean; pendingMessages: boolean; pendingTaskCount: number; retryCount: number }> };
+  /** Connected channel status */
+  getChannelStatus(): Array<{ name: string; connected: boolean }>;
+
+  /** Installed plugin metadata */
+  getInstalledPlugins(): Array<{ name: string; description?: string; version?: string; channelPlugin: boolean; groups?: string[]; channels?: string[]; dir: string }>;
+
+  /** Task CRUD (delegates to db.ts) */
+  getAllTasks(): ScheduledTask[];
+  getTaskById(id: string): ScheduledTask | undefined;
+  getTasksForGroup(folder: string): ScheduledTask[];
+  createTask(task: Omit<ScheduledTask, 'last_run' | 'last_result'>): void;
+  updateTask(id: string, updates: Partial<Pick<ScheduledTask, 'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status' | 'model'>>): void;
+  deleteTask(id: string): void;
+  getTaskRunLogs(taskId: string, limit?: number): TaskRunLog[];
+
+  /** Recent messages for a chat */
+  getRecentMessages(jid: string, limit?: number): NewMessage[];
 }
 
 /** Hook functions a plugin can export */

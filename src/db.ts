@@ -580,6 +580,18 @@ export function updateTaskAfterRun(
   ).run(nextRun, now, lastResult, nextRun, id);
 }
 
+export function getTaskRunLogs(taskId: string, limit = 50): TaskRunLog[] {
+  return db
+    .prepare('SELECT task_id, run_at, duration_ms, status, result, error FROM task_run_logs WHERE task_id = ? ORDER BY run_at DESC LIMIT ?')
+    .all(taskId, limit) as TaskRunLog[];
+}
+
+export function getRecentMessages(jid: string, limit = 50): NewMessage[] {
+  return db
+    .prepare('SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message FROM messages WHERE chat_jid = ? ORDER BY timestamp DESC LIMIT ?')
+    .all(jid, limit) as NewMessage[];
+}
+
 export function logTaskRun(log: TaskRunLog): void {
   db.prepare(
     `

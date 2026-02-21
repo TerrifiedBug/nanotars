@@ -1,0 +1,8 @@
+{
+  "name": "dashboard",
+  "description": "Admin dashboard with system monitoring and task management",
+  "hooks": ["onStartup", "onShutdown"],
+  "containerEnvVars": [],
+  "publicEnvVars": ["DASHBOARD_PORT", "DASHBOARD_HOST"],
+  "version": "1.0.0"
+}

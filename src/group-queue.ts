@@ -50,6 +50,21 @@ export class GroupQueue {
     return state;
   }
 
+  getStatus(): { activeCount: number; groups: Array<{ jid: string; folder: string; active: boolean; pendingMessages: boolean; pendingTaskCount: number; retryCount: number }> } {
+    const groups: Array<{ jid: string; folder: string; active: boolean; pendingMessages: boolean; pendingTaskCount: number; retryCount: number }> = [];
+    for (const [jid, state] of this.groups) {
+      groups.push({
+        jid,
+        folder: state.groupFolder || jid,
+        active: state.active,
+        pendingMessages: state.pendingMessages,
+        pendingTaskCount: state.pendingTasks.length,
+        retryCount: state.retryCount,
+      });
+    }
+    return { activeCount: this.activeCount, groups };
+  }
+
   setProcessMessagesFn(fn: (groupJid: string) => Promise<boolean>): void {
     this.processMessagesFn = fn;
   }
