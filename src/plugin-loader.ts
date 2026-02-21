@@ -18,6 +18,14 @@ const CORE_ENV_VARS = [
   'CLAUDE_MODEL',
 ];
 
+function parseStringArray(val: unknown): string[] {
+  return Array.isArray(val) ? val.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function parseOptionalStringArray(val: unknown): string[] | undefined {
+  return Array.isArray(val) ? val.filter((v): v is string => typeof v === 'string') : undefined;
+}
+
 /** Validate and normalize a raw plugin.json object */
 export function parseManifest(raw: Record<string, unknown>): PluginManifest {
   if (!raw.name || typeof raw.name !== 'string') {
@@ -26,18 +34,10 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
   return {
     name: raw.name,
     description: typeof raw.description === 'string' ? raw.description : undefined,
-    containerEnvVars: Array.isArray(raw.containerEnvVars)
-      ? raw.containerEnvVars.filter((v): v is string => typeof v === 'string')
-      : [],
-    publicEnvVars: Array.isArray(raw.publicEnvVars)
-      ? raw.publicEnvVars.filter((v): v is string => typeof v === 'string')
-      : [],
-    hooks: Array.isArray(raw.hooks)
-      ? raw.hooks.filter((v): v is string => typeof v === 'string')
-      : [],
-    containerHooks: Array.isArray(raw.containerHooks)
-      ? raw.containerHooks.filter((v): v is string => typeof v === 'string')
-      : [],
+    containerEnvVars: parseStringArray(raw.containerEnvVars),
+    publicEnvVars: parseStringArray(raw.publicEnvVars),
+    hooks: parseStringArray(raw.hooks),
+    containerHooks: parseStringArray(raw.containerHooks),
     containerMounts: Array.isArray(raw.containerMounts)
       ? raw.containerMounts.filter(
           (v): v is { hostPath: string; containerPath: string } =>
@@ -49,12 +49,8 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
     dependencies: raw.dependencies === true,
     channelPlugin: raw.channelPlugin === true,
     authSkill: typeof raw.authSkill === 'string' ? raw.authSkill : undefined,
-    channels: Array.isArray(raw.channels)
-      ? raw.channels.filter((v): v is string => typeof v === 'string')
-      : undefined,
-    groups: Array.isArray(raw.groups)
-      ? raw.groups.filter((v): v is string => typeof v === 'string')
-      : undefined,
+    channels: parseOptionalStringArray(raw.channels),
+    groups: parseOptionalStringArray(raw.groups),
     version: typeof raw.version === 'string' ? raw.version : undefined,
     minCoreVersion: typeof raw.minCoreVersion === 'string' ? raw.minCoreVersion : undefined,
   };
