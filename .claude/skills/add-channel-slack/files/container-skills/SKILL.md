@@ -23,6 +23,8 @@ When users share files in Slack, they appear as `[type: /workspace/group/media/f
 
 You can react to messages with emoji using `mcp__nanoclaw__react`. Use the message ID from the `id` attribute on `<message>` tags in the conversation.
 
+Use Slack short names (not Unicode emoji): `thumbsup`, `heart`, `fire`, `eyes`, `white_check_mark`, `tada`, `thinking_face`, `rocket`, etc. Any valid Slack emoji name works, including custom workspace emoji.
+
 Good uses: acknowledge a request (thumbsup), show you found something funny (joy), confirm you've seen something (white_check_mark). Keep it natural.
 
 ## Agent Teams
