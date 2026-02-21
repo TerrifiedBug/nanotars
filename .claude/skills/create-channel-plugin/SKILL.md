@@ -374,6 +374,8 @@ export async function onChannel(ctx, config) {
    ```
    Append the media reference to the message content so the agent knows a file is attached: `` content = `[${type}: ${mediaPath}]` ``. If download fails and there's no text content, use a placeholder like `[image: download failed]`.
 
+   **Video thumbnails** (optional but recommended): Claude cannot view MP4 files directly. If the platform delivers videos or GIF-like content, extract a JPEG thumbnail frame using ffmpeg so the agent can preview it. Check for ffmpeg once at startup (`execFile('ffmpeg', ['-version'])`), cache the result, and extract the first frame: `ffmpeg -i video.mp4 -frames:v 1 -q:v 2 thumb.jpg`. Fall back to any embedded thumbnail the platform provides. For GIF-type videos, return `type: 'image'` pointing at the thumbnail. For regular videos, include both: `[video: ...mp4]\n[thumbnail: ...thumb.jpg]`. See the WhatsApp plugin for a reference implementation.
+
 8. **File Sending** (optional): Implement `sendFile(jid, buffer, mime, fileName, caption)` to let agents send files back to users. The MIME type tells you which platform API to use (image upload vs document upload). Agents access this via the `send_file` MCP tool — the router calls `routeOutboundFile()` which dispatches to your channel. If not implemented, `send_file` returns an error to the agent.
 
 9. **Reply Context** (optional but recommended): When users reply to a specific message, extract the quoted message's sender and text and pass as `reply_context` on the `NewMessage`. The agent sees this as `<reply to="sender">text</reply>` inside the message XML.

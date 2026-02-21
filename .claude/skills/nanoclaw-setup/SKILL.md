@@ -27,6 +27,7 @@ ls plugins/channels/*/plugin.json 2>/dev/null | head -1 | xargs -I{} sh -c '
 sqlite3 store/messages.db "SELECT COUNT(*) FROM registered_groups WHERE folder = 'main'" 2>/dev/null | grep -q "^[1-9]" && echo "MAIN_GROUP: registered" || echo "MAIN_GROUP: not_registered"
 grep -q "^TZ=" .env 2>/dev/null && echo "TIMEZONE: configured" || echo "TIMEZONE: not_set"
 [ -f ~/.config/nanoclaw/mount-allowlist.json ] && echo "MOUNT_ALLOWLIST: configured" || echo "MOUNT_ALLOWLIST: missing"
+which ffmpeg >/dev/null 2>&1 && echo "FFMPEG: installed" || echo "FFMPEG: not_installed (optional)"
 (pgrep -f 'node.*dist/index.js' >/dev/null 2>&1 || launchctl list 2>/dev/null | grep -q nanoclaw || systemctl is-active nanoclaw >/dev/null 2>&1) && echo "SERVICE: running" || echo "SERVICE: not_running"
 ```
 

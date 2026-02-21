@@ -114,6 +114,12 @@ Skills we'd love the community to build:
 - [Claude Code](https://claude.ai/download)
 - [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
 
+### Optional
+
+- **ffmpeg** — High-quality video/GIF thumbnail extraction for channel plugins. Without it, low-res previews from channel metadata are used.
+  - macOS: `brew install ffmpeg`
+  - Ubuntu/Debian: `sudo apt install ffmpeg`
+
 ## Architecture
 
 ```

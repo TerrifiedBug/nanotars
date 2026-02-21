@@ -1,6 +1,9 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
+import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
+
+const execFileAsync = promisify(execFile);
 
 import makeWASocket, {
   Browsers,
@@ -31,6 +34,10 @@ class WhatsAppChannel {
   /** @private */
   groupSyncTimerStarted = false;
   /** @private */
+  ffmpegAvailable = false;
+  /** @private */
+  ffmpegChecked = false;
+  /** @private */
   config;
   /** @private */
   logger;
@@ -53,6 +60,18 @@ class WhatsAppChannel {
 
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
 
+    if (!this.ffmpegChecked) {
+      this.ffmpegChecked = true;
+      try {
+        await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+        this.ffmpegAvailable = true;
+        this.logger.info('ffmpeg detected — video thumbnails enabled');
+      } catch {
+        this.ffmpegAvailable = false;
+        this.logger.warn('ffmpeg not found — video thumbnails will use low-res fallback');
+      }
+    }
+
     this.sock = makeWASocket({
       auth: {
         creds: state.creds,
@@ -61,6 +80,8 @@ class WhatsAppChannel {
       printQRInTerminal: false,
       logger: this.logger,
       browser: Browsers.macOS('Chrome'),
+      getMessage: async () => undefined,
+      syncFullHistory: false,
     });
 
     this.sock.ev.on('connection.update', (update) => {
@@ -248,9 +269,16 @@ class WhatsAppChannel {
               mediaType = media.type;
               mediaPath = media.path;
               mediaHostPath = media.hostPath;
-              content = content
-                ? `${content}\n[${media.type}: ${media.path}]`
-                : `[${media.type}: ${media.path}]`;
+              if (media.thumbnailPath) {
+                // Video with thumbnail — show both references so agent can preview
+                content = content
+                  ? `${content}\n[${media.type}: ${media.path}]\n[thumbnail: ${media.thumbnailPath}]`
+                  : `[${media.type}: ${media.path}]\n[thumbnail: ${media.thumbnailPath}]`;
+              } else {
+                content = content
+                  ? `${content}\n[${media.type}: ${media.path}]`
+                  : `[${media.type}: ${media.path}]`;
+              }
             } else if (!content) {
               // Media download failed and no caption — add placeholder so message isn't dropped
               const type = msg.message?.imageMessage ? 'image' : msg.message?.videoMessage ? 'video'
@@ -367,8 +395,43 @@ class WhatsAppChannel {
   }
 
   /**
+   * Extract a JPEG thumbnail from a video file.
+   * Tries ffmpeg first, falls back to Baileys' embedded jpegThumbnail.
+   * @private
+   * @returns {Promise<string|null>} Host path to thumbnail, or null on failure
+   */
+  async extractThumbnail(videoPath, thumbnailPath, jpegThumbnail) {
+    if (this.ffmpegAvailable) {
+      try {
+        await execFileAsync('ffmpeg', [
+          '-i', videoPath, '-frames:v', '1', '-q:v', '2', '-y', thumbnailPath,
+        ], { timeout: 10000 });
+        this.logger.debug({ thumbnailPath }, 'Thumbnail extracted via ffmpeg');
+        return thumbnailPath;
+      } catch (err) {
+        this.logger.warn({ err }, 'ffmpeg thumbnail extraction failed, trying fallback');
+      }
+    }
+
+    // Fallback: use Baileys' embedded low-res thumbnail
+    if (jpegThumbnail && Buffer.isBuffer(jpegThumbnail) && jpegThumbnail.length > 0) {
+      try {
+        fs.writeFileSync(thumbnailPath, jpegThumbnail);
+        this.logger.debug({ thumbnailPath }, 'Thumbnail written from Baileys jpegThumbnail');
+        return thumbnailPath;
+      } catch (err) {
+        this.logger.warn({ err }, 'Failed to write jpegThumbnail fallback');
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Download media from a WhatsApp message and save to the group's media directory.
    * Returns a container-relative path reference, or null if no media or download failed.
+   * For videos, extracts a JPEG thumbnail so the agent can preview the content.
+   * For GIFs (gifPlayback videos), returns the thumbnail as an image instead.
    * @private
    */
   async downloadMedia(msg, groupFolder) {
@@ -393,6 +456,33 @@ class WhatsAppChannel {
         fs.writeFileSync(filePath, buffer);
 
         this.logger.info({ groupFolder, type: mt.type, filename }, 'Media downloaded');
+
+        // Extract thumbnail for video messages
+        if (mt.key === 'videoMessage') {
+          const thumbFilename = `${msg.key.id}-thumb.jpg`;
+          const thumbPath = path.join(mediaDir, thumbFilename);
+          const thumbResult = await this.extractThumbnail(
+            filePath, thumbPath, mediaMsg.jpegThumbnail,
+          );
+
+          if (thumbResult) {
+            const containerThumbPath = `/workspace/group/media/${thumbFilename}`;
+            if (mediaMsg.gifPlayback) {
+              // GIF: present thumbnail as image so the agent can view it
+              this.logger.info({ groupFolder, filename: thumbFilename }, 'GIF thumbnail extracted as image');
+              return { path: containerThumbPath, hostPath: thumbResult, type: 'image' };
+            }
+            // Regular video: include both video and thumbnail
+            this.logger.info({ groupFolder, filename: thumbFilename }, 'Video thumbnail extracted');
+            return {
+              path: `/workspace/group/media/${filename}`,
+              hostPath: filePath,
+              type: 'video',
+              thumbnailPath: containerThumbPath,
+            };
+          }
+        }
+
         return { path: `/workspace/group/media/${filename}`, hostPath: filePath, type: mt.type };
       } catch (err) {
         this.logger.warn({ err, msgId: msg.key.id, type: mt.type }, 'Failed to download media');

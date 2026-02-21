@@ -17,6 +17,16 @@ Use this when:
 
 When users send images, voice notes, videos, or documents, they appear as `[type: /workspace/group/media/filename]` in the message. The file is available at that path for you to read or process.
 
+**GIFs:** WhatsApp converts GIFs to MP4 video. These appear as `[image: /workspace/group/media/msgid-thumb.jpg]` — a thumbnail frame extracted from the GIF. Use the Read tool to view it like any image.
+
+**Videos:** Videos appear as `[video: /workspace/group/media/msgid.mp4]` followed by `[thumbnail: /workspace/group/media/msgid-thumb.jpg]`. The MP4 cannot be viewed directly, but you can read the thumbnail to see a preview frame of the video.
+
+## Reactions
+
+You can react to messages with emoji using `mcp__nanoclaw__react`. Use the message ID from the `id` attribute on `<message>` tags in the conversation.
+
+Good uses: acknowledge a request (👍), show you found something funny (😂), confirm you've seen something (✅). Keep it natural — don't react to every message.
+
 ## Platform notes
 
 - Messages are plain text only (no markdown rendering)

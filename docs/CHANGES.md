@@ -282,6 +282,18 @@ Upstream only handles text messages. This fork adds core support for media in th
 
 Channel plugins implement the download logic. Host-side plugin hooks (`onInboundMessage`) can transform media before it reaches the agent (e.g., transcription).
 
+### Video thumbnail extraction
+
+When users send videos or GIFs via WhatsApp, the agent receives an MP4 file that Claude cannot view directly. The WhatsApp channel plugin now extracts a JPEG thumbnail frame from video messages so agents can "see" the content.
+
+**How it works:**
+- On startup, the plugin checks for `ffmpeg` availability (cached, checked once)
+- When a video message arrives, `extractThumbnail()` runs `ffmpeg -frames:v 1` to grab the first frame as a high-quality JPEG
+- Falls back to Baileys' embedded `jpegThumbnail` (low-res ~100px) when ffmpeg is not installed
+- **GIFs** (WhatsApp converts to MP4 with `gifPlayback: true`): presented as `[image: ...thumb.jpg]` so the agent treats it as a viewable image
+- **Regular videos**: presented as `[video: ...mp4]\n[thumbnail: ...thumb.jpg]` so the agent can preview without viewing the MP4
+- ffmpeg is an optional host dependency — the feature degrades gracefully without it
+
 ### How file sending works
 
 1. Agent calls `send_file` MCP tool with a path inside `/workspace/`
