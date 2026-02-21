@@ -3,5 +3,6 @@
   "description": "Website change monitoring via changedetection.io",
   "containerEnvVars": ["CHANGEDETECTION_URL", "CHANGEDETECTION_API_KEY"],
   "publicEnvVars": ["CHANGEDETECTION_URL"],
-  "hooks": []
+  "hooks": [],
+  "version": "1.0.0"
 }

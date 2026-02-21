@@ -3,5 +3,6 @@
   "description": "Voice message transcription via OpenAI Whisper",
   "containerEnvVars": [],
   "hooks": ["onInboundMessage"],
-  "dependencies": true
+  "dependencies": true,
+  "version": "1.0.0"
 }

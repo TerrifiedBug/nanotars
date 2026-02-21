@@ -283,6 +283,7 @@ Reference templates for each plugin archetype. Use these as the structural found
 {
   "name": "{name}",
   "description": "{DESCRIPTION}",
+  "version": "1.0.0",
   "containerEnvVars": [],
   "hooks": [],
   "channels": ["*"],
@@ -365,6 +366,7 @@ python3 /workspace/.claude/skills/{name}/scripts/{name}.py [args]
 {
   "name": "{name}",
   "description": "{DESCRIPTION}",
+  "version": "1.0.0",
   "containerEnvVars": ["{SERVICE_URL_VAR}", "{SERVICE_TOKEN_VAR}"],
   "publicEnvVars": ["{SERVICE_URL_VAR}"],
   "hooks": [],
@@ -457,6 +459,7 @@ curl -s -X POST "${SERVICE_URL_VAR}/api/{resource}" \
 {
   "name": "{name}",
   "description": "{DESCRIPTION}",
+  "version": "1.0.0",
   "containerEnvVars": ["{ENV_VARS_AGENTS_NEED}"],
   "hooks": ["onStartup", "onShutdown"],
   "channels": ["*"],
@@ -571,6 +574,7 @@ export async function onShutdown() {
 {
   "name": "{name}",
   "description": "{DESCRIPTION}",
+  "version": "1.0.0",
   "containerEnvVars": ["{SERVICE_URL_VAR}"],
   "containerHooks": ["hooks/{event-name}.js"],
   "hooks": [],
@@ -708,6 +712,7 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
 {
   "name": "string (required) — plugin identifier, used for directory and logging",
   "description": "string — human-readable description",
+  "version": "string — semver version (e.g. \"1.0.0\"). Used by /nanoclaw-update to detect plugin updates",
   "containerEnvVars": ["string — env var NAMES from .env to pass into agent containers"],
   "publicEnvVars": ["string — subset of containerEnvVars whose values are safe to appear in chat (exempt from secret redaction). Defaults to [] — all values redacted. Use for non-secret config like URLs."],
   "hooks": ["string — host-side hook function names exported from index.js. Valid: onStartup, onShutdown, onInboundMessage, onChannel"],

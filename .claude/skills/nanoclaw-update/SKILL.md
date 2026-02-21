@@ -1,75 +1,60 @@
 ---
 name: nanoclaw-update
-description: Efficiently bring upstream NanoClaw updates into a customized install, with preview, selective cherry-pick, and low token usage.
+description: Pull updates from the nanoclaw fork, preview core and plugin changes, and optionally update installed plugins.
 ---
 
-> **Future goal:** As NanoClaw's upstream adopts the plugin architecture, customizations will live entirely in `plugins/`, `groups/`, `.claude/skills/`, and `.env` — all gitignored. When that's achieved, upstream updates become a simple `git pull` with zero conflicts. Until then, this skill provides safe merge/cherry-pick/rebase options.
+> **Plugin architecture means most customizations live in gitignored directories** (`plugins/`, `groups/`, `.env`). Fork updates should always be clean merges — if conflicts arise, something is wrong with the fork and the update should be aborted.
 
 # About
 
-Your NanoClaw fork drifts from upstream as you customize it. This skill pulls upstream changes into your install without losing your modifications.
+Your NanoClaw installation (nanotars) tracks the fork at `TerrifiedBug/nanoclaw`. This skill fetches from the fork, shows you exactly what would change — both code and plugins — then lets you decide whether to apply the update.
 
 Run `/nanoclaw-update` in Claude Code.
 
 ## How it works
 
-**Preflight**: checks for clean working tree (`git status --porcelain`). If `upstream` remote is missing, asks you for the URL (defaults to `https://github.com/qwibitai/nanoclaw.git`) and adds it. Detects the upstream branch name (`main` or `master`).
+**Fetch & assess**: checks for clean working tree, fetches from `nanoclaw` remote, then shows a full preview of what changed — commits, file categories, and plugin version differences. You see everything before any merge happens.
 
-**Backup**: creates a timestamped backup branch and tag (`backup/pre-update-<hash>-<timestamp>`, `pre-update-<hash>-<timestamp>`) before touching anything. Safe to run multiple times.
+**Merge**: `git merge nanoclaw/main --no-edit`. This should always be clean. If conflicts arise, the merge is aborted — conflicts mean the fork has diverged and needs to be fixed first.
 
-**Preview**: runs `git log` and `git diff` against the merge base to show upstream changes since your last sync. Groups changed files into categories:
-- **Skills** (`.claude/skills/`): unlikely to conflict unless you edited an upstream skill
-- **Source** (`src/`): may conflict if you modified the same files
-- **Build/config** (`package.json`, `tsconfig*.json`, `container/`): review needed
+**Plugin updates**: after merge, if any skill templates have newer versions than installed plugins, offers to update them (copies template files, preserves your group/channel scoping).
 
-**Update paths** (you pick one):
-- `merge` (default): `git merge upstream/<branch>`. Resolves all conflicts in one pass.
-- `cherry-pick`: `git cherry-pick <hashes>`. Pull in only the commits you want.
-- `rebase`: `git rebase upstream/<branch>`. Linear history, but conflicts resolve per-commit.
-- `abort`: just view the changelog, change nothing.
-
-**Conflict preview**: before merging, runs a dry-run (`git merge --no-commit --no-ff`) to show which files would conflict. You can still abort at this point.
-
-**Conflict resolution**: opens only conflicted files, resolves the conflict markers, keeps your local customizations intact.
-
-**Validation**: runs `npm run build` and `npm test`.
+**Validation**: `npm run build` to confirm nothing broke.
 
 ## Rollback
 
-The backup tag is printed at the end of each run:
+A backup tag is created before any changes:
 ```
 git reset --hard pre-update-<hash>-<timestamp>
 ```
 
-Backup branch `backup/pre-update-<hash>-<timestamp>` also exists.
-
 ## Token usage
 
-Only opens files with actual conflicts. Uses `git log`, `git diff`, and `git status` for everything else. Does not scan or refactor unrelated code.
+Uses `git log`, `git diff`, and `git status` for previews. Plugin version comparison reads only `plugin.json` files. Does not open or scan unrelated code.
 
 ---
 
 # Goal
-Help a user with a customized NanoClaw install safely incorporate upstream changes without a fresh reinstall and without blowing tokens.
+Help a user safely pull fork updates into their NanoClaw installation, with full preview of both code and plugin changes before committing to anything.
 
 # Quick Update (try first)
 
 For installs where customizations live in gitignored directories:
 
 ```bash
-git fetch upstream
-git merge upstream/$UPSTREAM_BRANCH --no-edit
+git fetch nanoclaw
+git merge nanoclaw/main --no-edit
 npm run build
 ```
 
-If the merge succeeds cleanly, skip directly to Step 5 (Validation). If conflicts arise, proceed to the detailed flow below.
+If the merge succeeds cleanly, skip directly to Step 5 (Validation). If conflicts arise, abort the merge and tell the user — do not attempt conflict resolution.
 
 # Operating principles
 - Never proceed with a dirty working tree.
 - Always create a rollback point (backup branch + tag) before touching anything.
-- Prefer git-native operations (fetch, merge, cherry-pick). Do not manually rewrite files except conflict markers.
-- Default to MERGE (one-pass conflict resolution). Offer REBASE as an explicit option.
-- Keep token usage low: rely on `git status`, `git log`, `git diff`, and open only conflicted files.
+- **Fetch-then-assess**: always show the user what would change (code + plugins) before performing any merge.
+- **Conflicts = abort**: nanotars should always be a clean superset of the fork. If the merge produces conflicts, something is wrong with the fork — abort the merge (`git merge --abort`), explain the situation, and stop. Do not attempt to resolve conflicts.
+- Keep token usage low: rely on `git status`, `git log`, `git diff`, and only read `plugin.json` files for version comparison.
 
 # Step 0: Preflight (stop early if unsafe)
 Run:
@@ -79,20 +64,19 @@ If output is non-empty:
 
 Confirm remotes:
 - `git remote -v`
-If `upstream` is missing:
-- Ask the user for the upstream repo URL (default: `https://github.com/qwibitai/nanoclaw.git`).
-- Add it: `git remote add upstream <user-provided-url>`
-- Then: `git fetch upstream --prune`
+If `nanoclaw` remote is missing:
+- Ask the user for the fork repo URL (default: `https://github.com/TerrifiedBug/nanoclaw.git`).
+- Add it: `git remote add nanoclaw <url>`
 
-Determine the upstream branch name:
-- `git branch -r | grep upstream/`
-- If `upstream/main` exists, use `main`.
-- If only `upstream/master` exists, use `master`.
+Determine the fork branch name:
+- `git branch -r | grep nanoclaw/`
+- If `nanoclaw/main` exists, use `main`.
+- If only `nanoclaw/master` exists, use `master`.
 - Otherwise, ask the user which branch to use.
-- Store this as UPSTREAM_BRANCH for all subsequent commands. Every command below that references `upstream/main` should use `upstream/$UPSTREAM_BRANCH` instead.
+- Store this as FORK_BRANCH for all subsequent commands.
 
 Fetch:
-- `git fetch upstream --prune`
+- `git fetch nanoclaw --prune`
 
 # Step 1: Create a safety net
 Capture current state:
@@ -105,85 +89,85 @@ Create backup branch and tag (using timestamp to avoid collisions on retry):
 
 Save the tag name for later reference in the summary and rollback instructions.
 
-# Step 2: Preview what upstream changed (no edits yet)
+# Step 2: Preview what the fork changed (no edits yet)
+
+## 2a: Core code preview
+
 Compute common base:
-- `BASE=$(git merge-base HEAD upstream/$UPSTREAM_BRANCH)`
+- `BASE=$(git merge-base HEAD nanoclaw/$FORK_BRANCH)`
 
-Show upstream commits since BASE:
-- `git log --oneline $BASE..upstream/$UPSTREAM_BRANCH`
+Show fork commits since BASE:
+- `git log --oneline $BASE..nanoclaw/$FORK_BRANCH`
 
-Show local commits since BASE (custom drift):
+Show local commits since BASE (nanotars-only drift):
 - `git log --oneline $BASE..HEAD`
 
-Show file-level impact from upstream:
-- `git diff --name-only $BASE..upstream/$UPSTREAM_BRANCH`
+Show file-level impact from fork:
+- `git diff --name-only $BASE..nanoclaw/$FORK_BRANCH`
 
-Bucket the upstream changed files:
-- **Skills** (`.claude/skills/`): unlikely to conflict unless the user edited an upstream skill
-- **Source** (`src/`): may conflict if user modified the same files
-- **Build/config** (`package.json`, `package-lock.json`, `tsconfig*.json`, `container/`): review needed
+Bucket the fork changed files:
+- **Source** (`src/`): core code changes
+- **Skills** (`.claude/skills/`): skill template updates — may include plugin version bumps
+- **Build/config** (`package.json`, `package-lock.json`, `tsconfig*.json`, `container/`): build system changes
 - **Other**: docs, tests, misc
 
-Present these buckets to the user and ask them to choose one path using AskUserQuestion:
-- A) **Full update**: merge all upstream changes
-- B) **Selective update**: cherry-pick specific upstream commits
-- C) **Abort**: they only wanted the preview
-- D) **Rebase mode**: advanced, linear history (warn: resolves conflicts per-commit)
+## 2b: Plugin version preview
+
+Before any merge, compare what the fork's skill templates would bring vs what's currently installed. This shows the user plugin updates as part of the preview.
+
+For each `.claude/skills/add-skill-*/files/plugin.json` and `add-channel-*/files/plugin.json` **in the fork** (use `git show nanoclaw/$FORK_BRANCH:<path>` to read without checking out):
+
+1. Read the template's `plugin.json` from the fork: `git show nanoclaw/$FORK_BRANCH:.claude/skills/<skill>/files/plugin.json`
+2. Get the `name` and `version` fields
+3. Find matching installed plugin under `plugins/` (match by `name` field in the installed `plugin.json`)
+4. If installed plugin exists and has a `version` field, compare versions
+5. If fork template version > installed version → flag as "update available"
+6. If installed plugin has no `version` field → flag as "version tracking now available"
+
+## 2c: Conflict check
+
+Dry-run merge to check for conflicts. Run as a single chained command so the abort always executes:
+```
+git merge --no-commit --no-ff nanoclaw/$FORK_BRANCH; CONFLICTS=$(git diff --name-only --diff-filter=U); git merge --abort
+```
+
+## 2d: Present combined summary
+
+```
+Fork update preview:
+  Core: X commits, Y files changed
+    - src/: A files
+    - .claude/skills/: B files
+    - container/: C files
+    - other: D files
+
+  Conflicts: none (clean merge) ← or list conflicted files
+
+  Plugin updates available:
+    - weather: 1.0.0 → 1.1.0
+    - brave-search: 1.0.0 → 1.2.0
+
+  New skill templates (not installed):
+    - some-new-skill: available to install via /add-skill-some-new-skill
+```
+
+**If conflicts were detected**: tell the user the merge cannot proceed because the fork has diverged from nanotars. This needs to be fixed on the fork side first. List the conflicting files. **Stop here — do not offer to merge.**
+
+**If no conflicts**: ask the user to choose using AskUserQuestion:
+- A) **Apply update**: merge all fork changes
+- B) **Abort**: they only wanted the preview
 
 If Abort: stop here.
 
-# Step 3: Conflict preview (before committing anything)
-If Full update or Rebase:
-- Dry-run merge to preview conflicts. Run these as a single chained command so the abort always executes:
-  ```
-  git merge --no-commit --no-ff upstream/$UPSTREAM_BRANCH; git diff --name-only --diff-filter=U; git merge --abort
-  ```
-- If conflicts were listed: show them and ask user if they want to proceed.
-- If no conflicts: tell user it is clean and proceed.
-
-# Step 4A: Full update (MERGE, default)
+# Step 3: Apply update (MERGE)
 Run:
-- `git merge upstream/$UPSTREAM_BRANCH --no-edit`
+- `git merge nanoclaw/$FORK_BRANCH --no-edit`
 
-If conflicts occur:
-- Run `git status` and identify conflicted files.
-- For each conflicted file:
-  - Open the file.
-  - Resolve only conflict markers.
-  - Preserve intentional local customizations.
-  - Incorporate upstream fixes/improvements.
-  - Do not refactor surrounding code.
-  - `git add <file>`
-- When all resolved:
-  - If merge did not auto-commit: `git commit --no-edit`
+The merge should succeed cleanly (conflicts were already checked in Step 2c). If it somehow fails:
+- `git merge --abort`
+- Tell the user the merge failed and stop.
 
-# Step 4B: Selective update (CHERRY-PICK)
-If user chose Selective:
-- Recompute BASE if needed: `BASE=$(git merge-base HEAD upstream/$UPSTREAM_BRANCH)`
-- Show commit list again: `git log --oneline $BASE..upstream/$UPSTREAM_BRANCH`
-- Ask user which commit hashes they want.
-- Apply: `git cherry-pick <hash1> <hash2> ...`
-
-If conflicts during cherry-pick:
-- Resolve only conflict markers, then:
-  - `git add <file>`
-  - `git cherry-pick --continue`
-If user wants to stop:
-  - `git cherry-pick --abort`
-
-# Step 4C: Rebase (only if user explicitly chose option D)
-Run:
-- `git rebase upstream/$UPSTREAM_BRANCH`
-
-If conflicts:
-- Resolve conflict markers only, then:
-  - `git add <file>`
-  - `git rebase --continue`
-If it gets messy (more than 3 rounds of conflicts):
-  - `git rebase --abort`
-  - Recommend merge instead.
-
-# Step 5: Validation
+# Step 4: Validation
 Run:
 - `npm run build`
 - `npm test` (do not fail the flow if tests are not configured)
@@ -194,17 +178,51 @@ If build fails:
 - Do not refactor unrelated code.
 - If unclear, ask the user before making changes.
 
+# Step 5: Plugin updates (after successful merge + build)
+
+Now that the fork code is merged and built, apply plugin updates if any were detected in Step 2b.
+
+Re-scan the local (now merged) skill templates vs installed plugins to confirm version differences:
+
+For each `.claude/skills/add-skill-*/files/plugin.json` and `add-channel-*/files/plugin.json`:
+1. Read the template's `plugin.json` → get `name` and `version`
+2. Find matching installed plugin under `plugins/` or `plugins/channels/` by `name` field
+3. Compare versions (semver string comparison)
+4. If template version > installed version → add to update list
+
+If updates are available, present them:
+```
+Plugin updates available after merge:
+  - weather: 1.0.0 → 1.1.0
+  - brave-search: 1.0.0 → 1.2.0
+
+Would you like to update these plugins? (Updates copy template files over installed plugin directories, preserving your group/channel scoping.)
+```
+
+If user says yes, for each plugin to update:
+1. Read the installed `plugin.json` to capture current `channels` and `groups` arrays (user scoping)
+2. Copy all files from the skill template directory (`.claude/skills/add-skill-<name>/files/`) over the installed plugin directory (`plugins/<name>/`)
+3. Re-apply the preserved `channels` and `groups` arrays to the new `plugin.json` (overwrite what the template set)
+4. If the plugin has `dependencies: true`, run `npm install` in the plugin directory
+5. Report what was updated
+
+If user says no, skip — they can update individual plugins later via their `/add-skill-*` skills.
+
 # Step 6: Summary + rollback instructions
 Show:
 - Backup tag: the tag name created in Step 1
 - New HEAD: `git rev-parse --short HEAD`
-- Upstream HEAD: `git rev-parse --short upstream/$UPSTREAM_BRANCH`
-- Conflicts resolved (list files, if any)
-- Remaining local diff vs upstream: `git diff --name-only upstream/$UPSTREAM_BRANCH..HEAD`
+- Fork HEAD: `git rev-parse --short nanoclaw/$FORK_BRANCH`
+- Remaining local diff vs fork: `git diff --name-only nanoclaw/$FORK_BRANCH..HEAD`
+
+Update summary:
+- **Core code**: "X files changed in src/, container/, etc."
+- **Skill templates**: "Y skill templates updated in .claude/skills/"
+- **Plugins updated**: list plugins that were updated (or "none — user deferred" / "none — all up to date")
 
 Tell the user:
 - To rollback: `git reset --hard <backup-tag-from-step-1>`
 - Backup branch also exists: `backup/pre-update-<HASH>-<TIMESTAMP>`
-- Restart the service to apply changes:
-  - If using launchd: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist && launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist`
+- If plugins were updated or core code changed, restart the service:
+  - If using systemd: `sudo systemctl restart nanoclaw`
   - If running manually: restart `npm run dev`

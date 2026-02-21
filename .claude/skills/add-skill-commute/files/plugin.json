@@ -2,5 +2,6 @@
   "name": "commute",
   "description": "Travel time via Waze live traffic data",
   "containerEnvVars": [],
-  "hooks": []
+  "hooks": [],
+  "version": "1.0.0"
 }

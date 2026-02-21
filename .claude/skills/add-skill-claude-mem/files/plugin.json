@@ -4,5 +4,6 @@
   "containerEnvVars": ["CLAUDE_MEM_URL"],
   "publicEnvVars": ["CLAUDE_MEM_URL"],
   "containerHooks": ["hooks/post-tool-use.js"],
-  "hooks": []
+  "hooks": [],
+  "version": "1.0.0"
 }

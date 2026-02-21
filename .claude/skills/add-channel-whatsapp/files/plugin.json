@@ -3,5 +3,6 @@
   "description": "WhatsApp channel via Baileys",
   "hooks": ["onChannel"],
   "channelPlugin": true,
-  "dependencies": true
+  "dependencies": true,
+  "version": "1.0.0"
 }

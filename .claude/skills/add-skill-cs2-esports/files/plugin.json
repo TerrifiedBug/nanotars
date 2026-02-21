@@ -4,5 +4,6 @@
   "containerEnvVars": [],
   "hooks": [],
   "channels": ["*"],
-  "groups": ["*"]
+  "groups": ["*"],
+  "version": "1.0.0"
 }

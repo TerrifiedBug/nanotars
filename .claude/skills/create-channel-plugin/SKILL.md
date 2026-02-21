@@ -224,6 +224,7 @@ This is how the agent knows whether to attempt `send_file` or fall back to inlin
 {
   "name": "{name}",
   "description": "{Platform} channel via {library}",
+  "version": "1.0.0",
   "hooks": ["onChannel"],
   "channelPlugin": true,
   "dependencies": true,

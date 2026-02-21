@@ -5,5 +5,6 @@
   "containerMounts": [
     {"hostPath": "data/gogcli", "containerPath": "/home/node/.config/gogcli"}
   ],
-  "hooks": []
+  "hooks": [],
+  "version": "1.0.0"
 }

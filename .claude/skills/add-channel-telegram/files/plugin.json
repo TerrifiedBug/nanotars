@@ -4,5 +4,6 @@
   "hooks": ["onChannel"],
   "channelPlugin": true,
   "containerEnvVars": ["TELEGRAM_BOT_TOKEN"],
-  "dependencies": true
+  "dependencies": true,
+  "version": "1.0.0"
 }

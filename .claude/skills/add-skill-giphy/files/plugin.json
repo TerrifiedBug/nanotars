@@ -4,5 +4,6 @@
   "containerEnvVars": ["GIPHY_API_KEY"],
   "hooks": [],
   "channels": ["*"],
-  "groups": ["*"]
+  "groups": ["*"],
+  "version": "1.0.0"
 }

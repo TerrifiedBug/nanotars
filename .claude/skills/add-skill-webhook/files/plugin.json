@@ -3,5 +3,6 @@
   "description": "HTTP webhook endpoint for external event ingestion (HA, uptime monitors, changedetection, etc.)",
   "containerEnvVars": ["NANOCLAW_WEBHOOK_URL"],
   "publicEnvVars": ["NANOCLAW_WEBHOOK_URL"],
-  "hooks": ["onStartup", "onShutdown"]
+  "hooks": ["onStartup", "onShutdown"],
+  "version": "1.0.0"
 }

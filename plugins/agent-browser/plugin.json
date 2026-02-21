@@ -3,5 +3,6 @@
   "description": "Browser automation with agent-browser CLI (Playwright-based)",
   "hooks": [],
   "channels": ["*"],
-  "groups": ["*"]
+  "groups": ["*"],
+  "version": "1.0.0"
 }

@@ -21,6 +21,7 @@ This document describes all changes made in this fork compared to the upstream [
 11. [Minor Improvements](#11-minor-improvements) — Typing indicators, read receipts
 12. [Admin Dashboard](#12-admin-dashboard) — Web UI for monitoring and management
 13. [Agent Identity System](#13-agent-identity-system) — IDENTITY.md personality support
+14. [Plugin Versioning & Update System](#14-plugin-versioning--update-system) — Semver tracking, fork-based updates
 
 ---
 
@@ -46,6 +47,7 @@ Plugins live in `plugins/` with a `plugin.json` manifest. Skill plugin example:
 {
   "name": "brave-search",
   "description": "Web search via Brave Search API",
+  "version": "1.0.0",
   "containerEnvVars": ["BRAVE_API_KEY"],
   "hooks": []
 }
@@ -57,6 +59,7 @@ Channel plugin example:
 {
   "name": "whatsapp",
   "description": "WhatsApp via Baileys",
+  "version": "1.0.0",
   "hooks": ["onChannel"],
   "channelPlugin": true,
   "dependencies": true
@@ -583,6 +586,46 @@ The `nanoclaw-add-group` skill now offers optional per-group personality customi
 
 ---
 
+## 14. Plugin Versioning & Update System
+
+All plugins now include a `"version"` field in their `plugin.json` manifest (semver format, e.g. `"1.0.0"`). This enables the update skill to detect when skill templates have newer versions than installed plugins.
+
+### What was added
+
+| Change | Details |
+|--------|---------|
+| **Version field** | `"version": "1.0.0"` added to all 47 plugin.json files (21 installed plugins, 25 skill templates, 1 channel plugin) |
+| **Create-plugin templates** | `create-skill-plugin` and `create-channel-plugin` SKILL.md files updated — all archetype templates and the schema reference now include `"version"` |
+| **Update skill rework** | `nanoclaw-update` completely rewritten for fork-based workflow with plugin version detection |
+
+### How plugin versioning works
+
+- Each `plugin.json` has a `"version": "1.0.0"` field
+- Skill templates under `.claude/skills/add-*/files/` are the "source of truth" for the latest version
+- Installed plugins under `plugins/` may lag behind if the user hasn't re-run the installer
+- The `/nanoclaw-update` skill compares template versions vs installed versions after fetching fork updates
+
+### Update skill rework
+
+The `nanoclaw-update` skill was rewritten with three key changes:
+
+1. **Fork-based**: pulls from `nanoclaw` remote (`TerrifiedBug/nanoclaw`) instead of `upstream` (`qwibitai/nanoclaw`), since nanotars tracks the fork
+2. **Fetch-then-assess**: fetches first, then shows a combined preview of core code changes AND plugin version differences before asking whether to proceed — the user sees everything that would change before committing to the merge
+3. **Plugin update flow**: after merge, compares template versions vs installed plugins, offers to update outdated plugins while preserving user's group/channel scoping
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `plugins/*/plugin.json` (21 files) | Added `"version": "1.0.0"` |
+| `plugins/channels/whatsapp/plugin.json` | Added `"version": "1.0.0"` |
+| `.claude/skills/add-*/files/plugin.json` (25 files) | Added `"version": "1.0.0"` |
+| `.claude/skills/create-skill-plugin/SKILL.md` | Added `"version"` to all 4 archetype templates + schema reference |
+| `.claude/skills/create-channel-plugin/SKILL.md` | Added `"version"` to channel plugin template |
+| `.claude/skills/nanoclaw-update/SKILL.md` | Complete rewrite: fork remote, fetch-then-assess, plugin version check |
+
+---
+
 ### Key architectural differences
 
 | Aspect | Upstream | This Fork |
@@ -595,4 +638,5 @@ The `nanoclaw-add-group` skill now offers optional per-group personality customi
 | Security | Trust-based (one user) | Defense-in-depth (secret isolation, Bash hooks, IPC auth, resource limits, path traversal defense, pre-install security audits) |
 | Setup | Shell scripts hardcoding WhatsApp | Channel-agnostic SKILL.md with plugin detection |
 | Scheduled tasks | Single model, silent failures | Per-task model selection, error notifications, atomic claiming |
+| Updates | Manual `git pull` from upstream | Fetch-then-assess from fork with plugin version comparison |
 

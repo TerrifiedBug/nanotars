@@ -3,5 +3,6 @@
   "description": "n8n workflow automation integration",
   "containerEnvVars": ["N8N_URL", "N8N_API_KEY", "NANOCLAW_WEBHOOK_URL", "NANOCLAW_WEBHOOK_SECRET"],
   "publicEnvVars": ["N8N_URL", "NANOCLAW_WEBHOOK_URL"],
-  "hooks": []
+  "hooks": [],
+  "version": "1.0.0"
 }
