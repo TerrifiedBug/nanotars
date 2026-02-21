@@ -18,6 +18,27 @@ import { RegisteredGroup } from './types.js';
 /** Max file size for send_file (64 MB) */
 const SEND_FILE_MAX_SIZE = 64 * 1024 * 1024;
 
+/** Move a failed IPC file to the errors directory. */
+function quarantineFile(filePath: string, sourceGroup: string, fileName: string, ipcBaseDir: string): void {
+  const errorDir = path.join(ipcBaseDir, 'errors');
+  fs.mkdirSync(errorDir, { recursive: true });
+  fs.renameSync(filePath, path.join(errorDir, `${sourceGroup}-${fileName}`));
+}
+
+/** Check if a source group is authorized to act on a target JID. */
+function isAuthorizedForJid(
+  chatJid: string,
+  registeredGroups: Record<string, RegisteredGroup>,
+  sourceGroup: string,
+  isMain: boolean,
+  action: string,
+): boolean {
+  const targetGroup = registeredGroups[chatJid];
+  if (isMain || (targetGroup && targetGroup.folder === sourceGroup)) return true;
+  logger.warn({ chatJid, sourceGroup }, `Unauthorized IPC ${action} attempt blocked`);
+  return false;
+}
+
 /** Infer MIME type from file extension */
 function mimeFromExtension(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -94,93 +115,53 @@ export function startIpcWatcher(deps: IpcDeps): void {
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
               if (data.type === 'message' && data.chatJid && data.text) {
-                // Authorization: verify this group can send to this chatJid
-                const targetGroup = registeredGroups[data.chatJid];
-                if (
-                  isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
-                ) {
-                  await deps.sendMessage(data.chatJid, data.text, data.sender, data.replyTo as string | undefined);
-                  logger.info(
-                    { chatJid: data.chatJid, sourceGroup },
-                    'IPC message sent',
-                  );
-                } else {
-                  logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
-                    'Unauthorized IPC message attempt blocked',
-                  );
-                }
+                if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'message')) continue;
+                await deps.sendMessage(data.chatJid, data.text, data.sender, data.replyTo as string | undefined);
+                logger.info(
+                  { chatJid: data.chatJid, sourceGroup },
+                  'IPC message sent',
+                );
               } else if (data.type === 'send_file' && data.chatJid && data.filePath) {
-                // Authorization: same as message
-                const targetGroup = registeredGroups[data.chatJid];
-                if (
-                  isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
-                ) {
-                  // Translate container path to host path
-                  // Container /workspace/group/... → host groups/{folder}/...
-                  let hostPath = data.filePath as string;
-                  if (hostPath.startsWith('/workspace/group/')) {
-                    hostPath = path.join(GROUPS_DIR, sourceGroup, hostPath.slice('/workspace/group/'.length));
-                  }
+                if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'send_file')) continue;
+                // Translate container path to host path
+                // Container /workspace/group/... → host groups/{folder}/...
+                let hostPath = data.filePath as string;
+                if (hostPath.startsWith('/workspace/group/')) {
+                  hostPath = path.join(GROUPS_DIR, sourceGroup, hostPath.slice('/workspace/group/'.length));
+                }
 
-                  if (!fs.existsSync(hostPath)) {
-                    logger.warn({ hostPath, sourceGroup }, 'send_file: file not found');
-                  } else {
-                    const stat = fs.statSync(hostPath);
-                    if (!stat.isFile()) {
-                      logger.warn({ hostPath, sourceGroup }, 'send_file: not a regular file');
-                    } else if (stat.size > SEND_FILE_MAX_SIZE) {
-                      logger.warn({ hostPath, size: stat.size, sourceGroup }, 'send_file: file too large (64MB limit)');
-                    } else {
-                      const buffer = fs.readFileSync(hostPath);
-                      const mime = mimeFromExtension(hostPath);
-                      const fileName = (data.fileName as string) || path.basename(hostPath);
-                      const caption = data.caption as string | undefined;
-                      await deps.sendFile(data.chatJid, buffer, mime, fileName, caption);
-                      logger.info(
-                        { chatJid: data.chatJid, fileName, mime, size: stat.size, sourceGroup },
-                        'IPC file sent',
-                      );
-                    }
-                  }
+                if (!fs.existsSync(hostPath)) {
+                  logger.warn({ hostPath, sourceGroup }, 'send_file: file not found');
                 } else {
-                  logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
-                    'Unauthorized IPC send_file attempt blocked',
-                  );
+                  const stat = fs.statSync(hostPath);
+                  if (!stat.isFile()) {
+                    logger.warn({ hostPath, sourceGroup }, 'send_file: not a regular file');
+                  } else if (stat.size > SEND_FILE_MAX_SIZE) {
+                    logger.warn({ hostPath, size: stat.size, sourceGroup }, 'send_file: file too large (64MB limit)');
+                  } else {
+                    const buffer = fs.readFileSync(hostPath);
+                    const mime = mimeFromExtension(hostPath);
+                    const fileName = (data.fileName as string) || path.basename(hostPath);
+                    const caption = data.caption as string | undefined;
+                    await deps.sendFile(data.chatJid, buffer, mime, fileName, caption);
+                    logger.info(
+                      { chatJid: data.chatJid, fileName, mime, size: stat.size, sourceGroup },
+                      'IPC file sent',
+                    );
+                  }
                 }
               } else if (data.type === 'react' && data.chatJid && data.messageId && data.emoji) {
-                const targetGroup = registeredGroups[data.chatJid];
-                if (
-                  isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
-                ) {
-                  await deps.react(data.chatJid, data.messageId as string, data.emoji as string);
-                  logger.info(
-                    { chatJid: data.chatJid, messageId: data.messageId, sourceGroup },
-                    'IPC react sent',
-                  );
-                } else {
-                  logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
-                    'Unauthorized IPC react attempt blocked',
-                  );
-                }
+                if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'react')) continue;
+                await deps.react(data.chatJid, data.messageId as string, data.emoji as string);
+                logger.info(
+                  { chatJid: data.chatJid, messageId: data.messageId, sourceGroup },
+                  'IPC react sent',
+                );
               }
               fs.unlinkSync(filePath);
             } catch (err) {
-              logger.error(
-                { file, sourceGroup, err },
-                'Error processing IPC message',
-              );
-              const errorDir = path.join(ipcBaseDir, 'errors');
-              fs.mkdirSync(errorDir, { recursive: true });
-              fs.renameSync(
-                filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
-              );
+              logger.error({ file, sourceGroup, err }, 'Error processing IPC message');
+              quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
             }
           }
         }
@@ -205,16 +186,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
               await processTaskIpc(data, sourceGroup, isMain, deps);
               fs.unlinkSync(filePath);
             } catch (err) {
-              logger.error(
-                { file, sourceGroup, err },
-                'Error processing IPC task',
-              );
-              const errorDir = path.join(ipcBaseDir, 'errors');
-              fs.mkdirSync(errorDir, { recursive: true });
-              fs.renameSync(
-                filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
-              );
+              logger.error({ file, sourceGroup, err }, 'Error processing IPC task');
+              quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
             }
           }
         }
@@ -246,6 +219,37 @@ function authorizedTaskAction(
   } else {
     logger.warn({ taskId, sourceGroup }, `Unauthorized task ${label} attempt`);
   }
+}
+
+/** Compute the next run time for a schedule. Returns null nextRun on parse error. */
+function computeNextRun(
+  type: string,
+  value: string,
+): { nextRun: string | null; valid: boolean } {
+  if (type === 'cron') {
+    try {
+      const interval = CronExpressionParser.parse(value, { tz: TIMEZONE });
+      return { nextRun: interval.next().toISOString(), valid: true };
+    } catch {
+      logger.warn({ scheduleValue: value }, 'Invalid cron expression');
+      return { nextRun: null, valid: false };
+    }
+  } else if (type === 'interval') {
+    const ms = parseInt(value, 10);
+    if (isNaN(ms) || ms <= 0) {
+      logger.warn({ scheduleValue: value }, 'Invalid interval');
+      return { nextRun: null, valid: false };
+    }
+    return { nextRun: new Date(Date.now() + ms).toISOString(), valid: true };
+  } else if (type === 'once') {
+    const scheduled = new Date(value);
+    if (isNaN(scheduled.getTime())) {
+      logger.warn({ scheduleValue: value }, 'Invalid timestamp');
+      return { nextRun: null, valid: false };
+    }
+    return { nextRun: scheduled.toISOString(), valid: true };
+  }
+  return { nextRun: null, valid: true };
 }
 
 export async function processTaskIpc(
@@ -307,41 +311,8 @@ export async function processTaskIpc(
 
         const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
 
-        let nextRun: string | null = null;
-        if (scheduleType === 'cron') {
-          try {
-            const interval = CronExpressionParser.parse(data.schedule_value, {
-              tz: TIMEZONE,
-            });
-            nextRun = interval.next().toISOString();
-          } catch {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid cron expression',
-            );
-            break;
-          }
-        } else if (scheduleType === 'interval') {
-          const ms = parseInt(data.schedule_value, 10);
-          if (isNaN(ms) || ms <= 0) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid interval',
-            );
-            break;
-          }
-          nextRun = new Date(Date.now() + ms).toISOString();
-        } else if (scheduleType === 'once') {
-          const scheduled = new Date(data.schedule_value);
-          if (isNaN(scheduled.getTime())) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid timestamp',
-            );
-            break;
-          }
-          nextRun = scheduled.toISOString();
-        }
+        const { nextRun, valid } = computeNextRun(scheduleType, data.schedule_value);
+        if (!valid) break;
 
         const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const contextMode =
@@ -388,42 +359,13 @@ export async function processTaskIpc(
           if (data.model) updates.model = data.model as string;
 
           // If schedule changed, recompute next_run
-          let scheduleValid = true;
           if (data.schedule_type && data.schedule_value) {
             updates.schedule_type = data.schedule_type as 'cron' | 'interval' | 'once';
             updates.schedule_value = data.schedule_value as string;
-            const schedType = data.schedule_type as string;
-            if (schedType === 'cron') {
-              try {
-                const interval = CronExpressionParser.parse(
-                  data.schedule_value as string,
-                  { tz: TIMEZONE },
-                );
-                updates.next_run = interval.next().toISOString();
-              } catch {
-                logger.warn({ taskId: data.taskId, scheduleValue: data.schedule_value }, 'Invalid cron in update_task, update rejected');
-                scheduleValid = false;
-              }
-            } else if (schedType === 'interval') {
-              const ms = parseInt(data.schedule_value as string, 10);
-              if (isNaN(ms) || ms <= 0) {
-                logger.warn({ taskId: data.taskId, scheduleValue: data.schedule_value }, 'Invalid interval in update_task, update rejected');
-                scheduleValid = false;
-              } else {
-                updates.next_run = new Date(Date.now() + ms).toISOString();
-              }
-            } else if (schedType === 'once') {
-              const scheduled = new Date(data.schedule_value as string);
-              if (isNaN(scheduled.getTime())) {
-                logger.warn({ taskId: data.taskId, scheduleValue: data.schedule_value }, 'Invalid timestamp in update_task, update rejected');
-                scheduleValid = false;
-              } else {
-                updates.next_run = scheduled.toISOString();
-              }
-            }
+            const { nextRun, valid } = computeNextRun(data.schedule_type, data.schedule_value);
+            if (!valid) break;
+            updates.next_run = nextRun;
           }
-
-          if (!scheduleValid) break;
 
           updateTask(data.taskId, updates);
           logger.info(

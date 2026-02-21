@@ -28,7 +28,7 @@ interface GroupState {
 export class GroupQueue {
   private groups = new Map<string, GroupState>();
   private activeCount = 0;
-  private waitingGroups: string[] = [];
+  private waitingGroups = new Set<string>();
   private processMessagesFn: ((groupJid: string) => Promise<boolean>) | null =
     null;
   private shuttingDown = false;
@@ -82,9 +82,7 @@ export class GroupQueue {
 
     if (this.activeCount >= MAX_CONCURRENT_CONTAINERS) {
       state.pendingMessages = true;
-      if (!this.waitingGroups.includes(groupJid)) {
-        this.waitingGroups.push(groupJid);
-      }
+      this.waitingGroups.add(groupJid);
       logger.debug(
         { groupJid, activeCount: this.activeCount },
         'At concurrency limit, message queued',
@@ -125,9 +123,7 @@ export class GroupQueue {
 
     if (this.activeCount >= MAX_CONCURRENT_CONTAINERS) {
       state.pendingTasks.push({ id: taskId, groupJid, fn });
-      if (!this.waitingGroups.includes(groupJid)) {
-        this.waitingGroups.push(groupJid);
-      }
+      this.waitingGroups.add(groupJid);
       logger.debug(
         { groupJid, taskId, activeCount: this.activeCount },
         'At concurrency limit, task queued',
@@ -213,12 +209,7 @@ export class GroupQueue {
       logger.error({ groupJid, err }, 'Error processing messages for group');
       this.scheduleRetry(groupJid, state);
     } finally {
-      state.active = false;
-      state.process = null;
-      state.containerName = null;
-      state.groupFolder = null;
-      this.activeCount--;
-      this.drainGroup(groupJid);
+      this.releaseSlot(groupJid);
     }
   }
 
@@ -237,13 +228,18 @@ export class GroupQueue {
     } catch (err) {
       logger.error({ groupJid, taskId: task.id, err }, 'Error running task');
     } finally {
-      state.active = false;
-      state.process = null;
-      state.containerName = null;
-      state.groupFolder = null;
-      this.activeCount--;
-      this.drainGroup(groupJid);
+      this.releaseSlot(groupJid);
     }
+  }
+
+  private releaseSlot(groupJid: string): void {
+    const state = this.getGroup(groupJid);
+    state.active = false;
+    state.process = null;
+    state.containerName = null;
+    state.groupFolder = null;
+    this.activeCount--;
+    this.drainGroup(groupJid);
   }
 
   private scheduleRetry(groupJid: string, state: GroupState): void {
@@ -297,10 +293,11 @@ export class GroupQueue {
 
   private drainWaiting(): void {
     while (
-      this.waitingGroups.length > 0 &&
+      this.waitingGroups.size > 0 &&
       this.activeCount < MAX_CONCURRENT_CONTAINERS
     ) {
-      const nextJid = this.waitingGroups.shift()!;
+      const nextJid = this.waitingGroups.values().next().value!;
+      this.waitingGroups.delete(nextJid);
       const state = this.getGroup(nextJid);
 
       // Prioritize tasks over messages

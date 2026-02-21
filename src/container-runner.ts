@@ -46,6 +46,23 @@ export interface ContainerOutput {
   error?: string;
 }
 
+/** Resolve a container promise from a streaming parser's settled state. */
+function resolveFromParser(
+  parser: { settled(): Promise<void>; newSessionId: string | undefined },
+  resolve: (output: ContainerOutput) => void,
+  groupName: string,
+  errorContext: string,
+  onSuccess?: () => void,
+): void {
+  parser.settled().then(() => {
+    onSuccess?.();
+    resolve({ status: 'success', result: null, newSessionId: parser.newSessionId });
+  }).catch((err) => {
+    logger.error({ group: groupName, err }, errorContext);
+    resolve({ status: 'error', result: null, error: String(err) });
+  });
+}
+
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
   const args: string[] = [
     'run', '-i', '--rm', '--name', containerName,
@@ -251,16 +268,7 @@ export async function runContainerAgent(
             { group: group.name, containerName, duration, code },
             'Container timed out after output (idle cleanup)',
           );
-          parser.settled().then(() => {
-            resolve({
-              status: 'success',
-              result: null,
-              newSessionId: parser.newSessionId,
-            });
-          }).catch((err) => {
-            logger.error({ group: group.name, err }, 'Output chain error after timeout');
-            resolve({ status: 'error', result: null, error: String(err) });
-          });
+          resolveFromParser(parser, resolve, group.name, 'Output chain error after timeout');
           return;
         }
 
@@ -357,19 +365,11 @@ export async function runContainerAgent(
 
       // Streaming mode: wait for output chain to settle, return completion marker
       if (parser) {
-        parser.settled().then(() => {
+        resolveFromParser(parser, resolve, group.name, 'Output chain error on exit', () => {
           logger.info(
             { group: group.name, duration, newSessionId: parser.newSessionId },
             'Container completed (streaming mode)',
           );
-          resolve({
-            status: 'success',
-            result: null,
-            newSessionId: parser.newSessionId,
-          });
-        }).catch((err) => {
-          logger.error({ group: group.name, err }, 'Output chain error on exit');
-          resolve({ status: 'error', result: null, error: String(err) });
         });
         return;
       }

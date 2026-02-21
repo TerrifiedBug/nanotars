@@ -22,6 +22,13 @@ function assertPathWithin(resolved: string, parent: string, label: string): void
   }
 }
 
+/** Replace or append an env line by key. */
+function upsertEnvLine(lines: string[], key: string, value: string): void {
+  const idx = lines.findIndex((l) => l.trim().startsWith(`${key}=`));
+  if (idx >= 0) lines[idx] = `${key}=${value}`;
+  else lines.push(`${key}=${value}`);
+}
+
 /** Parse .env file content into a Map of key → raw line. */
 function parseEnvLines(content: string): Map<string, string> {
   const entries = new Map<string, string>();
@@ -88,19 +95,17 @@ export function buildVolumeMounts(
   // Scoped by channel and group so plugins only inject into matching containers
   const scopeChannel = group.channel;
   const scopeGroup = group.folder;
+  const mcpJsonFile = path.join(projectRoot, '.mcp.json');
   if (pluginRegistry) {
     for (const sp of pluginRegistry.getSkillPaths(scopeChannel, scopeGroup)) {
-      const containerSkillPath = `/workspace/.claude/skills/${sp.name}`;
       mounts.push({
         hostPath: sp.hostPath,
-        containerPath: containerSkillPath,
+        containerPath: `/workspace/.claude/skills/${sp.name}`,
         readonly: true,
       });
     }
-  }
 
-  // Plugin container hooks — JS files loaded by agent-runner at startup
-  if (pluginRegistry) {
+    // Plugin container hooks — JS files loaded by agent-runner at startup
     for (const hp of pluginRegistry.getContainerHookPaths(scopeChannel, scopeGroup)) {
       mounts.push({
         hostPath: hp.hostPath,
@@ -108,10 +113,8 @@ export function buildVolumeMounts(
         readonly: true,
       });
     }
-  }
 
-  // Plugin-declared container mounts (read-only)
-  if (pluginRegistry) {
+    // Plugin-declared container mounts (read-only)
     for (const pm of pluginRegistry.getContainerMounts(scopeChannel, scopeGroup)) {
       mounts.push({
         hostPath: pm.hostPath,
@@ -119,11 +122,8 @@ export function buildVolumeMounts(
         readonly: true,
       });
     }
-  }
 
-  // MCP server config — merge root .mcp.json with plugin mcp.json fragments
-  const mcpJsonFile = path.join(projectRoot, '.mcp.json');
-  if (pluginRegistry) {
+    // MCP server config — merge root .mcp.json with plugin mcp.json fragments
     const mergedMcp = pluginRegistry.getMergedMcpConfig(mcpJsonFile, scopeChannel, scopeGroup);
     if (Object.keys(mergedMcp.mcpServers).length > 0) {
       const mergedMcpDir = path.join(DATA_DIR, 'env', group.folder);
@@ -319,18 +319,12 @@ function buildEnvMount(
   const modelFile = path.join(projectRoot, 'store', 'claude-model');
   if (fs.existsSync(modelFile)) {
     const model = fs.readFileSync(modelFile, 'utf-8').trim();
-    if (model) {
-      const idx = filteredLines.findIndex((l) => l.trim().startsWith('CLAUDE_MODEL='));
-      if (idx >= 0) filteredLines[idx] = `CLAUDE_MODEL=${model}`;
-      else filteredLines.push(`CLAUDE_MODEL=${model}`);
-    }
+    if (model) upsertEnvLine(filteredLines, 'CLAUDE_MODEL', model);
   }
 
   // Per-task model override takes highest priority
   if (modelOverride) {
-    const idx = filteredLines.findIndex((l) => l.trim().startsWith('CLAUDE_MODEL='));
-    if (idx >= 0) filteredLines[idx] = `CLAUDE_MODEL=${modelOverride}`;
-    else filteredLines.push(`CLAUDE_MODEL=${modelOverride}`);
+    upsertEnvLine(filteredLines, 'CLAUDE_MODEL', modelOverride);
   }
 
   // Quote env values to prevent shell injection (# truncation, $() execution, etc.)

@@ -313,13 +313,7 @@ export class MessageOrchestrator {
 
     const wrappedOnOutput = onOutput
       ? async (output: ContainerOutput) => {
-          if (output.newSessionId) {
-            this.sessions[group.folder] = output.newSessionId;
-            this.deps.setSession(group.folder, output.newSessionId);
-          }
-          if (output.resumeAt) {
-            this.resumePositions[group.folder] = output.resumeAt;
-          }
+          this.applyOutputState(output, group.folder);
           await onOutput(output);
         }
       : undefined;
@@ -339,13 +333,7 @@ export class MessageOrchestrator {
         wrappedOnOutput,
       );
 
-      if (output.newSessionId) {
-        this.sessions[group.folder] = output.newSessionId;
-        this.deps.setSession(group.folder, output.newSessionId);
-      }
-      if (output.resumeAt) {
-        this.resumePositions[group.folder] = output.resumeAt;
-      }
+      this.applyOutputState(output, group.folder);
 
       if (output.status === 'error') {
         this.deps.logger.error(
@@ -361,6 +349,16 @@ export class MessageOrchestrator {
       this.deps.logger.error({ group: group.name, err }, 'Agent error');
       delete this.resumePositions[group.folder];
       return 'error';
+    }
+  }
+
+  private applyOutputState(output: ContainerOutput, groupFolder: string): void {
+    if (output.newSessionId) {
+      this.sessions[groupFolder] = output.newSessionId;
+      this.deps.setSession(groupFolder, output.newSessionId);
+    }
+    if (output.resumeAt) {
+      this.resumePositions[groupFolder] = output.resumeAt;
     }
   }
 
