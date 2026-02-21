@@ -209,6 +209,17 @@ Replace `PROJECT_PATH` with the actual project path (use `pwd`).
 
 Wait for the user to confirm authentication succeeded, then continue to the next step.
 
+## Agent Teams
+
+WhatsApp supports Agent Teams out of the box — no extra setup needed (unlike Telegram, which requires a bot pool). When subagents specify a `sender` parameter, their messages appear with a bold name prefix:
+
+```
+TARS: *Research Specialist*
+Here's what I found...
+```
+
+To add persistent agent definitions to a group, run `/nanoclaw-add-agent`.
+
 ## Register a Chat
 
 After authentication, the main chat is registered by `/nanoclaw-setup` (section 6c). Additional groups can be added later with `/nanoclaw-add-group`.

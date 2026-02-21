@@ -315,13 +315,18 @@ class WhatsAppChannel {
   }
 
   async sendMessage(jid, text, sender, replyTo) {
+    // If a subagent identity is specified, prefix with its name in bold
+    const withSender = sender && sender !== this.config.assistantName
+      ? `*${sender}*\n${text}`
+      : text;
+
     // Prefix bot messages with assistant name so users know who's speaking.
     // On a shared number, prefix is also needed in DMs (including self-chat)
     // to distinguish bot output from user messages.
     // Skip only when the assistant has its own dedicated phone number.
     const prefixed = this.config.assistantHasOwnNumber
-      ? text
-      : `${this.config.assistantName}: ${text}`;
+      ? withSender
+      : `${this.config.assistantName}: ${withSender}`;
 
     if (!this.connected) {
       if (this.outgoingQueue.length >= MAX_OUTGOING_QUEUE) {

@@ -240,3 +240,20 @@ When scheduling tasks for other groups, use the `target_group_jid` parameter wit
 - `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")` (JID format depends on channel)
 
 The task will run in that group's context with access to their files and memory.
+
+---
+
+## Agent Teams
+
+If `/workspace/group/agents/` exists, it contains specialized agent definitions you can spawn via Agent Teams.
+
+Each subdirectory is an agent:
+- `agents/{name}/IDENTITY.md` — who the agent is (use as their system prompt)
+- `agents/{name}/CLAUDE.md` — how they work (include in their task description)
+
+When a user's request matches an agent's specialty, create a team using `TeamCreate`:
+- Read the agent's IDENTITY.md and CLAUDE.md from `/workspace/group/agents/{name}/`
+- Use the folder name as the `sender` parameter so their messages appear with their identity
+- You don't need agents for simple tasks — they're for when specialized focus helps
+
+To see what agents are available, list `/workspace/group/agents/` and read the first line of each IDENTITY.md.

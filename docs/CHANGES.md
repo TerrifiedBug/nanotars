@@ -22,6 +22,7 @@ This document describes all changes made in this fork compared to the upstream [
 12. [Admin Dashboard](#12-admin-dashboard) — Web UI for monitoring and management
 13. [Agent Identity System](#13-agent-identity-system) — IDENTITY.md personality support
 14. [Plugin Versioning & Update System](#14-plugin-versioning--update-system) — Semver tracking, fork-based updates
+15. [Agent Teams & Per-Group Agent Definitions](#15-agent-teams--per-group-agent-definitions) — Persistent subagent roles, WhatsApp sender display
 
 ---
 
@@ -346,7 +347,7 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 
 ---
 
-## 8. New Skills (27)
+## 8. New Skills (28)
 
 Claude Code skills (`.claude/skills/`) that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
 
@@ -385,7 +386,7 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `add-channel-telegram` | Install Telegram as a channel plugin |
 | `nanoclaw-add-group` | Generic skill to register a group on any installed channel |
 
-### Meta skills (7)
+### Meta skills (8)
 
 | Skill | What it does |
 |-------|-------------|
@@ -395,6 +396,7 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `create-skill-plugin` | Guided creation of new skill plugins from an idea (includes scoping guidance for sensitive plugins) |
 | `create-channel-plugin` | Guided creation of new channel plugins (includes container-skills template for capability awareness) |
 | `nanoclaw-update` | Manage upstream sync with selective cherry-pick |
+| `nanoclaw-add-agent` | Guided creation of persistent agent definitions for groups (Agent Teams) |
 | `nanoclaw-security-audit` | Pre-installation security audit of skill plugins — purpose-based threat evaluation across 8 attack vectors |
 
 ### Rewritten upstream skills
@@ -623,6 +625,57 @@ The `nanoclaw-update` skill was rewritten with three key changes:
 | `.claude/skills/create-skill-plugin/SKILL.md` | Added `"version"` to all 4 archetype templates + schema reference |
 | `.claude/skills/create-channel-plugin/SKILL.md` | Added `"version"` to channel plugin template |
 | `.claude/skills/nanoclaw-update/SKILL.md` | Complete rewrite: fork remote, fetch-then-assess, plugin version check |
+
+---
+
+## 15. Agent Teams & Per-Group Agent Definitions
+
+Persistent, role-based agent definitions that the lead agent can spawn via the SDK's Agent Teams feature. Each group can have specialized agents (research, dev, coordinator, etc.) defined as files — no core code changes needed.
+
+### Agent definitions
+
+Agents are defined as files under `groups/{folder}/agents/{name}/`:
+
+| File | Purpose |
+|------|---------|
+| `IDENTITY.md` | Agent personality — who it is, its expertise |
+| `CLAUDE.md` | Agent instructions — capabilities, tools, communication rules |
+
+The lead agent reads these definitions and passes them to `TeamCreate` when spawning subagents. The group's CLAUDE.md gets an "Available Agents" section listing all defined agents with usage instructions.
+
+### WhatsApp sender display
+
+When subagents specify a `sender` parameter via `send_message`, WhatsApp now displays it as a bold name prefix:
+
+```
+TARS: *Research Specialist*
+Here's what I found about coral reefs...
+```
+
+This gives each subagent a visible identity without needing multiple phone numbers (unlike Telegram's bot pool approach). The change is in `sendMessage()` — if `sender` is provided and differs from `assistantName`, the message is prefixed with `*{sender}*\n`.
+
+### New skill
+
+| Skill | Purpose |
+|-------|---------|
+| `nanoclaw-add-agent` | Guided flow to create agent definitions for a group |
+
+### Updated skills
+
+| Skill | Change |
+|-------|--------|
+| `add-channel-whatsapp` | Documents Agent Teams support (no setup needed) |
+| `nanoclaw-add-group` | Mentions `/nanoclaw-add-agent` after group registration |
+| `create-channel-plugin` | Added sender parameter guidance for new channels |
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `plugins/channels/whatsapp/index.js` | Sender prefix display in `sendMessage` |
+| `.claude/skills/add-channel-whatsapp/files/index.js` | Same change in template |
+| `plugins/channels/whatsapp/container-skills/SKILL.md` | Agent Teams documentation for agents |
+| `.claude/skills/add-channel-whatsapp/files/container-skills/SKILL.md` | Same in template |
 
 ---
 

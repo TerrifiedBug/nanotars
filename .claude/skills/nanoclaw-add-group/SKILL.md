@@ -234,7 +234,9 @@ Tell the user:
 >
 > **To test**: Send a message in the group{trigger_instruction}.
 >
-> **To customize**: Edit `groups/{folder}/CLAUDE.md` to give the assistant context about this group."
+> **To customize**: Edit `groups/{folder}/CLAUDE.md` to give the assistant context about this group.
+>
+> **Agent Teams**: Want specialized subagents (research, dev, coordinator) in this group? Run `/nanoclaw-add-agent` to create persistent agent definitions."
 
 ## State Detection
 

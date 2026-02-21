@@ -27,6 +27,17 @@ You can react to messages with emoji using `mcp__nanoclaw__react`. Use the messa
 
 Good uses: acknowledge a request (👍), show you found something funny (😂), confirm you've seen something (✅). Keep it natural — don't react to every message.
 
+## Agent Teams
+
+When using Agent Teams (subagents), you can specify a `sender` parameter in `mcp__nanoclaw__send_message` to identify which agent is speaking. On WhatsApp, this displays as a bold name prefix before your message:
+
+```
+TARS: *Research Specialist*
+Here's what I found...
+```
+
+Pass your agent role name as the `sender` parameter. If omitted, messages appear as the default assistant name.
+
 ## Platform notes
 
 - Messages are plain text only (no markdown rendering)
