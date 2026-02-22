@@ -299,6 +299,56 @@ describe('buildVolumeMounts: plugin integration', () => {
     expect(mcpMount!.readonly).toBe(true);
   });
 
+  it('validates plugin container mounts against allowlist', () => {
+    setupProjectDirs();
+    setupGroupDirs('main');
+
+    vi.mocked(validateAdditionalMounts).mockReturnValue([
+      { hostPath: '/some/path', containerPath: '/workspace/extra/data', readonly: true },
+    ]);
+
+    setPluginRegistry({
+      getSkillPaths: vi.fn(() => []),
+      getContainerHookPaths: vi.fn(() => []),
+      getContainerMounts: vi.fn(() => [{ hostPath: '/some/path', containerPath: '/workspace/extra/data' }]),
+      getMergedMcpConfig: vi.fn(() => ({ mcpServers: {} })),
+      getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
+    } as any);
+
+    const mounts = buildVolumeMounts(makeGroup(), true);
+
+    expect(validateAdditionalMounts).toHaveBeenCalledWith(
+      [{ hostPath: '/some/path', containerPath: '/workspace/extra/data', readonly: true }],
+      'Main',
+      true,
+    );
+
+    const extra = mounts.find(m => m.containerPath === '/workspace/extra/data');
+    expect(extra).toBeDefined();
+    expect(extra!.readonly).toBe(true);
+  });
+
+  it('filters out rejected plugin container mounts', () => {
+    setupProjectDirs();
+    setupGroupDirs('main');
+
+    setPluginRegistry({
+      getSkillPaths: vi.fn(() => []),
+      getContainerHookPaths: vi.fn(() => []),
+      getContainerMounts: vi.fn(() => [
+        { hostPath: '/blocked/path', containerPath: '/workspace/extra/blocked' },
+      ]),
+      getMergedMcpConfig: vi.fn(() => ({ mcpServers: {} })),
+      getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
+    } as any);
+
+    vi.mocked(validateAdditionalMounts).mockReturnValue([]);
+
+    const mounts = buildVolumeMounts(makeGroup(), true);
+    const blocked = mounts.find(m => m.containerPath === '/workspace/extra/blocked');
+    expect(blocked).toBeUndefined();
+  });
+
   it('mounts root .mcp.json directly when no plugin registry', () => {
     setupProjectDirs();
     setupGroupDirs('main');

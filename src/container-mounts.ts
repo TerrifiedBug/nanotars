@@ -114,13 +114,15 @@ export function buildVolumeMounts(
       });
     }
 
-    // Plugin-declared container mounts (read-only)
-    for (const pm of pluginRegistry.getContainerMounts(scopeChannel, scopeGroup)) {
-      mounts.push({
-        hostPath: pm.hostPath,
-        containerPath: pm.containerPath,
-        readonly: true,
-      });
+    // Plugin-declared container mounts (read-only, validated against allowlist)
+    const pluginMounts = pluginRegistry.getContainerMounts(scopeChannel, scopeGroup);
+    if (pluginMounts.length > 0) {
+      const validated = validateAdditionalMounts(
+        pluginMounts.map(pm => ({ hostPath: pm.hostPath, containerPath: pm.containerPath, readonly: true })),
+        group.name,
+        isMain,
+      );
+      mounts.push(...validated);
     }
 
     // MCP server config — merge root .mcp.json with plugin mcp.json fragments
