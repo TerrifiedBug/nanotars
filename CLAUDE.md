@@ -52,6 +52,7 @@ All capabilities must be achieved through the plugin interface: `plugin.json`, `
 | `/create-channel-plugin` | Build a new channel plugin (Discord, Slack, etc.) from scratch |
 | `/nanoclaw-add-group` | Add a group/chat to an existing channel plugin |
 | `/create-skill-plugin` | Build a new skill plugin (integrations, tools, hooks) from scratch |
+| `/nanoclaw-publish-skill` | Publish a local skill to the marketplace repo |
 | `/nanoclaw-debug` | Container issues, logs, troubleshooting |
 
 ## Change Tracking

@@ -12,13 +12,13 @@ There are three ways to contribute to NanoClaw.
 
 A skill plugin adds an integration (calendar, weather, search, home automation, etc.) that agents can use inside their containers. Skills are installed per-deployment — the `plugins/` directory is gitignored so each user's installation is different.
 
+Skills live in the [nanoclaw-skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills). The main repo contains only core skills (`nanoclaw-*`) and creation tools (`create-*-plugin`).
+
 **How to contribute a skill plugin:**
 
-1. Run `/create-skill-plugin` on a fresh clone — it scaffolds everything: `plugin.json`, hook files, container skills, and an installation skill in `.claude/skills/add-skill-{name}/`
-2. Test by running the generated installation skill on a fresh clone
-3. Submit a PR containing the `.claude/skills/add-skill-{name}/` directory
-
-The PR only contains the installation skill and its `files/` subdirectory (the plugin template). The `plugins/` directory is gitignored — when a user runs `/add-skill-{name}`, the skill copies the template files into `plugins/` on their fork.
+1. Run `/create-skill-plugin` — it scaffolds everything: `plugin.json`, hook files, container skills, and an installation skill
+2. Test it locally with the generated `/add-skill-{name}` command
+3. Publish to the marketplace with `/nanoclaw-publish-skill {name}`
 
 ## 3. Channel Plugins
 
@@ -26,13 +26,9 @@ A channel plugin connects NanoClaw to a messaging platform (Telegram, Slack, SMS
 
 **How to contribute a channel plugin:**
 
-1. Run `/create-channel-plugin` on a fresh clone — it scaffolds the channel implementation and an installation skill in `.claude/skills/add-channel-{name}/`
-2. Test by running the generated installation skill on a fresh clone
-3. Submit a PR containing the `.claude/skills/add-channel-{name}/` directory
-
-Same as skill plugins — the PR only contains the skill directory. The plugin code lives in `.claude/skills/add-channel-{name}/files/` and gets copied to `plugins/channels/{name}/` when a user runs the installation skill.
-
-See existing channel skills (e.g., `.claude/skills/add-channel-telegram/`, `.claude/skills/add-channel-discord/`) for reference.
+1. Run `/create-channel-plugin` — it scaffolds the channel implementation and an installation skill
+2. Test it locally with the generated `/add-channel-{name}` command
+3. Publish to the marketplace with `/nanoclaw-publish-skill {name}`
 
 ## Plugin Structure
 

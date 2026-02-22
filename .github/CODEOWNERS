@@ -6,5 +6,5 @@
 /package.json @TerrifiedBug
 /package-lock.json @TerrifiedBug
 
-# Skills - open to contributors
-/.claude/skills/
+# Core skills - maintainer only (installable skills moved to TerrifiedBug/nanoclaw-skills marketplace)
+/.claude/skills/ @TerrifiedBug

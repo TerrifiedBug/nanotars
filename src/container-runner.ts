@@ -3,6 +3,7 @@
  * Spawns agent execution in containers and handles IPC.
  */
 import { ChildProcess } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,7 +21,7 @@ import { logger } from './logger.js';
 import { redactSecrets } from './secret-redact.js';
 import { RegisteredGroup } from './types.js';
 
-import { createOutputParser, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
+import { createOutputParser, makeMarkers, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
 
 // Re-export for consumers that still import from container-runner
 export { setPluginRegistry, VolumeMount } from './container-mounts.js';
@@ -36,6 +37,7 @@ export interface ContainerInput {
   isScheduledTask?: boolean;
   model?: string;
   secrets?: Record<string, string>;
+  outputNonce?: string;
 }
 
 export interface ContainerOutput {
@@ -152,12 +154,18 @@ export async function runContainerAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
+    // Generate per-run nonce for output markers (prevents injection)
+    const outputNonce = crypto.randomBytes(16).toString('hex');
+    input.outputNonce = outputNonce;
+    const noncedMarkers = makeMarkers(outputNonce);
+
     // Pass secrets via stdin (never written to disk or mounted as files)
     input.secrets = readSecrets();
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
     // Remove secrets from input so they don't appear in logs
     delete input.secrets;
+    delete input.outputNonce;
 
     let timedOut = false;
     const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
@@ -192,7 +200,7 @@ export async function runContainerAgent(
           onParseError: (err) => {
             logger.warn({ group: group.name, error: err }, 'Failed to parse streamed output chunk');
           },
-        })
+        }, noncedMarkers)
       : null;
 
     container.stdout.on('data', (data) => {
@@ -376,14 +384,14 @@ export async function runContainerAgent(
 
       // Legacy mode: parse the last output marker pair from accumulated stdout
       try {
-        // Extract JSON between sentinel markers for robust parsing
-        const startIdx = stdout.indexOf(OUTPUT_START_MARKER);
-        const endIdx = stdout.indexOf(OUTPUT_END_MARKER);
+        // Extract JSON between nonce-based sentinel markers for robust parsing
+        const startIdx = stdout.indexOf(noncedMarkers.start);
+        const endIdx = stdout.indexOf(noncedMarkers.end);
 
         let jsonLine: string;
         if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
           jsonLine = stdout
-            .slice(startIdx + OUTPUT_START_MARKER.length, endIdx)
+            .slice(startIdx + noncedMarkers.start.length, endIdx)
             .trim();
         } else {
           // Fallback: last non-empty line (backwards compatibility)

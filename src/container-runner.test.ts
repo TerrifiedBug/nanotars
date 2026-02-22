@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
-// Sentinel markers must match container-runner.ts
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+// Fixed nonce for tests (crypto.randomBytes is mocked below)
+const TEST_NONCE = 'deadbeefcafebabe1234567890abcdef';
+const OUTPUT_START_MARKER = `---NANOCLAW_OUTPUT_${TEST_NONCE}_START---`;
+const OUTPUT_END_MARKER = `---NANOCLAW_OUTPUT_${TEST_NONCE}_END---`;
 
 // Mock config
 vi.mock('./config.js', () => ({
@@ -15,6 +16,18 @@ vi.mock('./config.js', () => ({
   GROUPS_DIR: '/tmp/nanoclaw-test-groups',
   IDLE_TIMEOUT: 1800000, // 30min
 }));
+
+// Mock crypto to return a fixed nonce
+vi.mock('crypto', async () => {
+  const actual = await vi.importActual<typeof import('crypto')>('crypto');
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      randomBytes: vi.fn(() => Buffer.from(TEST_NONCE, 'hex')),
+    },
+  };
+});
 
 // Mock logger
 vi.mock('./logger.js', () => ({

@@ -29,6 +29,7 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   secrets?: Record<string, string>;
+  outputNonce?: string;
 }
 
 interface ContainerOutput {
@@ -156,8 +157,9 @@ async function readStdin(): Promise<string> {
   });
 }
 
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+// Markers are initialized with defaults, then overridden with nonce from host input
+let OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
+let OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
 function writeOutput(output: ContainerOutput): void {
   console.log(OUTPUT_START_MARKER);
@@ -652,6 +654,13 @@ async function main(): Promise<void> {
     const stdinData = await readStdin();
     containerInput = JSON.parse(stdinData);
     try { fs.unlinkSync('/tmp/input.json'); } catch { /* ignore */ }
+
+    // Use per-run nonce markers if provided (prevents output injection)
+    if (containerInput.outputNonce) {
+      OUTPUT_START_MARKER = `---NANOCLAW_OUTPUT_${containerInput.outputNonce}_START---`;
+      OUTPUT_END_MARKER = `---NANOCLAW_OUTPUT_${containerInput.outputNonce}_END---`;
+    }
+
     log(`Received input for group: ${containerInput.groupFolder}`);
   } catch (err) {
     writeOutput({

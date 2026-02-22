@@ -1,9 +1,0 @@
-{
-  "name": "gif-search",
-  "description": "Search and send GIFs via Giphy API",
-  "containerEnvVars": ["GIPHY_API_KEY"],
-  "hooks": [],
-  "channels": ["*"],
-  "groups": ["*"],
-  "version": "1.0.0"
-}

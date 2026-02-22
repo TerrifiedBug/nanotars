@@ -573,3 +573,13 @@ To remove the {Platform} channel:
 - The `onChannel(ctx, config)` hook receives a `PluginContext` (logger, insertMessage, sendMessage, getRegisteredGroups, getMainChannelJid) and `ChannelPluginConfig` (onMessage, onChatMetadata, registeredGroups, paths, assistantName, assistantHasOwnNumber, db)
 - Channels are initialized before other plugin hooks (`onStartup`)
 - The `Channel` interface: `name`, `connect()`, `sendMessage(jid, text, sender?, replyTo?)`, `isConnected()`, `ownsJid(jid)`, `disconnect()`, optional `sendFile(jid, buffer, mime, fileName, caption?)`, optional `react(jid, messageId, emoji)`, optional `refreshMetadata()`, optional `listAvailableGroups()`. The `sender` parameter carries the subagent's identity name — channels that support per-sender identities (bot pools, webhooks) can use it; others ignore it. The `replyTo` parameter is a platform message ID for quote-replies — channels should send the message as a reply to the referenced message. The `sendFile` method enables agents to send files back to users via the `send_file` MCP tool. The `react` method enables emoji reactions on specific messages.
+
+## Publishing to Marketplace
+
+After testing the channel plugin locally with `/add-channel-{name}`, you can publish it to the NanoClaw skills marketplace:
+
+```
+/nanoclaw-publish-skill {name}
+```
+
+This restructures the skill into Claude Code plugin format and pushes it to `TerrifiedBug/nanoclaw-skills`. Publishing is optional — channels work locally without it.

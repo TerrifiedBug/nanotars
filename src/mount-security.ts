@@ -39,6 +39,9 @@ const DEFAULT_BLOCKED_PATTERNS = [
   'id_ed25519',
   'private_key',
   '.secret',
+  'secrets.json',
+  'token.json',
+  '.ssh-agent',
 ];
 
 /**
@@ -149,16 +152,12 @@ function matchesBlockedPattern(
   const pathParts = realPath.split(path.sep);
 
   for (const pattern of blockedPatterns) {
-    // Check if any path component matches the pattern
+    // Exact match or dotfile/extension variants — substring matching caused false positives
+    // (e.g. blocking "my-credentials-app" because it contains "credentials")
     for (const part of pathParts) {
-      if (part === pattern || part.includes(pattern)) {
+      if (part === pattern || part.startsWith(pattern + '.') || part.startsWith('.' + pattern)) {
         return pattern;
       }
-    }
-
-    // Also check if the full path contains the pattern
-    if (realPath.includes(pattern)) {
-      return pattern;
     }
   }
 

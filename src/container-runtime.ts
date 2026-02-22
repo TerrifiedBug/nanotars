@@ -161,7 +161,9 @@ export function extraRunArgs(): string[] {
     // one — Docker's default blocks clone/unshare/ptrace that Chromium needs.
     const seccomp = path.join(__dirname, '..', 'container', 'chromium-seccomp.json');
     return [
+      '--cap-drop=ALL',
       '--cap-add=SYS_PTRACE',
+      '--security-opt=no-new-privileges',
       '--security-opt', `seccomp=${seccomp}`,
       '--shm-size=2g',
       '--init',

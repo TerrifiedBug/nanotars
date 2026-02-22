@@ -8,7 +8,7 @@
 
 ## What This Is
 
-A heavily customized fork of [NanoClaw](https://github.com/qwibitai/nanoclaw) — a lightweight Claude assistant that runs agents in Linux containers. This fork adds a plugin architecture, multi-channel support, Docker/Linux hosting, security hardening, an admin dashboard, agent teams, and 35 installation skills. The core philosophy remains: small enough to understand, secure by OS-level isolation.
+A heavily customized fork of [NanoClaw](https://github.com/qwibitai/nanoclaw) — a lightweight Claude assistant that runs agents in Linux containers. This fork adds a plugin architecture, multi-channel support, Docker/Linux hosting, security hardening, an admin dashboard, agent teams, and a [skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills) with 27 installable integrations. The core philosophy remains: small enough to understand, secure by OS-level isolation.
 
 ## What It Does
 
@@ -67,48 +67,22 @@ Single Node.js process. Channel plugins deliver messages to SQLite. A polling lo
 | `plugins/channels/*/` | Channel plugins (WhatsApp, Discord, Telegram) |
 | `plugins/*/` | Skill plugins (search, calendar, dashboard, etc.) |
 
-## Skills (35)
+## Skills
 
 Everything is installed via [Claude Code skills](https://code.claude.com/docs/en/skills). Run a skill, Claude does the work, you get a clean plugin tailored to your setup.
 
-### Integration Skills (23)
+### Integration & Channel Skills (27 — via marketplace)
 
-| Skill | What it adds |
-|-------|-------------|
-| `/add-skill-brave-search` | Web search via Brave API |
-| `/add-skill-calendar` | Google Calendar + CalDAV |
-| `/add-skill-changedetection` | Website monitoring via changedetection.io |
-| `/add-skill-claude-mem` | Persistent cross-session memory |
-| `/add-skill-commute` | Travel times via Waze |
-| `/add-skill-cs2-esports` | CS2 esports match tracking |
-| `/add-skill-dashboard` | Admin web UI |
-| `/add-skill-freshrss` | Self-hosted RSS reader |
-| `/add-skill-giphy` | GIF search and sending |
-| `/add-skill-github` | GitHub API (PRs, issues, commits) |
-| `/add-skill-gmail` | Gmail (search, read, send) |
-| `/add-skill-homeassistant` | Smart home control via MCP |
-| `/add-skill-imap-read` | Read-only IMAP email |
-| `/add-skill-n8n` | n8n workflow automation |
-| `/add-skill-norish` | Recipe import by URL |
-| `/add-skill-notion` | Notion pages and databases |
-| `/add-skill-parallel` | Parallel AI web research |
-| `/add-skill-stocks` | Stock prices via Yahoo Finance |
-| `/add-skill-telegram-swarm` | Agent Teams for Telegram (bot pool) |
-| `/add-skill-trains` | UK National Rail departures |
-| `/add-skill-transcription` | Voice transcription via Whisper |
-| `/add-skill-weather` | Weather (no API key needed) |
-| `/add-skill-webhook` | HTTP webhook endpoint for push events |
+Integration skills (weather, calendar, search, etc.) and channel skills (Discord, Telegram, Slack, WhatsApp) are available from the [NanoClaw skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills). Browse and install via Claude Code's built-in plugin system:
 
-### Channel Skills (4)
+```
+/plugin marketplace add TerrifiedBug/nanoclaw-skills
+/plugin install nanoclaw-weather@nanoclaw-skills
+```
 
-| Skill | What it adds |
-|-------|-------------|
-| `/add-channel-whatsapp` | WhatsApp via Baileys |
-| `/add-channel-discord` | Discord (servers + DMs) |
-| `/add-channel-telegram` | Telegram (bot API) |
-| `/nanoclaw-add-group` | Register a group on any channel |
+Or browse all 27 skills in the `/plugin` Discover tab. Categories: messaging channels, productivity, search, media, monitoring, smart home, and utilities.
 
-### Meta Skills (8)
+### Core Skills (10 — in this repo)
 
 | Skill | What it does |
 |-------|-------------|
@@ -116,8 +90,10 @@ Everything is installed via [Claude Code skills](https://code.claude.com/docs/en
 | `/nanoclaw-debug` | Container troubleshooting and health checks |
 | `/nanoclaw-set-model` | Change Claude model for containers |
 | `/nanoclaw-update` | Pull fork updates, compare plugin versions |
+| `/nanoclaw-add-group` | Register a group on any channel |
 | `/nanoclaw-add-agent` | Create agent definitions for a group |
 | `/nanoclaw-security-audit` | Pre-install security audit of skill plugins |
+| `/nanoclaw-publish-skill` | Publish a local skill to the marketplace |
 | `/create-skill-plugin` | Build a new skill plugin from scratch |
 | `/create-channel-plugin` | Build a new channel plugin from scratch |
 

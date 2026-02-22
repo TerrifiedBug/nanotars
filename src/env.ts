@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 /**
@@ -14,6 +15,19 @@ export function readEnvFile(keys: string[]): Record<string, string> {
     content = fs.readFileSync(envFile, 'utf-8');
   } catch {
     return {};
+  }
+
+  // Warn if .env is readable by group/others
+  if (os.platform() !== 'win32') {
+    try {
+      const stat = fs.statSync(envFile);
+      if (stat.mode & 0o044) {
+        console.warn(
+          `WARNING: ${envFile} is readable by group/others (mode ${(stat.mode & 0o777).toString(8)}). ` +
+          'Run "chmod 600 .env" to restrict access.',
+        );
+      }
+    } catch { /* stat failed, skip check */ }
   }
 
   const result: Record<string, string> = {};

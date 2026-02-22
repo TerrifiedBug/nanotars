@@ -242,6 +242,23 @@ else
 fi
 ```
 
+## 4b. Add Skill Marketplace
+
+Check if the NanoClaw skills marketplace is configured:
+
+```bash
+grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null && echo "MARKETPLACE: configured" || echo "MARKETPLACE: not configured"
+```
+
+**If marketplace is configured**, tell the user:
+> The NanoClaw skills marketplace is available. After setup, browse integrations with `/plugin` or install specific skills with `/plugin install nanoclaw-<name>@nanoclaw-skills`.
+
+**If NOT configured** and the user wants integrations:
+> To browse available integrations (weather, email, smart home, etc.), add the skills marketplace:
+> ```
+> /plugin marketplace add TerrifiedBug/nanoclaw-skills
+> ```
+
 ## 5. Authenticate Channel
 
 **USER ACTION REQUIRED**
@@ -261,45 +278,34 @@ for f in plugins/channels/*/plugin.json; do
   DESC=$(python3 -c "import json; print(json.load(open('$f')).get('description',''))" 2>/dev/null || echo "")
   echo "$NAME|$DESC|$DIR"
 done
-
-echo "=== AVAILABLE (not yet installed) ==="
-for s in .claude/skills/add-channel-*/SKILL.md; do
-  [ -f "$s" ] || continue
-  CHANNEL_NAME=$(basename "$(dirname "$s")" | sed 's/^add-channel-//')
-  # Skip if already installed
-  [ -d "plugins/channels/$CHANNEL_NAME" ] && continue
-  echo "$CHANNEL_NAME|$(dirname "$s")"
-done
 ```
+
+Available channels (not yet installed) are in the NanoClaw skills marketplace. If no channels are installed:
+> Channel plugins are available from the NanoClaw skills marketplace:
+> - **discord** — Discord (servers + DMs)
+> - **telegram** — Telegram (bot API)
+> - **whatsapp** — WhatsApp via Baileys
+> - **slack** — Slack (Socket Mode)
+>
+> Install one with: `/plugin install nanoclaw-<name>@nanoclaw-skills`
+> Then run `/add-channel-<name>` to configure it.
 
 ### 5b. Select channel
 
-Present both installed and available channels to the user. Mark which are installed and which need installation.
+Present installed channels to the user. If none are installed, show the marketplace options above.
 
-**If only one channel plugin is installed and none available**: Skip selection and proceed with that channel.
+**If only one channel plugin is installed**: Skip selection and proceed with that channel.
 
-**If multiple channels available (installed or not)**: Ask the user which channel to set up as their main:
+**If multiple channels installed**: Ask the user which channel to set up as their main.
 
-> I found these channels:
->
-> **Installed (ready to use):**
-> - **whatsapp** — WhatsApp channel via Baileys
->
-> **Available (not yet installed):**
-> - **telegram** — Not part of the core plugin set. I can install it for you.
->
-> Which channel do you want to use for your main (admin) channel?
+**If user picks an uninstalled channel**: Tell them to install it from the marketplace:
+> Install the channel plugin first:
+> `/plugin install nanoclaw-{name}@nanoclaw-skills`
+> Then run `/add-channel-{name}` to configure it.
 
-**If user picks an uninstalled channel**: Read the channel skill at `.claude/skills/add-channel-{name}/SKILL.md` and follow its installation instructions. This typically involves:
-1. Installing npm dependencies (e.g., `npm install grammy` for Telegram)
-2. Copying plugin files to `plugins/channels/{name}/` (if the skill has a `files/` directory)
-3. Collecting credentials (bot tokens, API keys) and adding them to `.env`
+**If no channels found at all** (neither installed nor in marketplace): Tell the user:
 
-After installation, continue with authentication below.
-
-**If no channels found at all** (neither installed nor available): Tell the user:
-
-> No channel plugins are installed or available. Use `/create-channel-plugin` to build one from scratch.
+> No channel plugins are installed. Use `/create-channel-plugin` to build one from scratch.
 
 Store the chosen channel name — it will be used in later steps (registration, troubleshooting).
 
@@ -347,13 +353,13 @@ for i in $(seq 1 60); do STATUS=$(cat data/channels/$CHANNEL_NAME/auth-status.tx
 
 These are common channels with specific auth requirements:
 
-**WhatsApp** — Interactive auth via QR code or pairing code. The auth script supports `--serve` (HTTP QR for headless servers) and `--pairing-code --phone NUMBER` (numeric code entry). Handles error 515 reconnection automatically. See `.claude/skills/add-channel-whatsapp/SKILL.md` for the full QR/pairing flow details.
+**WhatsApp** — Interactive auth via QR code or pairing code. The auth script supports `--serve` (HTTP QR for headless servers) and `--pairing-code --phone NUMBER` (numeric code entry). Handles error 515 reconnection automatically. If the WhatsApp plugin is installed, read `plugins/channels/whatsapp/auth.js` for the full auth flow.
 
 **Telegram** — Token-based. Needs `TELEGRAM_BOT_TOKEN` in `.env` (get from @BotFather). No interactive auth needed.
 
 **Discord** — Token-based. Needs `DISCORD_BOT_TOKEN` in `.env` (get from Discord Developer Portal). Enable Message Content Intent in bot settings. No interactive auth needed.
 
-For WhatsApp specifically, if you need the detailed QR/pairing code flow, read `.claude/skills/add-channel-whatsapp/SKILL.md` and follow its auth instructions inline.
+For WhatsApp specifically, if you need the detailed QR/pairing code flow, check the installed plugin at `plugins/channels/whatsapp/` or the marketplace skill for setup instructions.
 
 ## 6. Configure Assistant Name and Main Channel
 
