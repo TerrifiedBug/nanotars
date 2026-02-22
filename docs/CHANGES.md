@@ -744,6 +744,7 @@ Installable skills (`add-skill-*`, `add-channel-*`) moved to a separate Claude C
 
 **New skills:**
 - `/nanoclaw-publish-skill` — publishes local skills to the marketplace
+- `/nanoclaw-remove-plugin` — atomic plugin removal (runtime dir, env vars, DB entries for channels, marketplace skill cleanup)
 
 **Updated skills:**
 - `nanoclaw-setup` — now includes marketplace provisioning step
