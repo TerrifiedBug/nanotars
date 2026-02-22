@@ -16,7 +16,9 @@ import {
   getAllTasks,
   getDueTasks,
   getTaskById,
+  isValidGroupFolder,
   logTaskRun,
+  updateTask,
   updateTaskAfterRun,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
@@ -37,6 +39,15 @@ async function runTask(
   task: ScheduledTask,
   deps: SchedulerDependencies,
 ): Promise<void> {
+  if (!isValidGroupFolder(task.group_folder)) {
+    updateTask(task.id, { status: 'paused' });
+    logger.error(
+      { taskId: task.id, groupFolder: task.group_folder },
+      'Pausing task with invalid group folder to stop retry churn',
+    );
+    return;
+  }
+
   const startTime = Date.now();
   const groupDir = path.join(GROUPS_DIR, task.group_folder);
   fs.mkdirSync(groupDir, { recursive: true });
@@ -129,6 +140,9 @@ async function runTask(
           }
           // Only reset idle timer on actual results, not session-update markers
           resetIdleTimer();
+        }
+        if (streamedOutput.status === 'success') {
+          deps.queue.notifyIdle(task.chat_jid);
         }
       },
     );

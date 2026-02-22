@@ -280,6 +280,14 @@ Upstream passes secrets via environment variables, which are visible to `env` an
 - **Exact matching only** — `matchesBlockedPattern()` uses strict `===` on path components instead of substring `.includes()`, preventing false positives (e.g. blocking "my-credentials-app" because it contained "credentials")
 - **Additional blocked patterns** — `secrets.json`, `token.json`, `.ssh-agent`
 
+### Read-only project root mount
+
+- **Read-only project root mount** — Main group's project root is now mounted read-only to prevent container escape via host code modification (port of upstream 5fb1064)
+
+### Group folder path validation
+
+- **Group folder path validation** — Added max-length (64 chars) and reserved name (`global`) checks to folder validation. Malformed scheduled tasks are now paused instead of retrying forever (port of upstream 2e1c768, 02d8528)
+
 ### .env permissions warning
 
 - `readEnvFile()` warns on stderr if `.env` has group/other read permissions (mode > 600)
@@ -375,6 +383,9 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 | [#246](https://github.com/qwibitai/nanoclaw/pull/246) | Exclude test files from agent-runner production build (vitest not in prod) | `container/agent-runner/tsconfig.json` |
 | [#247](https://github.com/qwibitai/nanoclaw/pull/247) | Consecutive error tracking — counts sequential failures, notifies user | `src/index.ts` |
 | [#248](https://github.com/qwibitai/nanoclaw/pull/248) | Duplicate task creation prevention — warns in IPC tool description | `container/agent-runner/src/ipc-mcp-stdio.ts` |
+
+- **Container timezone** — TZ is now passed to containers via env. Containers no longer default to UTC. UTC-suffixed timestamps are rejected in schedule_task validation since all times should be local (port of upstream 77f7423)
+- **Idle preemption** — Scheduled tasks only preempt idle containers, not ones actively processing. Adds idleWaiting tracking to prevent mid-work container kills (port of upstream 93bb94f, c6b69e8, 3d8c0d1)
 
 ---
 
@@ -487,6 +498,12 @@ Re-exports preserve backward compatibility — no consumer import changes needed
 | `storeMessageDirect()` | `src/db.ts` | Zero callers — leftover from earlier iteration |
 | `formatOutbound()` | `src/router.ts` | Trivial wrapper around `stripInternalTags()` |
 | `findChannel()` | `src/router.ts` | Zero callers — replaced by `routeOutbound()` |
+
+### Performance
+
+| Optimization | File | What |
+|-------------|------|------|
+| **Stdout streaming to file** | `src/container-runner.ts` | Container stdout is streamed directly to a log file via `fs.createWriteStream` instead of accumulating in a string (previously up to 10MB per container). Stdout is read back from the file only when needed for error reporting or legacy parsing. Disk is cheaper than RAM. |
 
 ### DRY patterns
 

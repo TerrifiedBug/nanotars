@@ -42,6 +42,12 @@ vi.mock('./logger.js', () => ({
 // Mock fs
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
+  // Fake writable stream that accepts writes silently
+  const fakeWriteStream = {
+    write: vi.fn(),
+    end: vi.fn(),
+    on: vi.fn(),
+  };
   return {
     ...actual,
     default: {
@@ -50,9 +56,11 @@ vi.mock('fs', async () => {
       mkdirSync: vi.fn(),
       writeFileSync: vi.fn(),
       readFileSync: vi.fn(() => ''),
+      appendFileSync: vi.fn(),
       readdirSync: vi.fn(() => []),
       statSync: vi.fn(() => ({ isDirectory: () => false })),
       copyFileSync: vi.fn(),
+      createWriteStream: vi.fn(() => fakeWriteStream),
     },
   };
 });
@@ -61,6 +69,25 @@ vi.mock('fs', async () => {
 vi.mock('./mount-security.js', () => ({
   validateAdditionalMounts: vi.fn(() => []),
 }));
+
+// Mock container-mounts: buildVolumeMounts is now async
+vi.mock('./container-mounts.js', async () => {
+  const actual = await vi.importActual<typeof import('./container-mounts.js')>('./container-mounts.js');
+  return {
+    ...actual,
+    buildVolumeMounts: vi.fn(async () => []),
+    readSecrets: vi.fn(() => ({})),
+  };
+});
+
+// Mock container-runtime: fixMountPermissions is async and must resolve immediately in tests
+vi.mock('./container-runtime.js', async () => {
+  const actual = await vi.importActual<typeof import('./container-runtime.js')>('./container-runtime.js');
+  return {
+    ...actual,
+    fixMountPermissions: vi.fn(() => Promise.resolve()),
+  };
+});
 
 // Create a controllable fake ChildProcess
 function createFakeProcess() {

@@ -115,10 +115,16 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
         };
       }
     } else if (args.schedule_type === 'once') {
+      if (/[Zz]$/.test(args.schedule_value) || /[+-]\d{2}:?\d{2}$/.test(args.schedule_value)) {
+        return {
+          content: [{ type: 'text' as const, text: `Timestamp must be local time without timezone suffix. Got "${args.schedule_value}" — use format like "2026-02-01T15:30:00".` }],
+          isError: true,
+        };
+      }
       const date = new Date(args.schedule_value);
       if (isNaN(date.getTime())) {
         return {
-          content: [{ type: 'text' as const, text: `Invalid timestamp: "${args.schedule_value}". Use ISO 8601 format like "2026-02-01T15:30:00.000Z".` }],
+          content: [{ type: 'text' as const, text: `Invalid timestamp: "${args.schedule_value}". Use ISO 8601 format like "2026-02-01T15:30:00".` }],
           isError: true,
         };
       }
@@ -273,6 +279,12 @@ Use this instead of cancel + schedule when modifying a task. The task ID stays t
           };
         }
       } else if (newType === 'once') {
+        if (/[Zz]$/.test(newValue!) || /[+-]\d{2}:?\d{2}$/.test(newValue!)) {
+          return {
+            content: [{ type: 'text' as const, text: `Timestamp must be local time without timezone suffix. Got "${newValue}" — use format like "2026-02-01T15:30:00".` }],
+            isError: true,
+          };
+        }
         if (isNaN(new Date(newValue!).getTime())) {
           return {
             content: [{ type: 'text' as const, text: `Invalid timestamp: "${newValue}". Use ISO 8601 format.` }],

@@ -77,7 +77,7 @@ All outbound messages and container log files are run through `redactSecrets()` 
 - Values >= 8 characters are stored as secrets to redact (shorter values skipped to avoid false positives)
 - A small safe-list of known non-secret config vars is exempted (`ASSISTANT_NAME`, `CLAUDE_MODEL`, `LOG_LEVEL`, etc.)
 - Everything else is treated as potentially sensitive — new secrets are automatically protected
-- `redactSecrets()` uses literal `split().join('[REDACTED]')` — no regex, so special characters in API keys don't cause issues
+- `redactSecrets()` builds a pre-escaped composite regex at load time — special characters in API keys are properly escaped via `String.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`
 
 **Where it's applied:**
 - `routeOutbound()` in `src/router.ts` — catches ALL outbound message paths (orchestrator, IPC, scheduler)

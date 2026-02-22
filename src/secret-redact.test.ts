@@ -320,3 +320,29 @@ describe('credentials.json OAuth token redaction', () => {
     expect(redactSecrets('sk-ant-no-creds-file')).toBe('[REDACTED]');
   });
 });
+
+describe('NEVER_EXEMPT: critical secrets cannot be exempted', () => {
+  it('redacts ANTHROPIC_API_KEY even when passed as additionalSafeVars', () => {
+    writeEnv('ANTHROPIC_API_KEY=sk-ant-never-exempt-key');
+    loadSecrets(['ANTHROPIC_API_KEY']);
+    expect(redactSecrets('sk-ant-never-exempt-key')).toBe('[REDACTED]');
+  });
+
+  it('redacts CLAUDE_CODE_OAUTH_TOKEN even when passed as additionalSafeVars', () => {
+    writeEnv('CLAUDE_CODE_OAUTH_TOKEN=oauth-never-exempt-tok');
+    loadSecrets(['CLAUDE_CODE_OAUTH_TOKEN']);
+    expect(redactSecrets('oauth-never-exempt-tok')).toBe('[REDACTED]');
+  });
+
+  it('redacts OPENAI_API_KEY even when passed as additionalSafeVars', () => {
+    writeEnv('OPENAI_API_KEY=sk-openai-never-exempt');
+    loadSecrets(['OPENAI_API_KEY']);
+    expect(redactSecrets('sk-openai-never-exempt')).toBe('[REDACTED]');
+  });
+
+  it('redacts DASHBOARD_SECRET even when passed as additionalSafeVars', () => {
+    writeEnv('DASHBOARD_SECRET=dash-secret-never-exempt');
+    loadSecrets(['DASHBOARD_SECRET']);
+    expect(redactSecrets('dash-secret-never-exempt')).toBe('[REDACTED]');
+  });
+});

@@ -211,6 +211,111 @@ describe('GroupQueue', () => {
     expect(callCount).toBe(countAfterMaxRetries);
   });
 
+  // --- Idle preemption ---
+
+  it('does NOT preempt active container when not idle', async () => {
+    const fs = await import('fs');
+    let resolveProcess: () => void;
+
+    const processMessages = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+
+    queue.setProcessMessagesFn(processMessages);
+
+    // Start a container
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+
+    // Enqueue a task while container is active (not idle)
+    const taskFn = vi.fn(async () => {});
+    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+
+    // closeStdin should NOT have been called (container is active, not idle)
+    // Check that _close was NOT written
+    const closeCalls = (fs.default.writeFileSync as any).mock.calls.filter(
+      (c: any[]) => String(c[0]).includes('_close'),
+    );
+    expect(closeCalls).toHaveLength(0);
+
+    // Clean up
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
+  it('preempts container when idle and task enqueues', async () => {
+    const fs = await import('fs');
+    let resolveProcess: () => void;
+
+    const processMessages = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+
+    queue.setProcessMessagesFn(processMessages);
+
+    // Start a container and register its process info
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess('group1@g.us', {} as any, 'container-1', 'main');
+
+    // Signal idle
+    queue.notifyIdle('group1@g.us');
+
+    // Now enqueue a task — should preempt
+    const taskFn = vi.fn(async () => {});
+    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+
+    expect(fs.default.writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('_close'),
+      '',
+    );
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
+  it('sendMessage resets idleWaiting so task does not preempt', async () => {
+    const fs = await import('fs');
+    (fs.default.writeFileSync as any).mockClear();
+    let resolveProcess: () => void;
+
+    const processMessages = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+
+    queue.setProcessMessagesFn(processMessages);
+
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess('group1@g.us', {} as any, 'container-1', 'main');
+
+    // Signal idle, then send a message (resets idle)
+    queue.notifyIdle('group1@g.us');
+    queue.sendMessage('group1@g.us', 'hello');
+
+    // Enqueue task — should NOT preempt (no longer idle)
+    const taskFn = vi.fn(async () => {});
+    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+
+    // _close should not be written for preemption
+    const closeCalls = (fs.default.writeFileSync as any).mock.calls.filter(
+      (c: any[]) => String(c[0]).includes('_close'),
+    );
+    expect(closeCalls).toHaveLength(0);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
   // --- Waiting groups get drained when slots free up ---
 
   it('drains waiting groups when active slots free up', async () => {

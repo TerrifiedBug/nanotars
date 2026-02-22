@@ -45,6 +45,7 @@ import {
   updateTask,
   deleteTask,
   getTaskRunLogs,
+  getRecentTaskRunLogs,
   getRecentMessages,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
@@ -210,6 +211,7 @@ async function main(): Promise<void> {
     updateTask: (id, updates) => updateTask(id, updates),
     deleteTask: (id) => deleteTask(id),
     getTaskRunLogs: (taskId, limit) => getTaskRunLogs(taskId, limit),
+    getRecentTaskRunLogs: (limit) => getRecentTaskRunLogs(limit),
 
     // Messages
     getRecentMessages: (jid, limit) => getRecentMessages(jid, limit ?? 50),

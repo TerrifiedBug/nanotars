@@ -11,9 +11,31 @@ import {
   TIMEZONE,
 } from './config.js';
 import { AvailableGroup } from './container-runner.js';
-import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import { createTask, deleteTask, getTaskById, isValidGroupFolder, updateTask } from './db.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
+
+/** Discriminated union for IPC message commands. */
+type IpcMessage =
+  | { type: 'message'; chatJid: string; text: string; sender?: string; replyTo?: string }
+  | { type: 'send_file'; chatJid: string; filePath: string; fileName?: string; caption?: string }
+  | { type: 'react'; chatJid: string; messageId: string; emoji: string };
+
+/** Type guard for IPC messages. */
+function isIpcMessage(data: unknown): data is IpcMessage {
+  if (typeof data !== 'object' || data === null || !('type' in data)) return false;
+  const d = data as Record<string, unknown>;
+  switch (d.type) {
+    case 'message':
+      return typeof d.chatJid === 'string' && typeof d.text === 'string';
+    case 'send_file':
+      return typeof d.chatJid === 'string' && typeof d.filePath === 'string';
+    case 'react':
+      return typeof d.chatJid === 'string' && typeof d.messageId === 'string' && typeof d.emoji === 'string';
+    default:
+      return false;
+  }
+}
 
 /** Max file size for send_file (64 MB) */
 const SEND_FILE_MAX_SIZE = 64 * 1024 * 1024;
@@ -28,9 +50,9 @@ const IPC_MAX_FILE_SIZE = 1024 * 1024;
  *  - O_NOFOLLOW to prevent TOCTOU race between lstat and open
  * Returns parsed JSON or null on any issue.
  */
-function readIpcJsonFile(filePath: string, sourceGroup: string): unknown | null {
+async function readIpcJsonFile(filePath: string, sourceGroup: string): Promise<unknown | null> {
   try {
-    const stat = fs.lstatSync(filePath);
+    const stat = await fs.promises.lstat(filePath);
     if (!stat.isFile()) {
       logger.warn({ filePath, sourceGroup }, 'IPC: not a regular file, skipping');
       return null;
@@ -40,13 +62,13 @@ function readIpcJsonFile(filePath: string, sourceGroup: string): unknown | null 
       return null;
     }
     // O_NOFOLLOW prevents symlink race between lstat and open
-    const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    const fd = await fs.promises.open(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
       const buf = Buffer.alloc(stat.size);
-      const bytesRead = fs.readSync(fd, buf, 0, stat.size, 0);
+      const { bytesRead } = await fd.read(buf, 0, stat.size, 0);
       return JSON.parse(buf.slice(0, bytesRead).toString('utf-8'));
     } finally {
-      fs.closeSync(fd);
+      await fd.close();
     }
   } catch (err) {
     logger.warn({ filePath, sourceGroup, err }, 'IPC: failed to read file safely');
@@ -58,11 +80,15 @@ function readIpcJsonFile(filePath: string, sourceGroup: string): unknown | null 
  * List .json files in an IPC directory, filtering to regular files only.
  * Uses withFileTypes to avoid stat on non-files (directory entry type confusion).
  */
-function listIpcJsonFiles(dir: string): string[] {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-    .map((entry) => entry.name);
+async function listIpcJsonFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
 }
 
 /** Move a failed IPC file to the errors directory. */
@@ -120,10 +146,10 @@ export interface IpcDeps {
 
 let ipcWatcherRunning = false;
 
-export function startIpcWatcher(deps: IpcDeps): void {
+export function startIpcWatcher(deps: IpcDeps): Promise<void> {
   if (ipcWatcherRunning) {
     logger.debug('IPC watcher already running, skipping duplicate start');
-    return;
+    return Promise.resolve();
   }
   ipcWatcherRunning = true;
 
@@ -134,7 +160,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
     // Scan all group IPC directories (identity determined by directory)
     let groupFolders: string[];
     try {
-      groupFolders = fs.readdirSync(ipcBaseDir, { withFileTypes: true })
+      const entries = await fs.promises.readdir(ipcBaseDir, { withFileTypes: true });
+      groupFolders = entries
         .filter((entry) => entry.isDirectory() && entry.name !== 'errors')
         .map((entry) => entry.name);
     } catch (err) {
@@ -153,77 +180,88 @@ export function startIpcWatcher(deps: IpcDeps): void {
       // Process messages from this group's IPC directory
       try {
         {
-          const messageFiles = listIpcJsonFiles(messagesDir);
+          const messageFiles = await listIpcJsonFiles(messagesDir);
           for (const file of messageFiles) {
             const filePath = path.join(messagesDir, file);
             try {
-              const raw = readIpcJsonFile(filePath, sourceGroup);
+              const raw = await readIpcJsonFile(filePath, sourceGroup);
               if (raw === null) {
                 quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
                 continue;
               }
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const data = raw as any;
-              if (data.type === 'message' && data.chatJid && data.text) {
-                if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'message')) continue;
-                await deps.sendMessage(data.chatJid, data.text, data.sender, data.replyTo as string | undefined);
-                logger.info(
-                  { chatJid: data.chatJid, sourceGroup },
-                  'IPC message sent',
-                );
-              } else if (data.type === 'send_file' && data.chatJid && data.filePath) {
-                if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'send_file')) continue;
-                // Translate container path to host path
-                // Container /workspace/group/... → host groups/{folder}/...
-                let hostPath = data.filePath as string;
-                if (hostPath.startsWith('/workspace/group/')) {
-                  hostPath = path.join(GROUPS_DIR, sourceGroup, hostPath.slice('/workspace/group/'.length));
+              if (!isIpcMessage(raw)) {
+                logger.warn({ filePath, sourceGroup, type: (raw as Record<string, unknown>)?.type }, 'IPC: invalid message format');
+                quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
+                continue;
+              }
+              const data = raw;
+              switch (data.type) {
+                case 'message': {
+                  if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'message')) break;
+                  await deps.sendMessage(data.chatJid, data.text, data.sender, data.replyTo);
+                  logger.info(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'IPC message sent',
+                  );
+                  break;
                 }
+                case 'send_file': {
+                  if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'send_file')) break;
+                  // Translate container path to host path
+                  // Container /workspace/group/... → host groups/{folder}/...
+                  let hostPath = data.filePath;
+                  if (hostPath.startsWith('/workspace/group/')) {
+                    hostPath = path.join(GROUPS_DIR, sourceGroup, hostPath.slice('/workspace/group/'.length));
+                  }
 
-                // Prevent path traversal: resolved path must stay within the group directory
-                const groupRoot = path.resolve(path.join(GROUPS_DIR, sourceGroup));
-                const resolvedHost = path.resolve(hostPath);
-                if (!resolvedHost.startsWith(groupRoot + path.sep) && resolvedHost !== groupRoot) {
-                  logger.warn({ hostPath, resolvedHost, groupRoot, sourceGroup }, 'send_file: path traversal blocked');
-                  fs.unlinkSync(filePath);
-                  continue;
-                }
-
-                if (!fs.existsSync(hostPath)) {
-                  logger.warn({ hostPath, sourceGroup }, 'send_file: file not found');
-                } else {
-                  // Resolve symlinks and re-check containment (path.resolve doesn't follow symlinks)
-                  const realHost = fs.realpathSync(hostPath);
-                  const realGroup = fs.realpathSync(path.join(GROUPS_DIR, sourceGroup));
-                  if (!realHost.startsWith(realGroup + path.sep) && realHost !== realGroup) {
-                    logger.warn({ hostPath, realHost, realGroup, sourceGroup }, 'send_file: symlink traversal blocked');
+                  // Prevent path traversal: resolved path must stay within the group directory
+                  const groupRoot = path.resolve(path.join(GROUPS_DIR, sourceGroup));
+                  const resolvedHost = path.resolve(hostPath);
+                  if (!resolvedHost.startsWith(groupRoot + path.sep) && resolvedHost !== groupRoot) {
+                    logger.warn({ hostPath, resolvedHost, groupRoot, sourceGroup }, 'send_file: path traversal blocked');
                     fs.unlinkSync(filePath);
-                    continue;
+                    break;
                   }
-                  const stat = fs.statSync(hostPath);
-                  if (!stat.isFile()) {
-                    logger.warn({ hostPath, sourceGroup }, 'send_file: not a regular file');
-                  } else if (stat.size > SEND_FILE_MAX_SIZE) {
-                    logger.warn({ hostPath, size: stat.size, sourceGroup }, 'send_file: file too large (64MB limit)');
+
+                  if (!fs.existsSync(hostPath)) {
+                    logger.warn({ hostPath, sourceGroup }, 'send_file: file not found');
                   } else {
-                    const buffer = fs.readFileSync(hostPath);
-                    const mime = mimeFromExtension(hostPath);
-                    const fileName = (data.fileName as string) || path.basename(hostPath);
-                    const caption = data.caption as string | undefined;
-                    await deps.sendFile(data.chatJid, buffer, mime, fileName, caption);
-                    logger.info(
-                      { chatJid: data.chatJid, fileName, mime, size: stat.size, sourceGroup },
-                      'IPC file sent',
-                    );
+                    // Resolve symlinks and re-check containment (path.resolve doesn't follow symlinks)
+                    const realHost = fs.realpathSync(hostPath);
+                    const realGroup = fs.realpathSync(path.join(GROUPS_DIR, sourceGroup));
+                    if (!realHost.startsWith(realGroup + path.sep) && realHost !== realGroup) {
+                      logger.warn({ hostPath, realHost, realGroup, sourceGroup }, 'send_file: symlink traversal blocked');
+                      fs.unlinkSync(filePath);
+                      break;
+                    }
+                    const stat = fs.statSync(hostPath);
+                    if (!stat.isFile()) {
+                      logger.warn({ hostPath, sourceGroup }, 'send_file: not a regular file');
+                    } else if (stat.size > SEND_FILE_MAX_SIZE) {
+                      logger.warn({ hostPath, size: stat.size, sourceGroup }, 'send_file: file too large (64MB limit)');
+                    } else {
+                      const buffer = fs.readFileSync(hostPath);
+                      const mime = mimeFromExtension(hostPath);
+                      const fileName = data.fileName || path.basename(hostPath);
+                      const caption = data.caption;
+                      await deps.sendFile(data.chatJid, buffer, mime, fileName, caption);
+                      logger.info(
+                        { chatJid: data.chatJid, fileName, mime, size: stat.size, sourceGroup },
+                        'IPC file sent',
+                      );
+                    }
                   }
+                  break;
                 }
-              } else if (data.type === 'react' && data.chatJid && data.messageId && data.emoji) {
-                if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'react')) continue;
-                await deps.react(data.chatJid, data.messageId as string, data.emoji as string);
-                logger.info(
-                  { chatJid: data.chatJid, messageId: data.messageId, sourceGroup },
-                  'IPC react sent',
-                );
+                case 'react': {
+                  if (!isAuthorizedForJid(data.chatJid, registeredGroups, sourceGroup, isMain, 'react')) break;
+                  await deps.react(data.chatJid, data.messageId, data.emoji);
+                  logger.info(
+                    { chatJid: data.chatJid, messageId: data.messageId, sourceGroup },
+                    'IPC react sent',
+                  );
+                  break;
+                }
               }
               fs.unlinkSync(filePath);
             } catch (err) {
@@ -242,11 +280,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
       // Process tasks from this group's IPC directory
       try {
         {
-          const taskFiles = listIpcJsonFiles(tasksDir);
+          const taskFiles = await listIpcJsonFiles(tasksDir);
           for (const file of taskFiles) {
             const filePath = path.join(tasksDir, file);
             try {
-              const data = readIpcJsonFile(filePath, sourceGroup);
+              const data = await readIpcJsonFile(filePath, sourceGroup);
               if (data === null) {
                 quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
                 continue;
@@ -268,8 +306,9 @@ export function startIpcWatcher(deps: IpcDeps): void {
     setTimeout(processIpcFiles, IPC_POLL_INTERVAL);
   };
 
-  processIpcFiles();
+  const firstRun = processIpcFiles();
   logger.info('IPC watcher started (per-group namespaces)');
+  return firstRun;
 }
 
 /** Authorize and execute a task action (pause/resume/cancel) with consistent logging. */
@@ -493,7 +532,7 @@ export async function processTaskIpc(
       }
       if (data.jid && data.name && data.folder && data.trigger) {
         // Validate folder name: allowlist of safe characters only
-        if (!/^[a-z0-9][a-z0-9_-]*$/i.test(data.folder)) {
+        if (!isValidGroupFolder(data.folder)) {
           logger.warn(
             { folder: data.folder },
             'Rejected register_group with invalid folder name (path traversal attempt)',

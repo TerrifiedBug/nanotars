@@ -85,20 +85,20 @@ describe('buildVolumeMounts: core mounts', () => {
     setPluginRegistry = mod.setPluginRegistry;
   });
 
-  it('mounts agent-runner source', () => {
+  it('mounts agent-runner source', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const agentRunner = mounts.find(m => m.containerPath === '/app/src');
     expect(agentRunner).toBeDefined();
     expect(agentRunner!.readonly).toBe(true);
     expect(agentRunner!.hostPath).toContain('agent-runner');
   });
 
-  it('mounts core skill subdirectories individually', () => {
+  it('mounts core skill subdirectories individually', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const skillMounts = mounts.filter(m => m.containerPath.startsWith('/workspace/.claude/skills/'));
     expect(skillMounts.length).toBeGreaterThanOrEqual(2);
     expect(skillMounts.some(m => m.containerPath.includes('memory'))).toBe(true);
@@ -106,65 +106,65 @@ describe('buildVolumeMounts: core mounts', () => {
     skillMounts.forEach(m => expect(m.readonly).toBe(true));
   });
 
-  it('creates per-group sessions directory', () => {
+  it('creates per-group sessions directory', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    buildVolumeMounts(makeGroup(), true);
+    await buildVolumeMounts(makeGroup(), true);
     const sessionsDir = path.join((configMod as any).DATA_DIR, 'sessions', 'main', '.claude');
     expect(fs.existsSync(sessionsDir)).toBe(true);
   });
 
-  it('mounts sessions directory at /home/node/.claude', () => {
+  it('mounts sessions directory at /home/node/.claude', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const sessions = mounts.find(m => m.containerPath === '/home/node/.claude');
     expect(sessions).toBeDefined();
     expect(sessions!.readonly).toBe(false);
   });
 
-  it('creates IPC directories (messages, tasks, input)', () => {
+  it('creates IPC directories (messages, tasks, input)', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    buildVolumeMounts(makeGroup(), true);
+    await buildVolumeMounts(makeGroup(), true);
     const ipcDir = path.join((configMod as any).DATA_DIR, 'ipc', 'main');
     expect(fs.existsSync(path.join(ipcDir, 'messages'))).toBe(true);
     expect(fs.existsSync(path.join(ipcDir, 'tasks'))).toBe(true);
     expect(fs.existsSync(path.join(ipcDir, 'input'))).toBe(true);
   });
 
-  it('mounts IPC at /workspace/ipc', () => {
+  it('mounts IPC at /workspace/ipc', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const ipc = mounts.find(m => m.containerPath === '/workspace/ipc');
     expect(ipc).toBeDefined();
     expect(ipc!.readonly).toBe(false);
   });
 
-  it('mounts group folder at /workspace/group', () => {
+  it('mounts group folder at /workspace/group', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const group = mounts.find(m => m.containerPath === '/workspace/group');
     expect(group).toBeDefined();
     expect(group!.readonly).toBe(false);
   });
 
-  it('mounts global directory when it exists', () => {
+  it('mounts global directory when it exists', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     fs.mkdirSync(path.join((configMod as any).GROUPS_DIR, 'global'), { recursive: true });
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const globalMount = mounts.find(m => m.containerPath === '/workspace/global');
     expect(globalMount).toBeDefined();
     expect(globalMount!.readonly).toBe(true);
   });
 
-  it('does not mount global directory when it does not exist', () => {
+  it('does not mount global directory when it does not exist', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const globalMount = mounts.find(m => m.containerPath === '/workspace/global');
     expect(globalMount).toBeUndefined();
   });
@@ -181,27 +181,27 @@ describe('buildVolumeMounts: main vs non-main', () => {
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
-  it('main gets project root mounted at /workspace/project', () => {
+  it('main gets project root mounted at /workspace/project', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const project = mounts.find(m => m.containerPath === '/workspace/project');
     expect(project).toBeDefined();
-    expect(project!.readonly).toBe(false);
+    expect(project!.readonly).toBe(true);
   });
 
-  it('non-main does NOT get project root', () => {
+  it('non-main does NOT get project root', async () => {
     setupProjectDirs();
     setupGroupDirs('family');
-    const mounts = buildVolumeMounts(makeGroup({ folder: 'family', name: 'Family' }), false);
+    const mounts = await buildVolumeMounts(makeGroup({ folder: 'family', name: 'Family' }), false);
     const project = mounts.find(m => m.containerPath === '/workspace/project');
     expect(project).toBeUndefined();
   });
 
-  it('non-main only gets its own group folder', () => {
+  it('non-main only gets its own group folder', async () => {
     setupProjectDirs();
     setupGroupDirs('family');
-    const mounts = buildVolumeMounts(makeGroup({ folder: 'family', name: 'Family' }), false);
+    const mounts = await buildVolumeMounts(makeGroup({ folder: 'family', name: 'Family' }), false);
     const group = mounts.find(m => m.containerPath === '/workspace/group');
     expect(group).toBeDefined();
     expect(group!.hostPath).toContain('family');
@@ -219,12 +219,12 @@ describe('buildVolumeMounts: path traversal protection', () => {
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
-  it('throws on group folder path traversal', () => {
+  it('throws on group folder path traversal', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    expect(() => {
-      buildVolumeMounts(makeGroup({ folder: '../escape' }), false);
-    }).toThrow('Path traversal blocked');
+    await expect(
+      buildVolumeMounts(makeGroup({ folder: '../escape' }), false),
+    ).rejects.toThrow('Path traversal blocked');
   });
 });
 
@@ -241,7 +241,7 @@ describe('buildVolumeMounts: plugin integration', () => {
     setPluginRegistry = mod.setPluginRegistry;
   });
 
-  it('mounts plugin skill directories', () => {
+  it('mounts plugin skill directories', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     const skillDir = path.join(tmpDir, 'plugin-skills');
@@ -255,13 +255,13 @@ describe('buildVolumeMounts: plugin integration', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
     } as any);
 
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const pluginSkill = mounts.find(m => m.containerPath === '/workspace/.claude/skills/test-skill');
     expect(pluginSkill).toBeDefined();
     expect(pluginSkill!.readonly).toBe(true);
   });
 
-  it('mounts plugin container hooks', () => {
+  it('mounts plugin container hooks', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     const hookFile = path.join(tmpDir, 'plugin-hook.js');
@@ -275,13 +275,13 @@ describe('buildVolumeMounts: plugin integration', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
     } as any);
 
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const hookMount = mounts.find(m => m.containerPath === '/workspace/plugin-hooks/test-hook.js');
     expect(hookMount).toBeDefined();
     expect(hookMount!.readonly).toBe(true);
   });
 
-  it('mounts merged MCP config when plugins provide servers', () => {
+  it('mounts merged MCP config when plugins provide servers', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
 
@@ -293,19 +293,69 @@ describe('buildVolumeMounts: plugin integration', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
     } as any);
 
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const mcpMount = mounts.find(m => m.containerPath === '/workspace/.mcp.json');
     expect(mcpMount).toBeDefined();
     expect(mcpMount!.readonly).toBe(true);
   });
 
-  it('mounts root .mcp.json directly when no plugin registry', () => {
+  it('validates plugin container mounts against allowlist', async () => {
+    setupProjectDirs();
+    setupGroupDirs('main');
+
+    vi.mocked(validateAdditionalMounts).mockReturnValue([
+      { hostPath: '/some/path', containerPath: '/workspace/extra/data', readonly: true },
+    ]);
+
+    setPluginRegistry({
+      getSkillPaths: vi.fn(() => []),
+      getContainerHookPaths: vi.fn(() => []),
+      getContainerMounts: vi.fn(() => [{ hostPath: '/some/path', containerPath: '/workspace/extra/data' }]),
+      getMergedMcpConfig: vi.fn(() => ({ mcpServers: {} })),
+      getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
+    } as any);
+
+    const mounts = await buildVolumeMounts(makeGroup(), true);
+
+    expect(validateAdditionalMounts).toHaveBeenCalledWith(
+      [{ hostPath: '/some/path', containerPath: '/workspace/extra/data', readonly: true }],
+      'Main',
+      true,
+    );
+
+    const extra = mounts.find(m => m.containerPath === '/workspace/extra/data');
+    expect(extra).toBeDefined();
+    expect(extra!.readonly).toBe(true);
+  });
+
+  it('filters out rejected plugin container mounts', async () => {
+    setupProjectDirs();
+    setupGroupDirs('main');
+
+    setPluginRegistry({
+      getSkillPaths: vi.fn(() => []),
+      getContainerHookPaths: vi.fn(() => []),
+      getContainerMounts: vi.fn(() => [
+        { hostPath: '/blocked/path', containerPath: '/workspace/extra/blocked' },
+      ]),
+      getMergedMcpConfig: vi.fn(() => ({ mcpServers: {} })),
+      getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
+    } as any);
+
+    vi.mocked(validateAdditionalMounts).mockReturnValue([]);
+
+    const mounts = await buildVolumeMounts(makeGroup(), true);
+    const blocked = mounts.find(m => m.containerPath === '/workspace/extra/blocked');
+    expect(blocked).toBeUndefined();
+  });
+
+  it('mounts root .mcp.json directly when no plugin registry', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     fs.writeFileSync(path.join(projectRoot, '.mcp.json'), '{"mcpServers":{}}');
 
     // No setPluginRegistry call — registry remains null
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const mcpMount = mounts.find(m => m.containerPath === '/workspace/.mcp.json');
     expect(mcpMount).toBeDefined();
     expect(mcpMount!.hostPath).toContain('.mcp.json');
@@ -325,7 +375,7 @@ describe('buildVolumeMounts: env file', () => {
     setPluginRegistry = mod.setPluginRegistry;
   });
 
-  it('filters env vars to allowed list', () => {
+  it('filters env vars to allowed list', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     fs.writeFileSync(path.join(projectRoot, '.env'), 'ANTHROPIC_API_KEY=sk-test\nSECRET=hidden\nCLAUDE_MODEL=sonnet');
@@ -338,7 +388,7 @@ describe('buildVolumeMounts: env file', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY', 'CLAUDE_MODEL']),
     } as any);
 
-    buildVolumeMounts(makeGroup(), true);
+    await buildVolumeMounts(makeGroup(), true);
     const envFilePath = path.join((configMod as any).DATA_DIR, 'env', 'main', 'env');
     expect(fs.existsSync(envFilePath)).toBe(true);
     const content = fs.readFileSync(envFilePath, 'utf-8');
@@ -347,7 +397,7 @@ describe('buildVolumeMounts: env file', () => {
     expect(content).not.toContain('SECRET=hidden');
   });
 
-  it('overrides CLAUDE_MODEL from store file', () => {
+  it('overrides CLAUDE_MODEL from store file', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     fs.writeFileSync(path.join(projectRoot, '.env'), 'CLAUDE_MODEL=sonnet\nANTHROPIC_API_KEY=sk-x');
@@ -363,12 +413,12 @@ describe('buildVolumeMounts: env file', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY', 'CLAUDE_MODEL']),
     } as any);
 
-    buildVolumeMounts(makeGroup(), true);
+    await buildVolumeMounts(makeGroup(), true);
     const content = fs.readFileSync(path.join((configMod as any).DATA_DIR, 'env', 'main', 'env'), 'utf-8');
     expect(content).toContain("CLAUDE_MODEL='opus'");
   });
 
-  it('per-task model override takes highest priority', () => {
+  it('per-task model override takes highest priority', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     fs.writeFileSync(path.join(projectRoot, '.env'), 'CLAUDE_MODEL=sonnet\nANTHROPIC_API_KEY=sk-x');
@@ -384,12 +434,12 @@ describe('buildVolumeMounts: env file', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY', 'CLAUDE_MODEL']),
     } as any);
 
-    buildVolumeMounts(makeGroup(), true, 'haiku');
+    await buildVolumeMounts(makeGroup(), true, 'haiku');
     const content = fs.readFileSync(path.join((configMod as any).DATA_DIR, 'env', 'main', 'env'), 'utf-8');
     expect(content).toContain("CLAUDE_MODEL='haiku'");
   });
 
-  it('shell-safe quotes env values', () => {
+  it('shell-safe quotes env values', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     fs.writeFileSync(path.join(projectRoot, '.env'), "ANTHROPIC_API_KEY=sk-with'quote");
@@ -402,13 +452,13 @@ describe('buildVolumeMounts: env file', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
     } as any);
 
-    buildVolumeMounts(makeGroup(), true);
+    await buildVolumeMounts(makeGroup(), true);
     const content = fs.readFileSync(path.join((configMod as any).DATA_DIR, 'env', 'main', 'env'), 'utf-8');
     // Single quotes escaped with '\''
     expect(content).toContain("ANTHROPIC_API_KEY='sk-with'\\''quote'");
   });
 
-  it('skips env mount when no matching vars', () => {
+  it('skips env mount when no matching vars', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     fs.writeFileSync(path.join(projectRoot, '.env'), 'UNRELATED=value');
@@ -421,7 +471,7 @@ describe('buildVolumeMounts: env file', () => {
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
     } as any);
 
-    const mounts = buildVolumeMounts(makeGroup(), true);
+    const mounts = await buildVolumeMounts(makeGroup(), true);
     const envMount = mounts.find(m => m.containerPath === '/workspace/env-dir');
     expect(envMount).toBeUndefined();
   });
@@ -438,7 +488,7 @@ describe('buildVolumeMounts: additional mounts', () => {
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
-  it('passes additional mounts to validateAdditionalMounts', () => {
+  it('passes additional mounts to validateAdditionalMounts', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     const addlMounts = [{ hostPath: '/home/user/data', containerPath: 'data' }];
@@ -447,7 +497,7 @@ describe('buildVolumeMounts: additional mounts', () => {
       { hostPath: '/home/user/data', containerPath: '/workspace/extra/data', readonly: true },
     ]);
 
-    const mounts = buildVolumeMounts(
+    const mounts = await buildVolumeMounts(
       makeGroup({ containerConfig: { additionalMounts: addlMounts } }),
       true,
     );
@@ -456,10 +506,10 @@ describe('buildVolumeMounts: additional mounts', () => {
     expect(extra).toBeDefined();
   });
 
-  it('skips additional mounts when not configured', () => {
+  it('skips additional mounts when not configured', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
-    buildVolumeMounts(makeGroup(), true);
+    await buildVolumeMounts(makeGroup(), true);
     expect(validateAdditionalMounts).not.toHaveBeenCalled();
   });
 });
@@ -475,14 +525,14 @@ describe('buildVolumeMounts: credentials', () => {
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
-  it('mounts host credentials when file exists', () => {
+  it('mounts host credentials when file exists', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
     const homeDir = os.homedir();
     const credsFile = path.join(homeDir, '.claude', '.credentials.json');
     // Only test if credentials file actually exists on this system
     if (fs.existsSync(credsFile)) {
-      const mounts = buildVolumeMounts(makeGroup(), true);
+      const mounts = await buildVolumeMounts(makeGroup(), true);
       const creds = mounts.find(m => m.containerPath === '/home/node/.claude/.credentials.json');
       expect(creds).toBeDefined();
       expect(creds!.readonly).toBe(false);

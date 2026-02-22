@@ -85,7 +85,7 @@ Main has access to the entire project:
 
 | Container Path | Host Path | Access |
 |----------------|-----------|--------|
-| `/workspace/project` | Project root | read-write |
+| `/workspace/project` | Project root | read-only |
 | `/workspace/group` | `groups/main/` | read-write |
 
 Key paths inside the container:

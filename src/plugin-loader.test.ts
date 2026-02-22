@@ -82,6 +82,11 @@ describe('collectContainerEnvVars', () => {
     expect(result).toContain('NOTION_API_KEY');
   });
 
+  it('includes TZ in core vars', () => {
+    const result = collectContainerEnvVars([]);
+    expect(result).toContain('TZ');
+  });
+
   it('deduplicates vars', () => {
     const plugins = [
       { manifest: { name: 'a', containerEnvVars: ['GH_TOKEN'] }, dir: '', hooks: {} },

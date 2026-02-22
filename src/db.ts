@@ -586,6 +586,20 @@ export function getTaskRunLogs(taskId: string, limit = 50): TaskRunLog[] {
     .all(taskId, limit) as TaskRunLog[];
 }
 
+/** Get recent task run logs across all tasks with a single JOIN query. */
+export function getRecentTaskRunLogs(limit = 15): Array<TaskRunLog & { group_folder: string; prompt: string }> {
+  return db
+    .prepare(`
+      SELECT trl.task_id, trl.run_at, trl.duration_ms, trl.status, trl.result, trl.error,
+             st.group_folder, st.prompt
+      FROM task_run_logs trl
+      JOIN scheduled_tasks st ON trl.task_id = st.id
+      ORDER BY trl.run_at DESC
+      LIMIT ?
+    `)
+    .all(limit) as Array<TaskRunLog & { group_folder: string; prompt: string }>;
+}
+
 export function getRecentMessages(jid: string, limit = 50): NewMessage[] {
   return db
     .prepare('SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message FROM messages WHERE chat_jid = ? ORDER BY timestamp DESC LIMIT ?')
@@ -685,7 +699,12 @@ function mapRegisteredGroupRow(row: RegisteredGroupRow): RegisteredGroup {
 }
 
 /** Validate folder name from DB to prevent path traversal from corrupted data. */
-const SAFE_FOLDER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+const SAFE_FOLDER_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+const RESERVED_FOLDERS = new Set(['global']);
+
+export function isValidGroupFolder(folder: string): boolean {
+  return SAFE_FOLDER_RE.test(folder) && !RESERVED_FOLDERS.has(folder.toLowerCase());
+}
 
 export function getRegisteredGroup(
   jid: string,
@@ -694,7 +713,7 @@ export function getRegisteredGroup(
     .prepare('SELECT * FROM registered_groups WHERE jid = ?')
     .get(jid) as RegisteredGroupRow | undefined;
   if (!row) return undefined;
-  if (!SAFE_FOLDER_RE.test(row.folder)) {
+  if (!isValidGroupFolder(row.folder)) {
     logger.warn({ jid, folder: row.folder }, 'Skipping registered group with invalid folder name');
     return undefined;
   }
@@ -727,7 +746,7 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     .all() as RegisteredGroupRow[];
   const result: Record<string, RegisteredGroup> = {};
   for (const row of rows) {
-    if (!SAFE_FOLDER_RE.test(row.folder)) {
+    if (!isValidGroupFolder(row.folder)) {
       logger.warn({ jid: row.jid, folder: row.folder }, 'Skipping registered group with invalid folder name');
       continue;
     }

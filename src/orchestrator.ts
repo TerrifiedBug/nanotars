@@ -247,6 +247,9 @@ export class MessageOrchestrator {
         }
         resetIdleTimer();
       }
+      if (result.status === 'success') {
+        this.deps.queue.notifyIdle(chatJid);
+      }
     });
 
     if (idleTimer) clearTimeout(idleTimer);
@@ -391,6 +394,11 @@ export class MessageOrchestrator {
           }
           for (const m of rawMessages) {
             this.processedIds.add(m.id);
+          }
+
+          // Defensive cap: prevent unbounded Set growth from clock skew or stuck cursors
+          if (this.processedIds.size > 10_000) {
+            this.processedIds.clear();
           }
 
           this.lastTimestamp = newTimestamp;

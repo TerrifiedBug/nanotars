@@ -188,11 +188,9 @@ export function stop(
  * Docker bind mounts preserve host ownership; the container's node user
  * (UID 1000) needs write access. No-op for Apple Container.
  */
-export function fixMountPermissions(hostPath: string): void {
-  if (detectRuntime() !== 'docker') return;
-  try {
-    execFileSync('chown', ['-R', '1000:1000', hostPath], { stdio: 'pipe' });
-  } catch {
-    /* Non-fatal — may not have permission */
-  }
+export function fixMountPermissions(hostPath: string): Promise<void> {
+  if (detectRuntime() !== 'docker') return Promise.resolve();
+  return new Promise((resolve) => {
+    execFile('chown', ['-R', '1000:1000', hostPath], { stdio: 'pipe' }, () => resolve());
+  });
 }

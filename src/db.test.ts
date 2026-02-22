@@ -11,8 +11,11 @@ import {
   getAllChats,
   getMessagesSince,
   getNewMessages,
+  getRegisteredGroup,
   getTaskById,
   insertExternalMessage,
+  isValidGroupFolder,
+  setRegisteredGroup,
   storeChatMetadata,
   storeMessage,
   updateTask,
@@ -473,5 +476,40 @@ describe('dbEvents', () => {
     } finally {
       dbEvents.off('new-message', handler);
     }
+  });
+});
+
+// --- folder validation ---
+
+describe('folder validation', () => {
+  it('rejects folders longer than 64 characters', () => {
+    const longFolder = 'a'.repeat(65);
+    setRegisteredGroup('test@g.us', {
+      name: 'Test', folder: longFolder, trigger: '@Bot',
+      added_at: new Date().toISOString(),
+    });
+    expect(getRegisteredGroup('test@g.us')).toBeUndefined();
+  });
+
+  it('rejects reserved folder name "global"', () => {
+    setRegisteredGroup('test@g.us', {
+      name: 'Test', folder: 'global', trigger: '@Bot',
+      added_at: new Date().toISOString(),
+    });
+    expect(getRegisteredGroup('test@g.us')).toBeUndefined();
+  });
+
+  it('accepts valid folder names', () => {
+    expect(isValidGroupFolder('main')).toBe(true);
+    expect(isValidGroupFolder('my-group')).toBe(true);
+    expect(isValidGroupFolder('group_123')).toBe(true);
+  });
+
+  it('rejects invalid folder names', () => {
+    expect(isValidGroupFolder('')).toBe(false);
+    expect(isValidGroupFolder('../etc')).toBe(false);
+    expect(isValidGroupFolder('.hidden')).toBe(false);
+    expect(isValidGroupFolder('global')).toBe(false);
+    expect(isValidGroupFolder('a'.repeat(65))).toBe(false);
   });
 });
