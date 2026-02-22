@@ -231,6 +231,10 @@ If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
    ```bash
    cp -r .claude/skills/add-skill-{name}/files/ plugins/{name}/
    ```
+   If installing from a marketplace (SKILL.md uses `${CLAUDE_PLUGIN_ROOT}`), also write a marketplace breadcrumb so `/nanoclaw-update` can detect future updates:
+   ```bash
+   echo '{"marketplace":"nanoclaw-skills","plugin":"nanoclaw-{name}"}' > plugins/{name}/.marketplace.json
+   ```
 
 4. **Plugin Configuration:**
    Ask the user to confirm or customize which channels and groups can use this plugin.
