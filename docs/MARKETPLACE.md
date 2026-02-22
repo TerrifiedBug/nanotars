@@ -119,6 +119,7 @@ The marketplace uses Claude Code's native plugin system:
 - **`plugins/nanoclaw-*/`** — Each plugin has a `.claude-plugin/plugin.json` manifest, `skills/` directory with the SKILL.md, and `files/` directory with templates
 - **`${CLAUDE_PLUGIN_ROOT}`** — Path variable in SKILL.md files that resolves to the plugin's cache location after marketplace install
 - **`.claude/settings.json`** — `extraKnownMarketplaces` config in the main repo enables auto-discovery for forkers
+- **Update detection** — `/nanoclaw-update` matches installed plugin names to marketplace entries by convention (`plugins/weather/` → `nanoclaw-weather`) and diffs for changes
 
 ## Auto-Discovery
 

@@ -747,17 +747,15 @@ Installable skills (`add-skill-*`, `add-channel-*`) moved to a separate Claude C
 - `/nanoclaw-publish-skill` — publishes local skills to the marketplace
 - `/nanoclaw-remove-plugin` — atomic plugin removal (runtime dir, env vars, DB entries for channels, marketplace skill cleanup)
 
-**Marketplace update tracking:**
-- Each marketplace SKILL.md writes a `.marketplace.json` breadcrumb to the installed plugin directory after `cp -r`
-- Format: `{"marketplace":"nanoclaw-skills","plugin":"nanoclaw-weather"}`
-- `/nanoclaw-update` scans these files, diffs installed plugins against `~/.claude/plugins/marketplaces/` source, and offers to re-copy changed files while preserving user scoping (`channels`/`groups`)
-- Works with Claude Code's periodic marketplace sync — no custom infrastructure needed
+**Marketplace update detection:**
+- `/nanoclaw-update` matches installed plugin names to marketplace entries by convention (`plugins/weather/` → `nanoclaw-weather` in `~/.claude/plugins/marketplaces/nanoclaw-skills/`)
+- Diffs installed plugins against marketplace cache and offers to re-copy changed files while preserving user scoping (`channels`/`groups`)
+- No breadcrumb files or version tracking needed — pure name-convention matching
 
 **Updated skills:**
 - `nanoclaw-setup` — now includes marketplace provisioning step
-- `nanoclaw-update` — marketplace-aware version checking + `.marketplace.json` diff-based update detection
-- `create-skill-plugin` / `create-channel-plugin` — publish guidance + marketplace breadcrumb template
-- `nanoclaw-publish-skill` — auto-injects `.marketplace.json` write step into SKILL.md during publishing
+- `nanoclaw-update` — marketplace-aware update detection via name-convention matching
+- `create-skill-plugin` / `create-channel-plugin` — uses `${CLAUDE_PLUGIN_ROOT}` paths, publish guidance
 
 **Files added/modified:**
 - `.claude/settings.json` — `extraKnownMarketplaces` for auto-discovery
