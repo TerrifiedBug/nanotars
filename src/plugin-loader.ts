@@ -145,6 +145,7 @@ export function mergeMcpConfigs(
 export class PluginRegistry {
   private plugins: LoadedPlugin[] = [];
   private _channels: Channel[] = [];
+  private pluginFilterCache = new Map<string, LoadedPlugin[]>();
 
   get loaded(): LoadedPlugin[] {
     return this.plugins;
@@ -220,9 +221,13 @@ export class PluginRegistry {
     }
   }
 
-  /** Filter plugins by channel and group scope */
+  /** Filter plugins by channel and group scope (cached — plugins don't change after loading) */
   getPluginsForGroup(channel?: string, groupFolder?: string): LoadedPlugin[] {
-    return this.plugins.filter(p => {
+    const cacheKey = `${channel ?? ''}:${groupFolder ?? ''}`;
+    const cached = this.pluginFilterCache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = this.plugins.filter(p => {
       // Channel filter: undefined or ["*"] means all channels
       const ch = p.manifest.channels;
       if (ch && !ch.includes('*') && channel && !ch.includes(channel)) return false;
@@ -231,6 +236,8 @@ export class PluginRegistry {
       if (gr && !gr.includes('*') && groupFolder && !gr.includes(groupFolder)) return false;
       return true;
     });
+    this.pluginFilterCache.set(cacheKey, result);
+    return result;
   }
 
   /** Collect all publicEnvVars across loaded plugins (safe for secret redaction exemption) */
