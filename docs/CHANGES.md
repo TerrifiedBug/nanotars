@@ -385,6 +385,7 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 | [#248](https://github.com/qwibitai/nanoclaw/pull/248) | Duplicate task creation prevention — warns in IPC tool description | `container/agent-runner/src/ipc-mcp-stdio.ts` |
 
 - **Container timezone** — TZ is now passed to containers via env. Containers no longer default to UTC. UTC-suffixed timestamps are rejected in schedule_task validation since all times should be local (port of upstream 77f7423)
+- **Idle preemption** — Scheduled tasks only preempt idle containers, not ones actively processing. Adds idleWaiting tracking to prevent mid-work container kills (port of upstream 93bb94f, c6b69e8, 3d8c0d1)
 
 ---
 

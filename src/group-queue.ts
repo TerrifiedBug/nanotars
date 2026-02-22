@@ -17,6 +17,8 @@ const BASE_RETRY_MS = 5000;
 
 interface GroupState {
   active: boolean;
+  idleWaiting: boolean;
+  isTaskContainer: boolean;
   pendingMessages: boolean;
   pendingTasks: QueuedTask[];
   process: ChildProcess | null;
@@ -38,6 +40,8 @@ export class GroupQueue {
     if (!state) {
       state = {
         active: false,
+        idleWaiting: false,
+        isTaskContainer: false,
         pendingMessages: false,
         pendingTasks: [],
         process: null,
@@ -107,17 +111,20 @@ export class GroupQueue {
     }
 
     if (state.active) {
-      // Preempt idle container so scheduled tasks don't wait for
-      // the 30-min IDLE_TIMEOUT. The _close sentinel is safe even if
-      // the container is mid-query: stream.end() only signals "no more
-      // user input" — the current agent turn completes fully before exit.
-      // Same mechanism the orchestrator's IDLE_TIMEOUT uses.
-      this.closeStdin(groupJid);
       state.pendingTasks.push({ id: taskId, groupJid, fn });
-      logger.debug(
-        { groupJid, taskId },
-        'Container active, preempting with close sentinel for scheduled task',
-      );
+      if (state.idleWaiting) {
+        // Preempt idle container so scheduled tasks don't wait
+        this.closeStdin(groupJid);
+        logger.debug(
+          { groupJid, taskId },
+          'Idle container preempted for scheduled task',
+        );
+      } else {
+        logger.debug(
+          { groupJid, taskId },
+          'Container active (not idle), task queued until container finishes',
+        );
+      }
       return;
     }
 
@@ -144,6 +151,27 @@ export class GroupQueue {
     if (groupFolder) state.groupFolder = groupFolder;
   }
 
+  notifyIdle(groupJid: string): void {
+    const state = this.getGroup(groupJid);
+    if (!state.active) return;
+    state.idleWaiting = true;
+
+    // If tasks are pending, preempt now
+    if (state.pendingTasks.length > 0) {
+      this.closeStdin(groupJid);
+    }
+  }
+
+  setTaskContainer(groupJid: string, isTask: boolean): void {
+    const state = this.getGroup(groupJid);
+    state.isTaskContainer = isTask;
+  }
+
+  isTaskContainerActive(groupJid: string): boolean {
+    const state = this.getGroup(groupJid);
+    return state.active && state.isTaskContainer;
+  }
+
   /**
    * Send a follow-up message to the active container via IPC file.
    * Returns true if the message was written, false if no active container.
@@ -151,6 +179,7 @@ export class GroupQueue {
   sendMessage(groupJid: string, text: string): boolean {
     const state = this.getGroup(groupJid);
     if (!state.active || !state.groupFolder) return false;
+    state.idleWaiting = false;  // Container is working on new input
 
     const inputDir = path.join(DATA_DIR, 'ipc', state.groupFolder, 'input');
     try {
@@ -235,6 +264,8 @@ export class GroupQueue {
   private releaseSlot(groupJid: string): void {
     const state = this.getGroup(groupJid);
     state.active = false;
+    state.idleWaiting = false;
+    state.isTaskContainer = false;
     state.process = null;
     state.containerName = null;
     state.groupFolder = null;

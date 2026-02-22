@@ -247,6 +247,9 @@ export class MessageOrchestrator {
         }
         resetIdleTimer();
       }
+      if (result.status === 'success') {
+        this.deps.queue.notifyIdle(chatJid);
+      }
     });
 
     if (idleTimer) clearTimeout(idleTimer);
