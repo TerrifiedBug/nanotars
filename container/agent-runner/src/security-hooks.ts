@@ -24,13 +24,24 @@ export function createSanitizeBashHook(): HookCallback {
 
     const command = toolInput.command;
 
-    // Block attempts to read /proc/*/environ (secrets in process memory)
-    if (/\/proc\/.*\/environ/.test(command)) {
+    // Block attempts to read /proc/*/environ via any method (direct, subshell, backtick)
+    if (/(?:\/proc\/.*\/environ|(?:\$\(|`).*\/proc\/.*\/environ)/.test(command)) {
       return {
         hookSpecificOutput: {
           hookEventName: h.hook_event_name,
           permissionDecision: 'deny' as const,
           reason: 'Access to /proc/*/environ is blocked for security reasons',
+        },
+      };
+    }
+
+    // Block attempts to read the container input file (may contain secrets)
+    if (/\/tmp\/input\.json/.test(command)) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: h.hook_event_name,
+          permissionDecision: 'deny' as const,
+          reason: 'Access to /tmp/input.json is blocked for security reasons',
         },
       };
     }
@@ -42,6 +53,19 @@ export function createSanitizeBashHook(): HookCallback {
           hookEventName: h.hook_event_name,
           permissionDecision: 'deny' as const,
           reason: 'Access to .credentials.json is blocked for security reasons',
+        },
+      };
+    }
+
+    // Block common file-reading tools targeting credentials or /proc/ paths
+    const sensitivePathPattern = /(?:\.credentials|\/proc\/)/;
+    const readTools = /\b(?:cat|less|head|tail|base64|xxd|strings|python|node|perl|ruby)\b/;
+    if (readTools.test(command) && sensitivePathPattern.test(command)) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: h.hook_event_name,
+          permissionDecision: 'deny' as const,
+          reason: 'Reading sensitive paths with file tools is blocked for security reasons',
         },
       };
     }
