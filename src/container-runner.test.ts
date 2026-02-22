@@ -42,6 +42,12 @@ vi.mock('./logger.js', () => ({
 // Mock fs
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
+  // Fake writable stream that accepts writes silently
+  const fakeWriteStream = {
+    write: vi.fn(),
+    end: vi.fn(),
+    on: vi.fn(),
+  };
   return {
     ...actual,
     default: {
@@ -50,9 +56,11 @@ vi.mock('fs', async () => {
       mkdirSync: vi.fn(),
       writeFileSync: vi.fn(),
       readFileSync: vi.fn(() => ''),
+      appendFileSync: vi.fn(),
       readdirSync: vi.fn(() => []),
       statSync: vi.fn(() => ({ isDirectory: () => false })),
       copyFileSync: vi.fn(),
+      createWriteStream: vi.fn(() => fakeWriteStream),
     },
   };
 });

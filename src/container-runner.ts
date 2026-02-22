@@ -148,10 +148,14 @@ export async function runContainerAgent(
 
     onProcess(container, containerName);
 
-    let stdout = '';
     let stderr = '';
-    let stdoutTruncated = false;
     let stderrTruncated = false;
+
+    // Create log file and stream early so stdout is written to disk, not RAM
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logFile = path.join(logsDir, `container-${timestamp}.log`);
+    const logStream = fs.createWriteStream(logFile, { flags: 'w' });
+    let stdoutSize = 0;
 
     // Generate per-run nonce for output markers (prevents injection)
     const outputNonce = crypto.randomBytes(16).toString('hex');
@@ -204,21 +208,10 @@ export async function runContainerAgent(
 
     container.stdout.on('data', (data) => {
       const chunk = data.toString();
+      stdoutSize += chunk.length;
 
-      // Always accumulate for logging
-      if (!stdoutTruncated) {
-        const remaining = CONTAINER_MAX_OUTPUT_SIZE - stdout.length;
-        if (chunk.length > remaining) {
-          stdout += chunk.slice(0, remaining);
-          stdoutTruncated = true;
-          logger.warn(
-            { group: group.name, size: stdout.length },
-            'Container stdout truncated due to size limit',
-          );
-        } else {
-          stdout += chunk;
-        }
-      }
+      // Write to log file (no size limit — disk is cheaper than RAM)
+      logStream.write(chunk);
 
       // Stream-parse for output markers
       parser?.feed(chunk);
@@ -248,6 +241,7 @@ export async function runContainerAgent(
 
     container.on('close', (code) => {
       clearTimeout(timeout);
+      logStream.end();
       const duration = Date.now() - startTime;
 
       // No credentials sync-back needed — credentials file is bind-mounted
@@ -255,10 +249,9 @@ export async function runContainerAgent(
       // visible on the host and vice versa.
 
       if (timedOut) {
-        const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        const timeoutLog = path.join(logsDir, `container-${ts}.log`);
-        fs.writeFileSync(timeoutLog, [
-          `=== Container Run Log (TIMEOUT) ===`,
+        // Append timeout metadata to the existing log file
+        fs.appendFileSync(logFile, [
+          `\n=== Container Run Log (TIMEOUT) ===`,
           `Timestamp: ${new Date().toISOString()}`,
           `Group: ${group.name}`,
           `Container: ${containerName}`,
@@ -292,26 +285,24 @@ export async function runContainerAgent(
         return;
       }
 
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const logFile = path.join(logsDir, `container-${timestamp}.log`);
       const isVerbose = process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
+      const isError = code !== 0;
 
-      const logLines = [
+      // Build metadata header — stdout is already in the log file from streaming
+      const headerLines = [
         `=== Container Run Log ===`,
         `Timestamp: ${new Date().toISOString()}`,
         `Group: ${group.name}`,
         `IsMain: ${input.isMain}`,
         `Duration: ${duration}ms`,
         `Exit Code: ${code}`,
-        `Stdout Truncated: ${stdoutTruncated}`,
+        `Stdout Size: ${stdoutSize} bytes`,
         `Stderr Truncated: ${stderrTruncated}`,
         ``,
       ];
 
-      const isError = code !== 0;
-
       if (isVerbose || isError) {
-        logLines.push(
+        headerLines.push(
           `=== Input ===`,
           JSON.stringify(input, null, 2),
           ``,
@@ -329,11 +320,10 @@ export async function runContainerAgent(
           `=== Stderr${stderrTruncated ? ' (TRUNCATED)' : ''} ===`,
           stderr,
           ``,
-          `=== Stdout${stdoutTruncated ? ' (TRUNCATED)' : ''} ===`,
-          stdout,
+          `=== Stdout (${stdoutSize} bytes) ===`,
         );
       } else {
-        logLines.push(
+        headerLines.push(
           `=== Input Summary ===`,
           `Prompt length: ${input.prompt.length} chars`,
           `Session ID: ${input.sessionId || 'new'}`,
@@ -346,17 +336,27 @@ export async function runContainerAgent(
         );
       }
 
-      fs.writeFileSync(logFile, redactSecrets(logLines.join('\n')));
+      // Read back the raw stdout from the log file, prepend metadata header,
+      // then rewrite with redacted content
+      const rawStdout = fs.readFileSync(logFile, 'utf-8');
+      if (isVerbose || isError) {
+        // Header already includes "=== Stdout ===" label; append the raw stdout
+        fs.writeFileSync(logFile, redactSecrets(headerLines.join('\n') + '\n' + rawStdout));
+      } else {
+        // Non-verbose success: just write metadata (stdout stays out of logs)
+        fs.writeFileSync(logFile, redactSecrets(headerLines.join('\n')));
+      }
       logger.debug({ logFile, verbose: isVerbose }, 'Container log written');
 
       if (code !== 0) {
+        const stdout = rawStdout;
         logger.error(
           {
             group: group.name,
             code,
             duration,
             stderr: redactSecrets(stderr),
-            stdout: redactSecrets(stdout),
+            stdout: redactSecrets(stdout.slice(-2000)),
             logFile,
           },
           'Container exited with error',
@@ -381,8 +381,9 @@ export async function runContainerAgent(
         return;
       }
 
-      // Legacy mode: parse the last output marker pair from accumulated stdout
+      // Legacy mode: parse the last output marker pair from file-backed stdout
       try {
+        const stdout = rawStdout;
         // Extract JSON between nonce-based sentinel markers for robust parsing
         const startIdx = stdout.indexOf(noncedMarkers.start);
         const endIdx = stdout.indexOf(noncedMarkers.end);
@@ -415,7 +416,7 @@ export async function runContainerAgent(
         logger.error(
           {
             group: group.name,
-            stdout,
+            stdout: rawStdout,
             stderr,
             error: err,
           },
@@ -432,6 +433,7 @@ export async function runContainerAgent(
 
     container.on('error', (err) => {
       clearTimeout(timeout);
+      logStream.end();
       logger.error({ group: group.name, containerName, error: err }, 'Container spawn error');
       resolve({
         status: 'error',

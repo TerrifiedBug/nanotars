@@ -499,6 +499,12 @@ Re-exports preserve backward compatibility — no consumer import changes needed
 | `formatOutbound()` | `src/router.ts` | Trivial wrapper around `stripInternalTags()` |
 | `findChannel()` | `src/router.ts` | Zero callers — replaced by `routeOutbound()` |
 
+### Performance
+
+| Optimization | File | What |
+|-------------|------|------|
+| **Stdout streaming to file** | `src/container-runner.ts` | Container stdout is streamed directly to a log file via `fs.createWriteStream` instead of accumulating in a string (previously up to 10MB per container). Stdout is read back from the file only when needed for error reporting or legacy parsing. Disk is cheaper than RAM. |
+
 ### DRY patterns
 
 | Pattern | File | What |
