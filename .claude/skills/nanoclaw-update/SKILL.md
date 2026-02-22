@@ -17,7 +17,7 @@ Run `/nanoclaw-update` in Claude Code.
 
 **Merge**: `git merge nanoclaw/main --no-edit`. This should always be clean. If conflicts arise, the merge is aborted — conflicts mean the fork has diverged and needs to be fixed first.
 
-**Plugin updates**: after merge, if any skill templates have newer versions than installed plugins, offers to update them (copies template files, preserves your group/channel scoping).
+**Plugin updates**: after merge, checks for marketplace plugin updates using name-convention matching and offers to apply them (copies marketplace files, preserves your group/channel scoping).
 
 **Validation**: `npm run build` to confirm nothing broke.
 
@@ -107,49 +107,31 @@ Show file-level impact from fork:
 
 Bucket the fork changed files:
 - **Source** (`src/`): core code changes
-- **Skills** (`.claude/skills/`): skill template updates — may include plugin version bumps
+- **Skills** (`.claude/skills/`): skill definition updates
 - **Build/config** (`package.json`, `package-lock.json`, `tsconfig*.json`, `container/`): build system changes
 - **Other**: docs, tests, misc
 
 ## 2b: Plugin version preview
 
-Before any merge, check for plugin updates from two sources:
+Check for marketplace plugin updates by matching installed plugin names to the marketplace cache.
 
-### Marketplace-installed plugins (via .marketplace.json)
+### Marketplace plugins (name-convention matching)
 
-Plugins installed from a marketplace write a `.marketplace.json` breadcrumb in their install directory. Use this to diff installed files against the marketplace source:
-
-```bash
-# Find all marketplace-tracked plugins
-find plugins/ -name '.marketplace.json' -type f 2>/dev/null
-```
-
-For each `.marketplace.json` found:
-1. Read the file to get `marketplace` and `plugin` fields
-2. Resolve the marketplace source directory:
-   `~/.claude/plugins/marketplaces/{marketplace}/plugins/{plugin}/files/`
-3. If the source directory doesn't exist, skip (marketplace not synced)
-4. Diff installed vs source (excluding `.marketplace.json` and `node_modules`):
+For each directory under `plugins/` and `plugins/channels/`:
+1. Extract the directory name (e.g., `weather` from `plugins/weather/`, `whatsapp` from `plugins/channels/whatsapp/`)
+2. Check if the marketplace cache has a matching plugin:
+   `~/.claude/plugins/marketplaces/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
+3. If the cache directory doesn't exist, skip (no marketplace match)
+4. Diff installed vs marketplace source (excluding `node_modules` and `plugin.json`):
    ```bash
-   diff -rq -x .marketplace.json -x node_modules {source}/ {installed}/
+   diff -rq -x node_modules -x plugin.json {source}/ {installed}/
    ```
-5. If differences exist → flag as "marketplace update available"
-6. If no differences → plugin is up to date
+5. Diff `plugin.json` separately, ignoring `channels` and `groups` fields (user scoping)
+6. If differences exist → flag as "marketplace update available"
+7. If no differences → plugin is up to date
 
-If the marketplace source is missing, tell the user:
+If no marketplace cache exists at `~/.claude/plugins/marketplaces/nanoclaw-skills/`, tell the user:
 > Marketplace not synced locally. Run `/plugin marketplace update nanoclaw-skills` to sync.
-
-### Legacy local skills (backward compatibility)
-For any `.claude/skills/add-skill-*/files/plugin.json` or `add-channel-*/files/plugin.json` that still exist locally (pre-marketplace migration), use the fork-based comparison:
-
-For each local skill template **in the fork** (use `git show nanoclaw/$FORK_BRANCH:<path>` to read without checking out):
-
-1. Read the template's `plugin.json` from the fork: `git show nanoclaw/$FORK_BRANCH:.claude/skills/<skill>/files/plugin.json`
-2. Get the `name` and `version` fields
-3. Find matching installed plugin under `plugins/` (match by `name` field in the installed `plugin.json`)
-4. If installed plugin exists and has a `version` field, compare versions
-5. If fork template version > installed version → flag as "update available"
-6. If installed plugin has no `version` field → flag as "version tracking now available"
 
 ## 2c: Conflict check
 
@@ -170,12 +152,9 @@ Fork update preview:
 
   Conflicts: none (clean merge) ← or list conflicted files
 
-  Marketplace plugin updates (from .marketplace.json diff):
+  Plugin updates (from marketplace):
     - weather: 3 files changed
     - brave-search: 1 file changed
-
-  Legacy plugin updates (from fork skill templates):
-    - some-plugin: 1.0.0 → 1.1.0
 ```
 
 **If conflicts were detected**: tell the user the merge cannot proceed because the fork has diverged from nanotars. This needs to be fixed on the fork side first. List the conflicting files. **Stop here — do not offer to merge.**
@@ -207,15 +186,15 @@ If build fails:
 
 # Step 5: Plugin updates (after successful merge + build)
 
-Now that the fork code is merged and built, apply plugin updates.
+Now that the fork code is merged and built, check for marketplace plugin updates.
 
-## Marketplace-installed plugins (via .marketplace.json)
+## Marketplace plugins (name-convention matching)
 
-Re-scan `plugins/**/.marketplace.json` files (same logic as Step 2b) to find plugins with available updates.
+Re-scan installed plugins using the same name-convention matching as Step 2b.
 
 If updates are available, present them:
 ```
-Marketplace plugin updates available:
+Plugin updates available (from marketplace):
   - weather: 3 files changed
   - brave-search: 1 file changed
 
@@ -225,47 +204,16 @@ Would you like to update these plugins?
 
 If user says yes, for each plugin to update:
 1. Read the installed `plugin.json` to capture current `channels` and `groups` arrays (user scoping)
-2. Resolve the marketplace source: `~/.claude/plugins/marketplaces/{marketplace}/plugins/{plugin}/files/`
+2. Resolve the marketplace source: `~/.claude/plugins/marketplaces/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
 3. Copy all files from marketplace source over the installed plugin directory:
    ```bash
    cp -r {source}/* {installed}/
    ```
 4. Re-apply the preserved `channels` and `groups` arrays to the new `plugin.json` (overwrite what the marketplace set)
-5. Re-write the `.marketplace.json` breadcrumb using the values read in step 1:
-   ```bash
-   echo '{"marketplace":"<MARKETPLACE>","plugin":"<PLUGIN>"}' > {installed}/.marketplace.json
-   ```
-6. If the plugin has `dependencies: true` in plugin.json, run `npm install` in the plugin directory
-7. Report what was updated
+5. If the plugin has `dependencies: true` in plugin.json, run `npm install` in the plugin directory
+6. Report what was updated
 
 If user says no, skip — they can update individually later by re-running the skill's installation command.
-
-## Legacy local skills (backward compatibility)
-For skills still in `.claude/skills/add-*/files/`, re-scan the local (now merged) skill templates vs installed plugins:
-
-For each `.claude/skills/add-skill-*/files/plugin.json` and `add-channel-*/files/plugin.json`:
-1. Read the template's `plugin.json` → get `name` and `version`
-2. Find matching installed plugin under `plugins/` or `plugins/channels/` by `name` field
-3. Compare versions (semver string comparison)
-4. If template version > installed version → add to update list
-
-If updates are available, present them:
-```
-Plugin updates available after merge:
-  - weather: 1.0.0 → 1.1.0
-  - brave-search: 1.0.0 → 1.2.0
-
-Would you like to update these plugins? (Updates copy template files over installed plugin directories, preserving your group/channel scoping.)
-```
-
-If user says yes, for each plugin to update:
-1. Read the installed `plugin.json` to capture current `channels` and `groups` arrays (user scoping)
-2. Copy all files from the skill template directory (`.claude/skills/add-skill-<name>/files/`) over the installed plugin directory (`plugins/<name>/`)
-3. Re-apply the preserved `channels` and `groups` arrays to the new `plugin.json` (overwrite what the template set)
-4. If the plugin has `dependencies: true`, run `npm install` in the plugin directory
-5. Report what was updated
-
-If user says no, skip — they can update individual plugins later via their `/add-skill-*` skills.
 
 # Step 6: Summary + rollback instructions
 Show:
@@ -276,7 +224,6 @@ Show:
 
 Update summary:
 - **Core code**: "X files changed in src/, container/, etc."
-- **Skill templates**: "Y skill templates updated in .claude/skills/"
 - **Plugins updated**: list plugins that were updated (or "none — user deferred" / "none — all up to date")
 
 Tell the user:
