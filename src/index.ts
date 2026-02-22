@@ -168,7 +168,11 @@ async function main(): Promise<void> {
   // Create pluginCtx first — channels array populated later but closure captures reference
   const pluginCtx: PluginContext = {
     insertMessage: insertExternalMessage,
-    sendMessage: (jid, text) => routeOutbound(orchestrator.channels, jid, text, undefined, undefined, plugins).then(() => {}),
+    sendMessage: (jid, rawText) => {
+      const text = stripInternalTags(rawText);
+      if (!text) return Promise.resolve();
+      return routeOutbound(orchestrator.channels, jid, text, undefined, undefined, plugins).then(() => {});
+    },
     getRegisteredGroups: () => orchestrator.registeredGroups,
     getMainChannelJid: () => {
       const mainEntry = Object.entries(orchestrator.registeredGroups).find(
@@ -268,7 +272,11 @@ async function main(): Promise<void> {
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text, sender, replyTo) => routeOutbound(orchestrator.channels, jid, text, sender, replyTo, plugins).then(() => {}),
+    sendMessage: (jid, rawText, sender, replyTo) => {
+      const text = stripInternalTags(rawText);
+      if (!text) return Promise.resolve();
+      return routeOutbound(orchestrator.channels, jid, text, sender, replyTo, plugins).then(() => {});
+    },
     sendFile: (jid, buffer, mime, fileName, caption) => routeOutboundFile(orchestrator.channels, jid, buffer, mime, fileName, caption),
     react: async (jid, messageId, emoji) => {
       const channel = orchestrator.channels.find((c) => c.ownsJid(jid) && c.isConnected());
