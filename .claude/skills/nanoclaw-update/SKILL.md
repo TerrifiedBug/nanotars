@@ -126,7 +126,12 @@ For each directory under `plugins/` and `plugins/channels/`:
    ```bash
    diff -rq -x node_modules -x plugin.json {source}/ {installed}/
    ```
-5. Diff `plugin.json` separately, ignoring `channels` and `groups` fields (user scoping)
+5. Diff `plugin.json` separately, ignoring `channels` and `groups` fields (user scoping):
+   ```bash
+   jq 'del(.channels, .groups)' {installed}/plugin.json > /tmp/installed-plugin.json
+   jq 'del(.channels, .groups)' {source}/plugin.json > /tmp/source-plugin.json
+   diff -q /tmp/installed-plugin.json /tmp/source-plugin.json
+   ```
 6. If differences exist → flag as "marketplace update available"
 7. If no differences → plugin is up to date
 
