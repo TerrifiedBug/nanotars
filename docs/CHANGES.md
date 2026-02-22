@@ -15,7 +15,7 @@ This document describes all changes made in this fork compared to the upstream [
 5. [Media Pipeline](#5-media-pipeline) — Image/video/audio/document downloads
 6. [Task Scheduler Improvements](#6-task-scheduler-improvements) — Model selection, error notifications
 7. [Bug Fixes](#7-bug-fixes) — Submitted as PRs
-8. [New Skills](#8-new-skills) — 27 integration, channel, and meta skills
+8. [New Skills](#8-new-skills) — 27 integration, channel, and meta skills (now in marketplace)
 9. [Documentation](#9-documentation) — Plugin guides, channel plugin architecture
 10. [Code Quality & Refactoring](#10-code-quality--refactoring) — Module decomposition, dead code removal
 11. [Minor Improvements](#11-minor-improvements) — Typing indicators, read receipts
@@ -23,6 +23,7 @@ This document describes all changes made in this fork compared to the upstream [
 13. [Agent Identity System](#13-agent-identity-system) — IDENTITY.md personality support
 14. [Plugin Versioning & Update System](#14-plugin-versioning--update-system) — Semver tracking, fork-based updates
 15. [Agent Teams & Per-Group Agent Definitions](#15-agent-teams--per-group-agent-definitions) — Persistent subagent roles, WhatsApp sender display
+16. [Skill Marketplace](#16-skill-marketplace) — Skills moved to Claude Code plugin marketplace
 
 ---
 
@@ -145,13 +146,14 @@ Upstream has WhatsApp hardcoded throughout. This fork extracted WhatsApp into a 
 
 ### Channel plugins available
 
-NanoClaw ships with no channels installed by default. The setup and add-channel skills discover available channel templates and guide installation. Currently supported:
+NanoClaw ships with no channels installed by default. Channel plugins are available from the [skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills) and installed via Claude Code's plugin system:
 
-| Channel | Installed via | Template location |
-|---------|--------------|-------------------|
-| WhatsApp | `/add-channel-whatsapp` | `.claude/skills/add-channel-whatsapp/files/` |
-| Discord | `/add-channel-discord` | `.claude/skills/add-channel-discord/` |
-| Telegram | `/add-channel-telegram` | `.claude/skills/add-channel-telegram/files/` |
+| Channel | Marketplace plugin | Install command |
+|---------|-------------------|-----------------|
+| WhatsApp | `nanoclaw-whatsapp` | `/plugin install nanoclaw-whatsapp@nanoclaw-skills` |
+| Discord | `nanoclaw-discord` | `/plugin install nanoclaw-discord@nanoclaw-skills` |
+| Telegram | `nanoclaw-telegram` | `/plugin install nanoclaw-telegram@nanoclaw-skills` |
+| Slack | `nanoclaw-slack` | `/plugin install nanoclaw-slack@nanoclaw-skills` |
 
 ### How routing works
 
@@ -375,11 +377,13 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 
 ---
 
-## 8. New Skills (35)
+## 8. New Skills
 
-Claude Code skills (`.claude/skills/`) that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
+Claude Code skills that guide the AI through installing integrations. Each skill creates a plugin directory with manifest, code, and container-side instructions.
 
-### Integration skills (23)
+Integration and channel skills (27 total) have been moved to the [skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills) — see [§16](#16-skill-marketplace). Core skills (10) remain in the main repository under `.claude/skills/`.
+
+### Integration skills (23) — now in marketplace
 
 | Skill | What it adds |
 |-------|-------------|
@@ -407,27 +411,29 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 | `add-skill-telegram-swarm` | Agent Teams support for Telegram (pool bot identities) |
 | `add-skill-webhook` | HTTP webhook endpoint for push events (Home Assistant, uptime monitors, etc.) |
 
-### Channel skills (4)
+### Channel skills (4) — now in marketplace
 
 | Skill | What it adds |
 |-------|-------------|
 | `add-channel-whatsapp` | Install WhatsApp as a channel plugin |
 | `add-channel-discord` | Install Discord as a channel plugin |
 | `add-channel-telegram` | Install Telegram as a channel plugin |
-| `nanoclaw-add-group` | Generic skill to register a group on any installed channel |
+| `add-channel-slack` | Install Slack as a channel plugin |
 
-### Meta skills (8)
+### Core skills (10) — in main repo
 
 | Skill | What it does |
 |-------|-------------|
 | `nanoclaw-setup` | First-time installation, auth, service configuration |
 | `nanoclaw-debug` | Container issues, logs, troubleshooting |
 | `nanoclaw-set-model` | Change Claude model used by containers |
-| `create-skill-plugin` | Guided creation of new skill plugins from an idea (includes scoping guidance for sensitive plugins) |
-| `create-channel-plugin` | Guided creation of new channel plugins (includes container-skills template for capability awareness) |
-| `nanoclaw-update` | Manage upstream sync with selective cherry-pick |
+| `nanoclaw-update` | Pull fork updates, compare plugin versions |
+| `nanoclaw-add-group` | Register a group on any installed channel |
 | `nanoclaw-add-agent` | Guided creation of persistent agent definitions for groups (Agent Teams) |
-| `nanoclaw-security-audit` | Pre-installation security audit of skill plugins — purpose-based threat evaluation across 8 attack vectors |
+| `nanoclaw-security-audit` | Pre-installation security audit of skill plugins |
+| `nanoclaw-publish-skill` | Publish a local skill to the marketplace |
+| `create-skill-plugin` | Guided creation of new skill plugins from an idea |
+| `create-channel-plugin` | Guided creation of new channel plugins |
 
 ### Rewritten upstream skills
 
@@ -446,6 +452,7 @@ Claude Code skills (`.claude/skills/`) that guide the AI through installing inte
 |------|----------|
 | `docs/PLUGINS.md` | Complete plugin system architecture — manifests, hooks, mounts, Dockerfile.partial, env vars, MCP merging, source code changes |
 | `docs/CHANNEL_PLUGINS.md` | Channel plugin development guide — interface, auth, registration, testing |
+| `docs/MARKETPLACE.md` | Skill marketplace guide — installation, publishing, available skills |
 | `docs/CHANGES.md` | This file — comprehensive fork changelog |
 
 ### Modified docs
@@ -633,9 +640,9 @@ All plugins now include a `"version"` field in their `plugin.json` manifest (sem
 ### How plugin versioning works
 
 - Each `plugin.json` has a `"version": "1.0.0"` field
-- Skill templates under `.claude/skills/add-*/files/` are the "source of truth" for the latest version
-- Installed plugins under `plugins/` may lag behind if the user hasn't re-run the installer
-- The `/nanoclaw-update` skill compares template versions vs installed versions after fetching fork updates
+- Marketplace plugin manifests are the "source of truth" for the latest version (previously: skill templates under `.claude/skills/add-*/files/`)
+- Installed plugins under `plugins/` may lag behind if the user hasn't updated from the marketplace
+- The `/nanoclaw-update` skill checks marketplace versions vs installed versions
 
 ### Update skill rework
 
@@ -719,6 +726,40 @@ This gives each subagent a visible identity without needing multiple phone numbe
 | `.claude/skills/add-channel-whatsapp/files/index.js` | Same change in template |
 | `plugins/channels/whatsapp/container-skills/SKILL.md` | Agent Teams documentation for agents |
 | `.claude/skills/add-channel-whatsapp/files/container-skills/SKILL.md` | Same in template |
+
+---
+
+## 16. Skill Marketplace
+
+Installable skills (`add-skill-*`, `add-channel-*`) moved to a separate Claude Code plugin marketplace at [TerrifiedBug/nanoclaw-skills](https://github.com/TerrifiedBug/nanoclaw-skills). This keeps the main repo focused on core functionality while making skills discoverable via Claude Code's native `/plugin` UI.
+
+**What moved:** 23 skill plugins + 4 channel plugins (27 total)
+**What stayed:** 10 core skills (`nanoclaw-*`, `create-*-plugin`, `nanoclaw-publish-skill`)
+
+**For forkers:**
+```
+/plugin marketplace add TerrifiedBug/nanoclaw-skills
+/plugin install nanoclaw-weather@nanoclaw-skills
+```
+
+**New skills:**
+- `/nanoclaw-publish-skill` — publishes local skills to the marketplace
+
+**Updated skills:**
+- `nanoclaw-setup` — now includes marketplace provisioning step
+- `nanoclaw-update` — marketplace-aware version checking
+- `create-skill-plugin` / `create-channel-plugin` — publish guidance added
+
+**Files added/modified:**
+- `.claude/settings.json` — `extraKnownMarketplaces` for auto-discovery
+- `.claude/skills/nanoclaw-publish-skill/SKILL.md` — new publish skill
+- `.claude/skills/nanoclaw-setup/SKILL.md` — marketplace step + marketplace channel discovery
+- `.claude/skills/nanoclaw-update/SKILL.md` — marketplace-aware version checking
+- `.claude/skills/create-skill-plugin/SKILL.md` — publish guidance
+- `.claude/skills/create-channel-plugin/SKILL.md` — publish guidance
+- `CONTRIBUTING.md` — marketplace contribution workflow
+- `.github/CODEOWNERS` — core skills maintainer-only
+- `.github/PULL_REQUEST_TEMPLATE.md` — marketplace skill checklist
 
 ---
 

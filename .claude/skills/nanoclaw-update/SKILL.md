@@ -113,9 +113,16 @@ Bucket the fork changed files:
 
 ## 2b: Plugin version preview
 
-Before any merge, compare what the fork's skill templates would bring vs what's currently installed. This shows the user plugin updates as part of the preview.
+Before any merge, check for plugin updates from two sources:
 
-For each `.claude/skills/add-skill-*/files/plugin.json` and `add-channel-*/files/plugin.json` **in the fork** (use `git show nanoclaw/$FORK_BRANCH:<path>` to read without checking out):
+### Marketplace-installed skills
+If the nanoclaw-skills marketplace is configured (`grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null`), marketplace skill updates are handled natively by Claude Code's auto-refresh. Tell the user:
+> Marketplace skill updates are managed separately. Run `/plugin marketplace update nanoclaw-skills` to check for skill updates.
+
+### Legacy local skills (backward compatibility)
+For any `.claude/skills/add-skill-*/files/plugin.json` or `add-channel-*/files/plugin.json` that still exist locally (pre-marketplace migration), use the fork-based comparison:
+
+For each local skill template **in the fork** (use `git show nanoclaw/$FORK_BRANCH:<path>` to read without checking out):
 
 1. Read the template's `plugin.json` from the fork: `git show nanoclaw/$FORK_BRANCH:.claude/skills/<skill>/files/plugin.json`
 2. Get the `name` and `version` fields
@@ -180,9 +187,14 @@ If build fails:
 
 # Step 5: Plugin updates (after successful merge + build)
 
-Now that the fork code is merged and built, apply plugin updates if any were detected in Step 2b.
+Now that the fork code is merged and built, apply plugin updates.
 
-Re-scan the local (now merged) skill templates vs installed plugins to confirm version differences:
+## Marketplace skills
+If the nanoclaw-skills marketplace is configured, plugin updates are managed through the marketplace. After merging core code updates, suggest:
+> Marketplace skill updates are handled separately. Run `/plugin marketplace update nanoclaw-skills` to check for skill updates.
+
+## Legacy local skills (backward compatibility)
+For skills still in `.claude/skills/add-*/files/`, re-scan the local (now merged) skill templates vs installed plugins:
 
 For each `.claude/skills/add-skill-*/files/plugin.json` and `add-channel-*/files/plugin.json`:
 1. Read the template's `plugin.json` → get `name` and `version`

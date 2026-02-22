@@ -8,15 +8,13 @@
 ## Description
 
 
-## For Skills
+## For Skills (marketplace)
 
-- [ ] I have not made any changes to source code
-- [ ] My skill contains instructions for Claude to follow (not pre-built code)
-- [ ] I tested this skill on a fresh clone
+- [ ] I tested this skill locally before publishing
+- [ ] Skill is published to [nanoclaw-skills](https://github.com/TerrifiedBug/nanoclaw-skills) marketplace
+- [ ] No hardcoded secrets
 
-## For Plugins
+## For Core Skills (nanoclaw-*, create-*)
 
-- [ ] Has `plugin.json` manifest
-- [ ] Has installation skill in `.claude/skills/`
-- [ ] Tested via installation skill on fresh clone
-- [ ] No hardcoded secrets (uses `containerEnvVars` in plugin.json)
+- [ ] I have not made changes to other source code
+- [ ] Tested on a fresh clone

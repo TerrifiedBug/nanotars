@@ -254,12 +254,13 @@ RUN cd /opt/cal-cli && npm install --omit=dev && npm run build && rm -rf src/ ts
 
 ## How Skills Create Plugins
 
-Installation skills live in `.claude/skills/add-skill-{name}/` and contain a `SKILL.md` that guides Claude Code through creating a plugin. The typical pattern is:
+Installation skills guide Claude Code through creating a plugin directory. Skills are distributed via the [NanoClaw skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills) as Claude Code plugins. The typical installation flow is:
 
-1. The skill's `SKILL.md` contains step-by-step instructions
-2. Steps create `plugins/{name}/` with all necessary files (manifest, skills, MCP config, etc.)
-3. Environment variables are added to `.env`
-4. The project is rebuilt (`npm run build`) and the service restarted
+1. Install the skill from the marketplace: `/plugin install nanoclaw-brave-search@nanoclaw-skills`
+2. Run the skill (e.g., `/add-skill-brave-search`)
+3. The skill creates `plugins/{name}/` with all necessary files (manifest, skills, MCP config, etc.)
+4. Environment variables are added to `.env`
+5. The project is rebuilt (`npm run build`) and the service restarted
 
 Example from `add-skill-brave-search`:
 
@@ -273,6 +274,10 @@ Step 6: Build and restart
 ```
 
 This pattern means skills are idempotent install scripts. The skill contains the knowledge; the plugin directory is the artifact.
+
+### Marketplace
+
+All 27 installable skills (integration + channel) are published to the [nanoclaw-skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills). Core skills (setup, debug, update, etc.) remain in the main repository under `.claude/skills/`. See [docs/MARKETPLACE.md](MARKETPLACE.md) for details.
 
 ## Plugin Discovery and Loading
 

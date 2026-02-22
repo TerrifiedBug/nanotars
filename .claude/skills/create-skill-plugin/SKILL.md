@@ -798,3 +798,13 @@ Claude Code's walk-up discovery finds them automatically — no configuration ne
 ### Container Hook Mount Path
 
 Container hooks from `plugins/{name}/hooks/` are mounted into the container and registered with the agent runner SDK automatically. The mount name is `{plugin-name}--{filename}`.
+
+## Publishing to Marketplace
+
+After testing the skill locally with `/add-skill-{name}`, you can publish it to the NanoClaw skills marketplace:
+
+```
+/nanoclaw-publish-skill {name}
+```
+
+This restructures the skill into Claude Code plugin format and pushes it to `TerrifiedBug/nanoclaw-skills`. Publishing is optional — skills work locally without it.
