@@ -28,9 +28,9 @@ const IPC_MAX_FILE_SIZE = 1024 * 1024;
  *  - O_NOFOLLOW to prevent TOCTOU race between lstat and open
  * Returns parsed JSON or null on any issue.
  */
-function readIpcJsonFile(filePath: string, sourceGroup: string): unknown | null {
+async function readIpcJsonFile(filePath: string, sourceGroup: string): Promise<unknown | null> {
   try {
-    const stat = fs.lstatSync(filePath);
+    const stat = await fs.promises.lstat(filePath);
     if (!stat.isFile()) {
       logger.warn({ filePath, sourceGroup }, 'IPC: not a regular file, skipping');
       return null;
@@ -40,13 +40,13 @@ function readIpcJsonFile(filePath: string, sourceGroup: string): unknown | null 
       return null;
     }
     // O_NOFOLLOW prevents symlink race between lstat and open
-    const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    const fd = await fs.promises.open(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
       const buf = Buffer.alloc(stat.size);
-      const bytesRead = fs.readSync(fd, buf, 0, stat.size, 0);
+      const { bytesRead } = await fd.read(buf, 0, stat.size, 0);
       return JSON.parse(buf.slice(0, bytesRead).toString('utf-8'));
     } finally {
-      fs.closeSync(fd);
+      await fd.close();
     }
   } catch (err) {
     logger.warn({ filePath, sourceGroup, err }, 'IPC: failed to read file safely');
@@ -58,11 +58,15 @@ function readIpcJsonFile(filePath: string, sourceGroup: string): unknown | null 
  * List .json files in an IPC directory, filtering to regular files only.
  * Uses withFileTypes to avoid stat on non-files (directory entry type confusion).
  */
-function listIpcJsonFiles(dir: string): string[] {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-    .map((entry) => entry.name);
+async function listIpcJsonFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
 }
 
 /** Move a failed IPC file to the errors directory. */
@@ -120,10 +124,10 @@ export interface IpcDeps {
 
 let ipcWatcherRunning = false;
 
-export function startIpcWatcher(deps: IpcDeps): void {
+export function startIpcWatcher(deps: IpcDeps): Promise<void> {
   if (ipcWatcherRunning) {
     logger.debug('IPC watcher already running, skipping duplicate start');
-    return;
+    return Promise.resolve();
   }
   ipcWatcherRunning = true;
 
@@ -134,7 +138,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
     // Scan all group IPC directories (identity determined by directory)
     let groupFolders: string[];
     try {
-      groupFolders = fs.readdirSync(ipcBaseDir, { withFileTypes: true })
+      const entries = await fs.promises.readdir(ipcBaseDir, { withFileTypes: true });
+      groupFolders = entries
         .filter((entry) => entry.isDirectory() && entry.name !== 'errors')
         .map((entry) => entry.name);
     } catch (err) {
@@ -153,11 +158,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
       // Process messages from this group's IPC directory
       try {
         {
-          const messageFiles = listIpcJsonFiles(messagesDir);
+          const messageFiles = await listIpcJsonFiles(messagesDir);
           for (const file of messageFiles) {
             const filePath = path.join(messagesDir, file);
             try {
-              const raw = readIpcJsonFile(filePath, sourceGroup);
+              const raw = await readIpcJsonFile(filePath, sourceGroup);
               if (raw === null) {
                 quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
                 continue;
@@ -242,11 +247,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
       // Process tasks from this group's IPC directory
       try {
         {
-          const taskFiles = listIpcJsonFiles(tasksDir);
+          const taskFiles = await listIpcJsonFiles(tasksDir);
           for (const file of taskFiles) {
             const filePath = path.join(tasksDir, file);
             try {
-              const data = readIpcJsonFile(filePath, sourceGroup);
+              const data = await readIpcJsonFile(filePath, sourceGroup);
               if (data === null) {
                 quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
                 continue;
@@ -268,8 +273,9 @@ export function startIpcWatcher(deps: IpcDeps): void {
     setTimeout(processIpcFiles, IPC_POLL_INTERVAL);
   };
 
-  processIpcFiles();
+  const firstRun = processIpcFiles();
   logger.info('IPC watcher started (per-group namespaces)');
+  return firstRun;
 }
 
 /** Authorize and execute a task action (pause/resume/cancel) with consistent logging. */

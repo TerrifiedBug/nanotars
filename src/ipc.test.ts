@@ -75,8 +75,7 @@ describe('startIpcWatcher', () => {
       JSON.stringify({ type: 'message', chatJid: 'jid@test', text: 'hello' }),
     );
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.sendMessage).toHaveBeenCalledWith('jid@test', 'hello', undefined, undefined);
     expect(fs.existsSync(path.join(ipcDir, 'msg-1.json'))).toBe(false);
@@ -91,8 +90,7 @@ describe('startIpcWatcher', () => {
     fs.mkdirSync(ipcDir, { recursive: true });
     fs.writeFileSync(path.join(ipcDir, 'bad.json'), 'not json{{{');
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(fs.existsSync(path.join(ipcDir, 'bad.json'))).toBe(false);
     const errDir = path.join(tmpDir, 'ipc', 'errors');
@@ -114,8 +112,7 @@ describe('startIpcWatcher', () => {
       JSON.stringify({ type: 'react', chatJid: 'jid@test', messageId: 'mid', emoji: '👍' }),
     );
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.react).toHaveBeenCalledWith('jid@test', 'mid', '👍');
   });
@@ -136,8 +133,7 @@ describe('startIpcWatcher', () => {
       JSON.stringify({ type: 'message', chatJid: 'jid@test', text: 'attack' }),
     );
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.sendMessage).not.toHaveBeenCalled();
   });
@@ -151,8 +147,7 @@ describe('startIpcWatcher', () => {
     fs.mkdirSync(ipcDir, { recursive: true });
     fs.writeFileSync(path.join(ipcDir, 'readme.txt'), 'not a message');
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.sendMessage).not.toHaveBeenCalled();
     expect(fs.existsSync(path.join(ipcDir, 'readme.txt'))).toBe(true);
@@ -183,8 +178,7 @@ describe('startIpcWatcher: send_file', () => {
       }),
     );
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.sendFile).toHaveBeenCalled();
     const call = vi.mocked(deps.sendFile).mock.calls[0];
@@ -209,8 +203,7 @@ describe('startIpcWatcher: send_file', () => {
       }),
     );
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.sendFile).not.toHaveBeenCalled();
   });
@@ -235,8 +228,7 @@ describe('startIpcWatcher: send_file', () => {
       }),
     );
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.sendFile).toHaveBeenCalled();
     const call = vi.mocked(deps.sendFile).mock.calls[0];
@@ -263,8 +255,7 @@ describe('startIpcWatcher: send_file', () => {
       }),
     );
 
-    startIpcWatcher(deps);
-    await vi.advanceTimersByTimeAsync(10);
+    await startIpcWatcher(deps);
 
     expect(deps.sendFile).toHaveBeenCalled();
     const call = vi.mocked(deps.sendFile).mock.calls[0];
