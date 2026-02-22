@@ -1,8 +1,0 @@
-{
-  "name": "nanoclaw-plugin-transcription",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "openai": "^4.77.0"
-  }
-}

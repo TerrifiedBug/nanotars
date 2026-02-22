@@ -1,7 +1,0 @@
-{
-  "name": "brave-search",
-  "description": "Brave Search API access for web search",
-  "containerEnvVars": ["BRAVE_API_KEY"],
-  "hooks": [],
-  "version": "1.0.0"
-}
