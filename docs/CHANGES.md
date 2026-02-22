@@ -24,6 +24,7 @@ This document describes all changes made in this fork compared to the upstream [
 14. [Plugin Versioning & Update System](#14-plugin-versioning--update-system) — Semver tracking, fork-based updates
 15. [Agent Teams & Per-Group Agent Definitions](#15-agent-teams--per-group-agent-definitions) — Persistent subagent roles, WhatsApp sender display
 16. [Skill Marketplace](#16-skill-marketplace) — Skills moved to Claude Code plugin marketplace
+17. [Plugin Scoping Standardization](#17-plugin-scoping-standardization) — Mandatory channels/groups configuration
 
 ---
 
@@ -777,4 +778,20 @@ Installable skills (`add-skill-*`, `add-channel-*`) moved to a separate Claude C
 | Setup | Shell scripts hardcoding WhatsApp | Channel-agnostic SKILL.md with plugin detection |
 | Scheduled tasks | Single model, silent failures | Per-task model selection, error notifications, atomic claiming |
 | Updates | Manual `git pull` from upstream | Fetch-then-assess from fork with plugin version comparison |
+
+---
+
+## 17. Plugin Scoping Standardization
+
+All plugin install skills now include a mandatory **Plugin Configuration** step that prompts users to confirm or customize `channels` and `groups` scoping. Previously only 2/27 marketplace plugins included these fields in `plugin.json`, and only 7/27 had a scoping step in their install skills.
+
+### What changed
+
+- **`create-skill-plugin` template** — Phase 3 now mandates Plugin Configuration for all plugins (not just sensitive ones). The generated SKILL.md template includes a mandatory configuration step after file copy.
+- **Local plugins** — Added `channels`/`groups` fields to `plugins/weather/plugin.json` and `plugins/dashboard/plugin.json`.
+- **Marketplace `plugin.json` files** — All 26 marketplace plugin templates now include `"channels": ["*"], "groups": ["*"]` defaults.
+- **Marketplace install skills** — All 23 skill plugin install skills now include a Plugin Configuration step:
+  - 7 existing "Group Scoping" sections renamed to "Plugin Configuration" with channels scoping added
+  - 16 skills received new Plugin Configuration steps (brief for informational/system plugins, detailed for sensitive plugins)
+- **Channel plugins** (discord, slack, telegram, whatsapp) — `plugin.json` templates updated for completeness; install skills unchanged since channels scope via group registration.
 

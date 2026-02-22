@@ -60,7 +60,9 @@ Ask about specifics based on the archetype(s) you determined. Again, **one quest
 - **For MCP integrations:** "Do you know the MCP server package or URL, or should I look it up?"
 - **For background processes:** "What port should it listen on?" or "How often should it check for updates?"
 - **For all plugins:** "What should I call this plugin?" — suggest a name based on the conversation (e.g., "How about `add-skill-weather`?")
-- **For sensitive plugins:** If the plugin handles personal data (email, calendar, financial), controls physical systems (home automation), or accesses private accounts (GitHub, Notion), add a **Group Scoping** step to the generated installation SKILL.md. This step asks the user whether all groups should have access or only specific ones, and sets the `"groups"` field in `plugin.json` accordingly. Informational plugins (weather, search, trains) don't need this — default `["*"]` is fine.
+- **For all plugins:** Add a mandatory **Plugin Configuration** step to the generated installation SKILL.md. This step asks the user to confirm or customize the `"channels"` and `"groups"` fields in `plugin.json`:
+  - **Sensitive plugins** (personal data, physical systems, private accounts): ask explicitly which channels and groups should have access.
+  - **Non-sensitive plugins** (weather, search, trains): show that defaults are `["*"]` (all channels, all groups) and ask for a quick confirmation — "These defaults give all groups access. Want to restrict to specific groups or channels instead?"
 
 ### Phase 4: Confirm and Generate
 
@@ -225,16 +227,21 @@ If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
 
 2. {If env vars needed: generate/collect API keys, add to .env}
 
-3. {If sensitive plugin — Group Scoping step:}
-   Ask the user: "This plugin can {capability}. Should all groups have access, or only specific ones?"
-   - If specific groups: update `plugins/{name}/plugin.json` to set `"groups": ["folder1", "folder2"]`
-   - If all groups: leave as `"groups": ["*"]` (the default)
-   {Skip this step for informational/utility plugins that don't handle personal data or control external systems.}
-
-4. Copy plugin files:
+3. Copy plugin files:
    ```bash
    cp -r .claude/skills/add-skill-{name}/files/ plugins/{name}/
    ```
+
+4. **Plugin Configuration:**
+   Ask the user to confirm or customize which channels and groups can use this plugin.
+   - Read current `channels` and `groups` from `plugins/{name}/plugin.json` (defaults: `["*"]`)
+   - For sensitive plugins (personal data, physical systems, private accounts):
+     "This plugin can {capability}. Which groups should have access?" → set `"groups": ["folder1", "folder2"]`
+     "Which channel types should have access?" → set `"channels": ["whatsapp", "discord"]` or leave `["*"]`
+   - For non-sensitive plugins:
+     "Defaults give all groups and channels access. Want to restrict to specific ones instead?"
+     If yes: collect and set specific values. If no: keep `["*"]`.
+   - Update `plugins/{name}/plugin.json` with the chosen values.
 
 5. Rebuild and restart:
    ```bash
