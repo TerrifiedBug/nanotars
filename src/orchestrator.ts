@@ -396,6 +396,11 @@ export class MessageOrchestrator {
             this.processedIds.add(m.id);
           }
 
+          // Defensive cap: prevent unbounded Set growth from clock skew or stuck cursors
+          if (this.processedIds.size > 10_000) {
+            this.processedIds.clear();
+          }
+
           this.lastTimestamp = newTimestamp;
           this.saveState();
 
