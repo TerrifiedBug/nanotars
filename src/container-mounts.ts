@@ -54,8 +54,9 @@ async function fileExists(p: string): Promise<boolean> {
 
 let pluginRegistry: PluginRegistry | null = null;
 
-/** Cached global .env parse — file doesn't change during process lifetime. */
+/** Cached global .env parse with mtime tracking for invalidation. */
 let globalEnvCache: Map<string, string> | null = null;
+let globalEnvMtime: number = 0;
 
 /** Set the plugin registry for dynamic env vars and skill mounting */
 export function setPluginRegistry(registry: PluginRegistry): void {
@@ -307,14 +308,16 @@ async function buildEnvMount(
   const envDir = path.join(DATA_DIR, 'env', group.folder);
   await fs.promises.mkdir(envDir, { recursive: true });
 
-  // Parse global .env (cached — doesn't change during process lifetime)
-  if (globalEnvCache === null) {
-    const envFile = path.join(projectRoot, '.env');
-    if (await fileExists(envFile)) {
+  // Parse global .env (cached with mtime-based invalidation)
+  const envFile = path.join(projectRoot, '.env');
+  try {
+    const stat = await fs.promises.stat(envFile);
+    if (globalEnvCache === null || stat.mtimeMs !== globalEnvMtime) {
       globalEnvCache = parseEnvLines(await fs.promises.readFile(envFile, 'utf-8'));
-    } else {
-      globalEnvCache = new Map();
+      globalEnvMtime = stat.mtimeMs;
     }
+  } catch {
+    if (globalEnvCache === null) globalEnvCache = new Map();
   }
   // Clone so group overlays don't mutate the cache
   const envMap = new Map(globalEnvCache);

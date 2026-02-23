@@ -191,6 +191,11 @@ export function stop(
 export function fixMountPermissions(hostPath: string): Promise<void> {
   if (detectRuntime() !== 'docker') return Promise.resolve();
   return new Promise((resolve) => {
-    execFile('chown', ['-R', '1000:1000', hostPath], { stdio: 'pipe' }, () => resolve());
+    execFile('chown', ['-R', '1000:1000', hostPath], { stdio: 'pipe' }, (err) => {
+      if (err) {
+        logger.warn({ hostPath, err: err.message }, 'chown failed on mount path (container may still work)');
+      }
+      resolve();
+    });
   });
 }

@@ -8,11 +8,13 @@ import {
   createTask,
   dbEvents,
   deleteTask,
+  deleteTasksForGroup,
   getAllChats,
   getMessagesSince,
   getNewMessages,
   getRegisteredGroup,
   getTaskById,
+  getTasksForGroup,
   insertExternalMessage,
   isValidGroupFolder,
   setRegisteredGroup,
@@ -511,5 +513,63 @@ describe('folder validation', () => {
     expect(isValidGroupFolder('.hidden')).toBe(false);
     expect(isValidGroupFolder('global')).toBe(false);
     expect(isValidGroupFolder('a'.repeat(65))).toBe(false);
+  });
+});
+
+// --- deleteTasksForGroup ---
+
+describe('deleteTasksForGroup', () => {
+  it('deletes all tasks for a given group folder', () => {
+    createTask({
+      id: 'dtg-1',
+      group_folder: 'group-a',
+      chat_jid: 'a@g.us',
+      prompt: 'task A1',
+      schedule_type: 'cron',
+      schedule_value: '0 9 * * *',
+      context_mode: 'isolated',
+      next_run: '2024-06-01T09:00:00.000Z',
+      status: 'active',
+      created_at: '2024-01-01T00:00:00.000Z',
+    });
+    createTask({
+      id: 'dtg-2',
+      group_folder: 'group-a',
+      chat_jid: 'a@g.us',
+      prompt: 'task A2',
+      schedule_type: 'once',
+      schedule_value: '2024-06-02T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2024-06-02T00:00:00.000Z',
+      status: 'active',
+      created_at: '2024-01-01T00:00:01.000Z',
+    });
+    createTask({
+      id: 'dtg-3',
+      group_folder: 'group-b',
+      chat_jid: 'b@g.us',
+      prompt: 'task B1',
+      schedule_type: 'cron',
+      schedule_value: '0 12 * * *',
+      context_mode: 'isolated',
+      next_run: '2024-06-01T12:00:00.000Z',
+      status: 'active',
+      created_at: '2024-01-01T00:00:02.000Z',
+    });
+
+    const deleted = deleteTasksForGroup('group-a');
+    expect(deleted).toBe(2);
+
+    // group-a tasks are gone
+    expect(getTasksForGroup('group-a')).toHaveLength(0);
+
+    // group-b task is unaffected
+    expect(getTasksForGroup('group-b')).toHaveLength(1);
+    expect(getTaskById('dtg-3')).toBeDefined();
+  });
+
+  it('returns 0 when no tasks exist for the group', () => {
+    const deleted = deleteTasksForGroup('nonexistent');
+    expect(deleted).toBe(0);
   });
 });

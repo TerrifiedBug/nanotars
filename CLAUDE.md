@@ -56,6 +56,9 @@ All capabilities must be achieved through the plugin interface: `plugin.json`, `
 | `/nanoclaw-update-skill` | Sync improved local plugins to the marketplace repo |
 | `/nanoclaw-remove-plugin` | Remove a plugin (runtime + env vars + marketplace cleanup) |
 | `/nanoclaw-debug` | Container issues, logs, troubleshooting |
+| `/nanoclaw-health` | Quick system health check with pass/fail status |
+| `/nanoclaw-db-maintenance` | Database optimization, cleanup, integrity checks |
+| `/nanoclaw-groups` | List, view, and manage group configurations |
 
 ## Change Tracking
 

@@ -105,6 +105,16 @@ describe('writeTasksSnapshot', () => {
     const file = path.join(tmpDir, 'ipc', 'main', 'current_tasks.json');
     expect(() => JSON.parse(fs.readFileSync(file, 'utf-8'))).not.toThrow();
   });
+
+  it('does not leave .tmp file after atomic write', () => {
+    const groupFolder = 'test-group';
+    const tasksData = [{ id: '1', groupFolder, prompt: 'test', schedule_type: 'once', schedule_value: '2026-01-01', status: 'active', next_run: null }];
+    writeTasksSnapshot(groupFolder, true, tasksData);
+
+    const tasksFile = path.join(tmpDir, 'ipc', groupFolder, 'current_tasks.json');
+    expect(fs.existsSync(tasksFile)).toBe(true);
+    expect(fs.existsSync(tasksFile + '.tmp')).toBe(false);
+  });
 });
 
 // --- writeGroupsSnapshot ---

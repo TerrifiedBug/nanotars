@@ -630,6 +630,14 @@ export function pruneTaskRunLogs(olderThanDays = 30): number {
   return result.changes;
 }
 
+/** Delete all scheduled tasks for a given group folder. Returns count deleted. */
+export function deleteTasksForGroup(groupFolder: string): number {
+  const result = db.prepare(
+    'DELETE FROM scheduled_tasks WHERE group_folder = ?',
+  ).run(groupFolder);
+  return result.changes;
+}
+
 // --- Router state accessors ---
 
 export function getRouterState(key: string): string | undefined {

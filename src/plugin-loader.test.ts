@@ -65,6 +65,21 @@ describe('parseManifest', () => {
     expect(manifest.version).toBeUndefined();
     expect(manifest.minCoreVersion).toBeUndefined();
   });
+
+  it('rejects invalid semver version strings', () => {
+    const manifest = parseManifest({ name: 'test-plugin', version: 'abc' });
+    expect(manifest.version).toBeUndefined();
+  });
+
+  it('accepts valid semver versions', () => {
+    const manifest = parseManifest({ name: 'test-plugin', version: '2.1.0' });
+    expect(manifest.version).toBe('2.1.0');
+  });
+
+  it('rejects partial semver like 1.0', () => {
+    const manifest = parseManifest({ name: 'test-plugin', version: '1.0' });
+    expect(manifest.version).toBeUndefined();
+  });
 });
 
 describe('collectContainerEnvVars', () => {
@@ -266,6 +281,80 @@ describe('PluginRegistry.getPublicEnvVars', () => {
       dir: '', hooks: {},
     });
     expect(registry.getPublicEnvVars()).toEqual(['SHARED_URL']);
+  });
+});
+
+describe('startup error handling', () => {
+  it('continues starting plugins when one throws', async () => {
+    const registry = new PluginRegistry();
+    const started: string[] = [];
+
+    registry.add({
+      manifest: { name: 'good-before' } as any,
+      dir: '',
+      hooks: { onStartup: async () => { started.push('good-before'); } },
+    });
+    registry.add({
+      manifest: { name: 'bad' } as any,
+      dir: '',
+      hooks: { onStartup: async () => { throw new Error('plugin init failed'); } },
+    });
+    registry.add({
+      manifest: { name: 'good-after' } as any,
+      dir: '',
+      hooks: { onStartup: async () => { started.push('good-after'); } },
+    });
+
+    await registry.startup({} as any);
+    expect(started).toEqual(['good-before', 'good-after']);
+  });
+});
+
+describe('hook error handling', () => {
+  it('continues inbound hooks when one throws', async () => {
+    const registry = new PluginRegistry();
+
+    registry.add({
+      manifest: { name: 'prefix' } as any,
+      dir: '',
+      hooks: { onInboundMessage: async (msg: any) => ({ ...msg, text: '[ok] ' + msg.text }) },
+    });
+    registry.add({
+      manifest: { name: 'bad' } as any,
+      dir: '',
+      hooks: { onInboundMessage: async () => { throw new Error('hook failed'); } },
+    });
+    registry.add({
+      manifest: { name: 'suffix' } as any,
+      dir: '',
+      hooks: { onInboundMessage: async (msg: any) => ({ ...msg, text: msg.text + ' [done]' }) },
+    });
+
+    const result = await registry.runInboundHooks({ text: 'hi', jid: 'a@b', pushName: 'x' } as any, 'whatsapp');
+    expect(result.text).toBe('[ok] hi [done]');
+  });
+
+  it('continues outbound hooks when one throws', async () => {
+    const registry = new PluginRegistry();
+
+    registry.add({
+      manifest: { name: 'upper' } as any,
+      dir: '',
+      hooks: { onOutboundMessage: async (text: string) => text.toUpperCase() },
+    });
+    registry.add({
+      manifest: { name: 'bad' } as any,
+      dir: '',
+      hooks: { onOutboundMessage: async () => { throw new Error('hook failed'); } },
+    });
+    registry.add({
+      manifest: { name: 'exclaim' } as any,
+      dir: '',
+      hooks: { onOutboundMessage: async (text: string) => text + '!' },
+    });
+
+    const result = await registry.runOutboundHooks('hello', 'g@g.us', 'whatsapp');
+    expect(result).toBe('HELLO!');
   });
 });
 

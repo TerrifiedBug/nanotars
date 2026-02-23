@@ -15,8 +15,8 @@ This document describes all changes made in this fork compared to the upstream [
 5. [Media Pipeline](#5-media-pipeline) — Image/video/audio/document downloads
 6. [Task Scheduler Improvements](#6-task-scheduler-improvements) — Model selection, error notifications
 7. [Bug Fixes](#7-bug-fixes) — Submitted as PRs
-8. [New Skills](#8-new-skills) — 27 integration, channel, and meta skills (now in marketplace)
-9. [Documentation](#9-documentation) — Plugin guides, channel plugin architecture
+8. [New Skills](#8-new-skills) — 27 integration, channel, and 13 core skills (marketplace + repo)
+9. [Documentation](#9-documentation) — Plugin guides, channel plugin architecture, troubleshooting, IPC protocol
 10. [Code Quality & Refactoring](#10-code-quality--refactoring) — Module decomposition, dead code removal
 11. [Minor Improvements](#11-minor-improvements) — Typing indicators, read receipts
 12. [Admin Dashboard](#12-admin-dashboard) — Web UI for monitoring and management
@@ -386,6 +386,15 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 
 - **Container timezone** — TZ is now passed to containers via env. Containers no longer default to UTC. UTC-suffixed timestamps are rejected in schedule_task validation since all times should be local (port of upstream 77f7423)
 - **Idle preemption** — Scheduled tasks only preempt idle containers, not ones actively processing. Adds idleWaiting tracking to prevent mid-work container kills (port of upstream 93bb94f, c6b69e8, 3d8c0d1)
+- **Systemd EnvironmentFile** — Added `-` prefix to `EnvironmentFile=` in setup skill's systemd unit, so the service starts even if `.env` doesn't exist yet (first boot)
+- **.env cache invalidation** — Global `.env` file cache now tracks file mtime; re-reads automatically when the file changes on disk instead of caching forever until process restart (`src/container-mounts.ts`)
+- **chown error logging** — `fixMountPermissions()` now logs a warning when `chown` fails on Docker mount paths instead of silently swallowing the error (`src/container-runtime.ts`)
+- **Atomic snapshot writes** — `writeTasksSnapshot()` and `writeGroupsSnapshot()` now write to a `.tmp` file and atomically rename, preventing containers from reading partial JSON (`src/snapshots.ts`)
+- **Container timeout race** — Added `settled` guard in `container-runner.ts` to prevent both timeout and close handlers from running cleanup concurrently
+- **IPC task validation** — Added `isValidTaskIpc()` type guard with allowlisted IPC types and `schedule_type` validation; invalid messages are quarantined instead of crashing (`src/ipc.ts`)
+- **Orphaned task auto-pause** — Tasks for deleted/missing groups are now auto-paused with a warning instead of failing repeatedly (`src/task-scheduler.ts`)
+- **Semver validation** — `parseManifest()` now validates `version` and `minCoreVersion` fields against semver format; malformed values are treated as undefined (`src/plugin-loader.ts`)
+- **Hook error handling** — `startup()`, `runInboundHooks()`, and `runOutboundHooks()` now catch and log errors per-plugin instead of letting one failing plugin take down the chain (`src/plugin-loader.ts`)
 
 ---
 
@@ -432,7 +441,7 @@ Integration and channel skills (27 total) have been moved to the [skills marketp
 | `add-channel-telegram` | Install Telegram as a channel plugin |
 | `add-channel-slack` | Install Slack as a channel plugin |
 
-### Core skills (10) — in main repo
+### Core skills (13) — in main repo
 
 | Skill | What it does |
 |-------|-------------|
@@ -445,6 +454,9 @@ Integration and channel skills (27 total) have been moved to the [skills marketp
 | `nanoclaw-security-audit` | Pre-installation security audit of skill plugins |
 | `nanoclaw-publish-skill` | Publish a local skill to the marketplace |
 | `nanoclaw-update-skill` | Sync improved local plugins to the marketplace |
+| `nanoclaw-health` | Quick pass/fail system health check across 9 components |
+| `nanoclaw-db-maintenance` | SQLite maintenance — vacuum, integrity check, prune, statistics |
+| `nanoclaw-groups` | List, view, and manage group configurations |
 | `create-skill-plugin` | Guided creation of new skill plugins from an idea |
 | `create-channel-plugin` | Guided creation of new channel plugins |
 
@@ -466,6 +478,10 @@ Integration and channel skills (27 total) have been moved to the [skills marketp
 | `docs/PLUGINS.md` | Complete plugin system architecture — manifests, hooks, mounts, Dockerfile.partial, env vars, MCP merging, source code changes |
 | `docs/CHANNEL_PLUGINS.md` | Channel plugin development guide — interface, auth, registration, testing |
 | `docs/MARKETPLACE.md` | Skill marketplace guide — installation, publishing, available skills |
+| `docs/TROUBLESHOOTING.md` | Symptom-to-fix mapping — exit codes, auth, container, plugin, database issues |
+| `docs/IPC_PROTOCOL.md` | Complete IPC message schemas, file lifecycle, security model |
+| `docs/AGENT_TEAMS.md` | Agent setup guide — file structure, communication patterns, examples |
+| `docs/SCHEDULED_TASKS.md` | Task types, lifecycle, authorization model, query reference |
 | `docs/CHANGES.md` | This file — comprehensive fork changelog |
 
 ### Modified docs
@@ -505,6 +521,7 @@ Re-exports preserve backward compatibility — no consumer import changes needed
 | Optimization | File | What |
 |-------------|------|------|
 | **Stdout streaming to file** | `src/container-runner.ts` | Container stdout is streamed directly to a log file via `fs.createWriteStream` instead of accumulating in a string (previously up to 10MB per container). Stdout is read back from the file only when needed for error reporting or legacy parsing. Disk is cheaper than RAM. |
+| **Mtime-based .env cache** | `src/container-mounts.ts` | Global `.env` cache invalidates based on file mtime instead of caching forever. Env changes take effect on next container spawn without process restart. |
 
 ### DRY patterns
 

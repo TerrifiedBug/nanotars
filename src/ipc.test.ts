@@ -24,7 +24,8 @@ vi.mock('./db.js', () => ({
 
 import type { IpcDeps } from './ipc.js';
 import * as configMod from './config.js';
-import { getTaskById, updateTask } from './db.js';
+import { createTask, getTaskById, updateTask } from './db.js';
+import { logger } from './logger.js';
 import type { RegisteredGroup } from './types.js';
 
 let tmpDir: string;
@@ -412,5 +413,166 @@ describe('processTaskIpc: update_task', () => {
     expect(updateTask).toHaveBeenCalled();
     const updates = vi.mocked(updateTask).mock.calls[0][1] as any;
     expect(updates.prompt).toBeUndefined();
+  });
+
+  it('rejects invalid schedule_type in update_task', async () => {
+    vi.mocked(getTaskById).mockReturnValue(makeTask());
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      { type: 'update_task', taskId: 't1', schedule_type: 'bogus', schedule_value: '123' },
+      'main', true, deps,
+    );
+
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ scheduleType: 'bogus' }),
+      expect.stringContaining('Invalid schedule_type'),
+    );
+  });
+});
+
+// --- isValidTaskIpc: unknown/missing task type quarantined ---
+
+describe('startIpcWatcher: task type validation', () => {
+  it('quarantines task file with unknown type', async () => {
+    vi.resetModules();
+    const { startIpcWatcher } = await import('./ipc.js');
+
+    const deps = makeDeps();
+    const tasksDir = path.join(tmpDir, 'ipc', 'main', 'tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(tasksDir, 'bad-type.json'),
+      JSON.stringify({ type: 'hack_the_planet', payload: 'evil' }),
+    );
+
+    await startIpcWatcher(deps);
+
+    // Original file should be gone
+    expect(fs.existsSync(path.join(tasksDir, 'bad-type.json'))).toBe(false);
+    // Should be in errors directory
+    const errDir = path.join(tmpDir, 'ipc', 'errors');
+    expect(fs.existsSync(errDir)).toBe(true);
+    const errFiles = fs.readdirSync(errDir);
+    expect(errFiles.some((f) => f.includes('bad-type.json'))).toBe(true);
+  });
+
+  it('quarantines task file with missing type field', async () => {
+    vi.resetModules();
+    const { startIpcWatcher } = await import('./ipc.js');
+
+    const deps = makeDeps();
+    const tasksDir = path.join(tmpDir, 'ipc', 'main', 'tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(tasksDir, 'no-type.json'),
+      JSON.stringify({ prompt: 'do something', schedule_value: '60000' }),
+    );
+
+    await startIpcWatcher(deps);
+
+    expect(fs.existsSync(path.join(tasksDir, 'no-type.json'))).toBe(false);
+    const errDir = path.join(tmpDir, 'ipc', 'errors');
+    const errFiles = fs.readdirSync(errDir);
+    expect(errFiles.some((f) => f.includes('no-type.json'))).toBe(true);
+  });
+
+  it('processes valid task types normally', async () => {
+    vi.resetModules();
+    const { startIpcWatcher } = await import('./ipc.js');
+
+    const deps = makeDeps();
+    const tasksDir = path.join(tmpDir, 'ipc', 'main', 'tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(tasksDir, 'valid-task.json'),
+      JSON.stringify({
+        type: 'schedule_task',
+        prompt: 'test',
+        schedule_type: 'interval',
+        schedule_value: '60000',
+        targetJid: 'jid@test',
+      }),
+    );
+
+    await startIpcWatcher(deps);
+
+    // File should be processed and deleted (not quarantined)
+    expect(fs.existsSync(path.join(tasksDir, 'valid-task.json'))).toBe(false);
+    const errDir = path.join(tmpDir, 'ipc', 'errors');
+    if (fs.existsSync(errDir)) {
+      const errFiles = fs.readdirSync(errDir);
+      expect(errFiles.some((f) => f.includes('valid-task.json'))).toBe(false);
+    }
+    // Task should have been created
+    expect(createTask).toHaveBeenCalled();
+  });
+});
+
+// --- processTaskIpc: schedule_type validation ---
+
+describe('processTaskIpc: schedule_type validation', () => {
+  let processTaskIpc: typeof import('./ipc.js').processTaskIpc;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const mod = await import('./ipc.js');
+    processTaskIpc = mod.processTaskIpc;
+  });
+
+  it('rejects invalid schedule_type in schedule_task', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'test',
+        schedule_type: 'weekly',
+        schedule_value: '60000',
+        targetJid: 'jid@test',
+      },
+      'main', true, deps,
+    );
+
+    expect(createTask).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ scheduleType: 'weekly' }),
+      expect.stringContaining('Invalid schedule_type'),
+    );
+  });
+
+  it('accepts valid schedule_type cron', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'test cron',
+        schedule_type: 'cron',
+        schedule_value: '0 9 * * *',
+        targetJid: 'jid@test',
+      },
+      'main', true, deps,
+    );
+
+    expect(createTask).toHaveBeenCalled();
+  });
+
+  it('accepts valid schedule_type once', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'test once',
+        schedule_type: 'once',
+        schedule_value: '2030-06-15T12:00:00Z',
+        targetJid: 'jid@test',
+      },
+      'main', true, deps,
+    );
+
+    expect(createTask).toHaveBeenCalled();
   });
 });

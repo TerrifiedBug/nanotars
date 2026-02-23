@@ -475,6 +475,40 @@ describe('buildVolumeMounts: env file', () => {
     const envMount = mounts.find(m => m.containerPath === '/workspace/env-dir');
     expect(envMount).toBeUndefined();
   });
+
+  it('re-reads .env when file mtime changes', async () => {
+    setupProjectDirs();
+    setupGroupDirs('main');
+    const envPath = path.join(projectRoot, '.env');
+
+    // Write initial .env with original key
+    fs.writeFileSync(envPath, 'ANTHROPIC_API_KEY=sk-original');
+
+    setPluginRegistry({
+      getSkillPaths: vi.fn(() => []),
+      getContainerHookPaths: vi.fn(() => []),
+      getContainerMounts: vi.fn(() => []),
+      getMergedMcpConfig: vi.fn(() => ({ mcpServers: {} })),
+      getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
+    } as any);
+
+    // First call — caches the .env
+    await buildVolumeMounts(makeGroup(), true);
+    const envFilePath = path.join((configMod as any).DATA_DIR, 'env', 'main', 'env');
+    const content1 = fs.readFileSync(envFilePath, 'utf-8');
+    expect(content1).toContain('sk-original');
+
+    // Update .env content and bump mtime to ensure it differs
+    fs.writeFileSync(envPath, 'ANTHROPIC_API_KEY=sk-updated');
+    const currentStat = fs.statSync(envPath);
+    fs.utimesSync(envPath, currentStat.atime, new Date(currentStat.mtimeMs + 2000));
+
+    // Second call — should detect mtime change and re-read
+    await buildVolumeMounts(makeGroup(), true);
+    const content2 = fs.readFileSync(envFilePath, 'utf-8');
+    expect(content2).toContain('sk-updated');
+    expect(content2).not.toContain('sk-original');
+  });
 });
 
 // --- Additional mounts passthrough ---

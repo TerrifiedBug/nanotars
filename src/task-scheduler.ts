@@ -68,17 +68,18 @@ async function runTask(
   );
 
   if (!group) {
-    logger.error(
+    logger.warn(
       { taskId: task.id, groupFolder: task.group_folder },
-      'Group not found for task',
+      'Group not found for task — auto-pausing to stop retry churn',
     );
+    updateTask(task.id, { status: 'paused' });
     logTaskRun({
       task_id: task.id,
       run_at: new Date().toISOString(),
       duration_ms: Date.now() - startTime,
       status: 'error',
       result: null,
-      error: `Group not found: ${task.group_folder}`,
+      error: `Group not found: ${task.group_folder} (task auto-paused)`,
     });
     return;
   }

@@ -739,7 +739,7 @@ Restart=always
 RestartSec=10
 Environment=HOME=${HOME}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:${HOME}/.local/bin
-EnvironmentFile=${PROJECT_PATH}/.env
+EnvironmentFile=-${PROJECT_PATH}/.env
 StandardOutput=append:${PROJECT_PATH}/logs/nanoclaw.log
 StandardError=append:${PROJECT_PATH}/logs/nanoclaw.error.log
 
