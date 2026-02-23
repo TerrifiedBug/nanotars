@@ -65,6 +65,21 @@ describe('parseManifest', () => {
     expect(manifest.version).toBeUndefined();
     expect(manifest.minCoreVersion).toBeUndefined();
   });
+
+  it('rejects invalid semver version strings', () => {
+    const manifest = parseManifest({ name: 'test-plugin', version: 'abc' });
+    expect(manifest.version).toBeUndefined();
+  });
+
+  it('accepts valid semver versions', () => {
+    const manifest = parseManifest({ name: 'test-plugin', version: '2.1.0' });
+    expect(manifest.version).toBe('2.1.0');
+  });
+
+  it('rejects partial semver like 1.0', () => {
+    const manifest = parseManifest({ name: 'test-plugin', version: '1.0' });
+    expect(manifest.version).toBeUndefined();
+  });
 });
 
 describe('collectContainerEnvVars', () => {

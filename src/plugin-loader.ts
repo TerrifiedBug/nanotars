@@ -19,6 +19,11 @@ const CORE_ENV_VARS = [
   'TZ',
 ];
 
+/** Validate basic semver format: MAJOR.MINOR.PATCH */
+function isValidSemver(v: string): boolean {
+  return /^\d+\.\d+\.\d+$/.test(v);
+}
+
 function parseStringArray(val: unknown): string[] {
   return Array.isArray(val) ? val.filter((v): v is string => typeof v === 'string') : [];
 }
@@ -52,8 +57,8 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
     authSkill: typeof raw.authSkill === 'string' ? raw.authSkill : undefined,
     channels: parseOptionalStringArray(raw.channels),
     groups: parseOptionalStringArray(raw.groups),
-    version: typeof raw.version === 'string' ? raw.version : undefined,
-    minCoreVersion: typeof raw.minCoreVersion === 'string' ? raw.minCoreVersion : undefined,
+    version: typeof raw.version === 'string' && isValidSemver(raw.version) ? raw.version : undefined,
+    minCoreVersion: typeof raw.minCoreVersion === 'string' && isValidSemver(raw.minCoreVersion) ? raw.minCoreVersion : undefined,
   };
 }
 
