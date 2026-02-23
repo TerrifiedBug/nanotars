@@ -42,7 +42,9 @@ export function writeTasksSnapshot(
     : tasks.filter((t) => t.groupFolder === groupFolder);
 
   const tasksFile = path.join(groupIpcDir, 'current_tasks.json');
-  fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
+  const tmpFile = tasksFile + '.tmp';
+  fs.writeFileSync(tmpFile, JSON.stringify(filteredTasks, null, 2));
+  fs.renameSync(tmpFile, tasksFile);
 }
 
 export interface AvailableGroup {
@@ -70,8 +72,9 @@ export function writeGroupsSnapshot(
   const visibleGroups = isMain ? groups : [];
 
   const groupsFile = path.join(groupIpcDir, 'available_groups.json');
+  const tmpFile = groupsFile + '.tmp';
   fs.writeFileSync(
-    groupsFile,
+    tmpFile,
     JSON.stringify(
       {
         groups: visibleGroups,
@@ -81,4 +84,5 @@ export function writeGroupsSnapshot(
       2,
     ),
   );
+  fs.renameSync(tmpFile, groupsFile);
 }
