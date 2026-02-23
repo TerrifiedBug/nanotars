@@ -37,6 +37,19 @@ function isIpcMessage(data: unknown): data is IpcMessage {
   }
 }
 
+/** Valid task IPC command types. */
+const TASK_IPC_TYPES = new Set([
+  'schedule_task', 'pause_task', 'resume_task', 'update_task', 'cancel_task',
+  'refresh_groups', 'register_group',
+]);
+
+/** Validate that raw IPC data has a known task type. */
+function isValidTaskIpc(data: unknown): data is { type: string } & Record<string, unknown> {
+  if (typeof data !== 'object' || data === null || !('type' in data)) return false;
+  const d = data as Record<string, unknown>;
+  return typeof d.type === 'string' && TASK_IPC_TYPES.has(d.type);
+}
+
 /** Max file size for send_file (64 MB) */
 const SEND_FILE_MAX_SIZE = 64 * 1024 * 1024;
 
@@ -289,6 +302,14 @@ export function startIpcWatcher(deps: IpcDeps): Promise<void> {
                 quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
                 continue;
               }
+              if (!isValidTaskIpc(data)) {
+                logger.warn(
+                  { filePath, sourceGroup, type: (data as Record<string, unknown>)?.type },
+                  'IPC: invalid task format — unknown or missing type',
+                );
+                quarantineFile(filePath, sourceGroup, file, ipcBaseDir);
+                continue;
+              }
               // Pass source group identity to processTaskIpc for authorization
               await processTaskIpc(data as any, sourceGroup, isMain, deps);
               fs.unlinkSync(filePath);
@@ -420,6 +441,11 @@ export async function processTaskIpc(
           break;
         }
 
+        const validScheduleTypes = new Set(['cron', 'interval', 'once']);
+        if (!validScheduleTypes.has(data.schedule_type!)) {
+          logger.warn({ scheduleType: data.schedule_type }, 'Invalid schedule_type in task IPC');
+          break;
+        }
         const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
 
         const { nextRun, valid } = computeNextRun(scheduleType, data.schedule_value);
@@ -471,6 +497,11 @@ export async function processTaskIpc(
 
           // If schedule changed, recompute next_run
           if (data.schedule_type && data.schedule_value) {
+            const validScheduleTypes = new Set(['cron', 'interval', 'once']);
+            if (!validScheduleTypes.has(data.schedule_type)) {
+              logger.warn({ scheduleType: data.schedule_type }, 'Invalid schedule_type in update_task IPC');
+              break;
+            }
             updates.schedule_type = data.schedule_type as 'cron' | 'interval' | 'once';
             updates.schedule_value = data.schedule_value as string;
             const { nextRun, valid } = computeNextRun(data.schedule_type, data.schedule_value);
