@@ -58,17 +58,17 @@ If they haven't tested, recommend doing so before publishing. Do not block if th
 
 Check if the marketplace repo is already cloned:
 ```bash
-[ -d "/data/nanoclaw-skills/.git" ] && echo "MARKETPLACE: local at /data/nanoclaw-skills" || echo "MARKETPLACE: needs clone"
+[ -d "/tmp/nanoclaw-skills/.git" ] && echo "MARKETPLACE: local at /tmp/nanoclaw-skills" || echo "MARKETPLACE: needs clone"
 ```
 
 If not found, clone it:
 ```bash
-gh repo clone TerrifiedBug/nanoclaw-skills /data/nanoclaw-skills
+gh repo clone TerrifiedBug/nanoclaw-skills /tmp/nanoclaw-skills
 ```
 
 Pull latest and create a feature branch:
 ```bash
-cd /data/nanoclaw-skills && git checkout main && git pull
+cd /tmp/nanoclaw-skills && git checkout main && git pull
 git checkout -b feat/add-${SHORT_NAME}
 ```
 
@@ -81,7 +81,7 @@ Derive names:
 
 Create the plugin directory:
 ```bash
-PLUGIN_DIR="/data/nanoclaw-skills/plugins/${PLUGIN_NAME}"
+PLUGIN_DIR="/tmp/nanoclaw-skills/plugins/${PLUGIN_NAME}"
 mkdir -p "$PLUGIN_DIR/.claude-plugin"
 mkdir -p "$PLUGIN_DIR/skills/${SKILL_DIR}"
 ```
@@ -120,7 +120,7 @@ This copies the runtime plugin manifest (`files/plugin.json`), container skills,
 
 ## Step 6: Update marketplace.json
 
-Read `/data/nanoclaw-skills/.claude-plugin/marketplace.json`.
+Read `/tmp/nanoclaw-skills/.claude-plugin/marketplace.json`.
 
 Check if a plugin with this name already exists:
 - If yes: update the existing entry (bump version if changed)
@@ -133,12 +133,12 @@ Write the updated marketplace.json.
 
 ## Step 7: Update README.md
 
-Add the new skill to the appropriate category table in `/data/nanoclaw-skills/README.md`. Match the format of existing entries.
+Add the new skill to the appropriate category table in `/tmp/nanoclaw-skills/README.md`. Match the format of existing entries.
 
 ## Step 8: Create Pull Request
 
 ```bash
-cd /data/nanoclaw-skills
+cd /tmp/nanoclaw-skills
 git add -A
 git status
 ```

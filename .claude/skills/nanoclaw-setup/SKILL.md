@@ -251,13 +251,33 @@ grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null && echo "MARKETPLACE
 ```
 
 **If marketplace is configured**, tell the user:
-> The NanoClaw skills marketplace is available. After setup, browse integrations with `/plugin` or install specific skills with `/plugin install nanoclaw-<name>@nanoclaw-skills`.
+> The NanoClaw skills marketplace is available. After setup, you can add optional capabilities like weather, email, search, smart home, and more.
+>
+> Browse available plugins:
+> - `/plugin` Discover tab in Claude Code
+> - Or visit: https://github.com/TerrifiedBug/nanoclaw-skills
+>
+> Install example:
+> 1. `/plugin install nanoclaw-weather@nanoclaw-skills`
+> 2. Run the install skill: `/add-skill-weather`
+>
+> Popular plugins: weather, brave-search, homeassistant, stocks, gmail, calendar.
+> You can install plugins at any time after setup completes.
 
 **If NOT configured** and the user wants integrations:
-> To browse available integrations (weather, email, smart home, etc.), add the skills marketplace:
+> NanoClaw ships with no plugins installed — you add only what you need from the skills marketplace.
+>
+> To enable the marketplace:
 > ```
 > /plugin marketplace add TerrifiedBug/nanoclaw-skills
 > ```
+>
+> After adding, browse with `/plugin` or install directly:
+> ```
+> /plugin install nanoclaw-weather@nanoclaw-skills
+> ```
+>
+> You can skip this now and add the marketplace later.
 
 ## 5. Authenticate Channel
 

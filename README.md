@@ -94,8 +94,23 @@ Or browse all 27 skills in the `/plugin` Discover tab. Categories: messaging cha
 | `/nanoclaw-add-agent` | Create agent definitions for a group |
 | `/nanoclaw-security-audit` | Pre-install security audit of skill plugins |
 | `/nanoclaw-publish-skill` | Publish a local skill to the marketplace |
+| `/nanoclaw-update-skill` | Sync plugin improvements to marketplace |
 | `/create-skill-plugin` | Build a new skill plugin from scratch |
 | `/create-channel-plugin` | Build a new channel plugin from scratch |
+
+## Plugins
+
+NanoClaw ships with no plugins installed — you add only what you need from the [skill marketplace](https://github.com/TerrifiedBug/nanoclaw-skills).
+
+After running `/nanoclaw-setup`, install plugins with:
+1. `/plugin install nanoclaw-{name}@nanoclaw-skills`
+2. Run the install skill: `/add-skill-{name}`
+
+See the [marketplace README](https://github.com/TerrifiedBug/nanoclaw-skills) for the full list of 27 available plugins.
+
+To remove a plugin: `/nanoclaw-remove-plugin`
+To check for plugin updates: `/nanoclaw-update`
+To sync local plugin improvements to marketplace: `/nanoclaw-update-skill`
 
 ## Getting Started
 

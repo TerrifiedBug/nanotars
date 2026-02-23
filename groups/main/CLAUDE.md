@@ -60,8 +60,6 @@ Do NOT use markdown headings (##) in messages. Only use:
 
 Keep messages clean and readable for messaging apps.
 
-**Angle brackets**: Never use `<` or `>` in outbound messages — WhatsApp interprets them as HTML tags and silently truncates everything after them. Use parentheses, brackets, or quotes instead.
-
 ---
 
 ## Error Handling & Diagnostics

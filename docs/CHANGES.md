@@ -444,6 +444,7 @@ Integration and channel skills (27 total) have been moved to the [skills marketp
 | `nanoclaw-add-agent` | Guided creation of persistent agent definitions for groups (Agent Teams) |
 | `nanoclaw-security-audit` | Pre-installation security audit of skill plugins |
 | `nanoclaw-publish-skill` | Publish a local skill to the marketplace |
+| `nanoclaw-update-skill` | Sync improved local plugins to the marketplace |
 | `create-skill-plugin` | Guided creation of new skill plugins from an idea |
 | `create-channel-plugin` | Guided creation of new channel plugins |
 
@@ -762,6 +763,7 @@ Installable skills (`add-skill-*`, `add-channel-*`) moved to a separate Claude C
 
 **New skills:**
 - `/nanoclaw-publish-skill` — publishes local skills to the marketplace
+- `/nanoclaw-update-skill` — syncs improved local plugins to the marketplace and creates a PR
 - `/nanoclaw-remove-plugin` — atomic plugin removal (runtime dir, env vars, DB entries for channels, marketplace skill cleanup)
 
 **Marketplace update detection:**
@@ -770,15 +772,19 @@ Installable skills (`add-skill-*`, `add-channel-*`) moved to a separate Claude C
 - Diffs installed plugins against marketplace cache and offers to re-copy changed files while preserving user scoping (`channels`/`groups`)
 - No breadcrumb files needed — pure name-convention matching + version comparison
 
+**Auto-version-bump:** GitHub Action in `TerrifiedBug/nanoclaw-skills` auto-bumps plugin versions on PR merge (patch by default, `minor`/`major` via PR labels).
+
 **Updated skills:**
-- `nanoclaw-setup` — now includes marketplace provisioning step
+- `nanoclaw-setup` — expanded marketplace onboarding section with browsing instructions and popular plugin list
 - `nanoclaw-update` — marketplace-aware update detection via name-convention matching
+- `nanoclaw-publish-skill` — fixed hardcoded `/data/` paths (now uses `/tmp/nanoclaw-skills` for cross-platform portability)
 - `create-skill-plugin` / `create-channel-plugin` — uses `${CLAUDE_PLUGIN_ROOT}` paths, publish guidance
 
 **Files added/modified:**
 - `.claude/settings.json` — `extraKnownMarketplaces` for auto-discovery
-- `.claude/skills/nanoclaw-publish-skill/SKILL.md` — new publish skill
-- `.claude/skills/nanoclaw-setup/SKILL.md` — marketplace step + marketplace channel discovery
+- `.claude/skills/nanoclaw-publish-skill/SKILL.md` — new publish skill (paths fixed)
+- `.claude/skills/nanoclaw-update-skill/SKILL.md` — new skill for syncing plugin updates to marketplace
+- `.claude/skills/nanoclaw-setup/SKILL.md` — marketplace step + expanded forker onboarding
 - `.claude/skills/nanoclaw-update/SKILL.md` — marketplace-aware version checking
 - `.claude/skills/create-skill-plugin/SKILL.md` — publish guidance
 - `.claude/skills/create-channel-plugin/SKILL.md` — publish guidance
