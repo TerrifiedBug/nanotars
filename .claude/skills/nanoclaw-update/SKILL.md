@@ -17,7 +17,7 @@ Run `/nanoclaw-update` in Claude Code.
 
 **Merge**: `git merge nanoclaw/main --no-edit`. This should always be clean. If conflicts arise, the merge is aborted — conflicts mean the fork has diverged and needs to be fixed first.
 
-**Plugin updates**: after merge, checks for marketplace plugin updates using name-convention matching and offers to apply them (copies marketplace files, preserves your group/channel scoping).
+**Plugin updates**: after merge, if the marketplace has newer plugin versions (higher semver), offers to apply them while preserving your group/channel scoping.
 
 **Validation**: `npm run build` to confirm nothing broke.
 
@@ -115,6 +115,11 @@ Bucket the fork changed files:
 
 Check for marketplace plugin updates by matching installed plugin names to the marketplace cache.
 
+If no marketplace cache exists at `~/.claude/plugins/marketplaces/nanoclaw-skills/`, tell the user:
+> Marketplace not synced locally. Run `/plugin marketplace update nanoclaw-skills` to sync.
+
+Then skip plugin scanning entirely.
+
 ### Marketplace plugins (name-convention matching)
 
 For each directory under `plugins/` and `plugins/channels/`:
@@ -122,21 +127,21 @@ For each directory under `plugins/` and `plugins/channels/`:
 2. Check if the marketplace cache has a matching plugin:
    `~/.claude/plugins/marketplaces/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
 3. If the cache directory doesn't exist, skip (no marketplace match)
-4. Diff installed vs marketplace source (excluding `node_modules` and `plugin.json`):
+4. **Compare versions** — only offer updates when the marketplace has a higher version:
    ```bash
-   diff -rq -x node_modules -x plugin.json {source}/ {installed}/
+   INSTALLED_VER=$(jq -r '.version // "0.0.0"' {installed}/plugin.json)
+   MARKET_VER=$(jq -r '.version // "0.0.0"' {source}/plugin.json)
+   LOWEST=$(printf '%s\n' "$INSTALLED_VER" "$MARKET_VER" | sort -V | head -1)
+   if [ "$LOWEST" = "$INSTALLED_VER" ] && [ "$INSTALLED_VER" != "$MARKET_VER" ]; then
+     # MARKET_VER > INSTALLED_VER → update available
+   else
+     # same version or marketplace is older → skip
+   fi
    ```
-5. Diff `plugin.json` separately, ignoring `channels` and `groups` fields (user scoping):
+5. For plugins with updates, diff to show what changed (excluding `node_modules`, `package-lock.json`, `plugin.json`):
    ```bash
-   jq 'del(.channels, .groups)' {installed}/plugin.json > /tmp/installed-plugin.json
-   jq 'del(.channels, .groups)' {source}/plugin.json > /tmp/source-plugin.json
-   diff -q /tmp/installed-plugin.json /tmp/source-plugin.json
+   diff -rq -x node_modules -x package-lock.json -x plugin.json {source}/ {installed}/
    ```
-6. If differences exist → flag as "marketplace update available"
-7. If no differences → plugin is up to date
-
-If no marketplace cache exists at `~/.claude/plugins/marketplaces/nanoclaw-skills/`, tell the user:
-> Marketplace not synced locally. Run `/plugin marketplace update nanoclaw-skills` to sync.
 
 ## 2c: Conflict check
 
@@ -157,10 +162,13 @@ Fork update preview:
 
   Conflicts: none (clean merge) ← or list conflicted files
 
-  Plugin updates (from marketplace):
-    - weather: 3 files changed
-    - brave-search: 1 file changed
+  Plugin updates (version bumped):
+    - weather: 1.0.0 → 1.1.0 (3 files changed)
+
+  Plugins up to date: N
 ```
+
+If zero plugin updates and zero core changes, say "Already up to date" and stop.
 
 **If conflicts were detected**: tell the user the merge cannot proceed because the fork has diverged from nanotars. This needs to be fixed on the fork side first. List the conflicting files. **Stop here — do not offer to merge.**
 
@@ -193,15 +201,14 @@ If build fails:
 
 Now that the fork code is merged and built, check for marketplace plugin updates.
 
-## Marketplace plugins (name-convention matching)
+## Marketplace plugins (version-aware matching)
 
-Re-scan installed plugins using the same name-convention matching as Step 2b.
+Re-scan installed plugins using the same version comparison as Step 2b. Only plugins where `MARKET_VER > INSTALLED_VER` are offered for update.
 
-If updates are available, present them:
+If updates are available:
 ```
-Plugin updates available (from marketplace):
-  - weather: 3 files changed
-  - brave-search: 1 file changed
+Plugin updates available:
+  - weather: 1.0.0 → 1.1.0 (3 files changed)
 
 Would you like to update these plugins?
 (Copies marketplace files over installed plugins, preserving your group/channel scoping.)
