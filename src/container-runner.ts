@@ -171,12 +171,14 @@ export async function runContainerAgent(
     delete input.outputNonce;
 
     let timedOut = false;
+    let settled = false;  // Guard: only one of timeout/close handles cleanup
     const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
     // Grace period: hard timeout must be at least IDLE_TIMEOUT + 30s so the
     // graceful _close sentinel has time to trigger before the hard kill fires.
     const timeoutMs = Math.max(configTimeout, IDLE_TIMEOUT + 30_000);
 
     const killOnTimeout = () => {
+      if (settled) return;  // close handler already ran
       timedOut = true;
       logger.error({ group: group.name, containerName }, 'Container timeout, stopping gracefully');
       containerRuntime.stop(containerName, (err) => {
@@ -241,6 +243,7 @@ export async function runContainerAgent(
 
     container.on('close', (code) => {
       clearTimeout(timeout);
+      settled = true;  // Prevent timeout from running cleanup
       logStream.end();
       const duration = Date.now() - startTime;
 
