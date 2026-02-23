@@ -130,7 +130,7 @@ git diff
 
 Scan for potential credentials:
 ```bash
-git diff --cached --diff-filter=ACM -z --name-only | xargs -0 grep -lnE '(password|secret|token|api_key|private_key)\s*[:=]' 2>/dev/null | grep -v plugin.json || echo "No credential patterns found"
+git diff --diff-filter=ACM -z --name-only | xargs -0 grep -lnE '(password|secret|token|api_key|private_key)\s*[:=]' 2>/dev/null | grep -v plugin.json || echo "No credential patterns found"
 ```
 
 If matches found, warn the user and ask for confirmation before proceeding.
