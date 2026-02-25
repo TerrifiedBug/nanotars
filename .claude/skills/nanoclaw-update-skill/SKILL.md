@@ -127,13 +127,32 @@ Determine paths:
 - Installed: `plugins/{name}/` or `plugins/channels/{name}/`
 - Marketplace: `/tmp/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
 
-Sync plugin runtime files:
+Sync plugin runtime files (excluding `plugin.json` which needs special handling):
 ```bash
-rsync -av --delete \
+rsync -av \
   --exclude node_modules \
   --exclude package-lock.json \
+  --exclude plugin.json \
   {installed}/ /tmp/nanoclaw-skills/plugins/nanoclaw-{name}/files/
 ```
+
+**Do NOT use `--delete`** — the marketplace may contain files not present locally (README, docs added by other contributors). Only sync files that exist locally.
+
+Sync `plugin.json` separately, preserving marketplace `version`, `channels`, and `groups` fields:
+```bash
+# Start with marketplace plugin.json (preserves version + scoping)
+MARKET_PJ="/tmp/nanoclaw-skills/plugins/nanoclaw-{name}/files/plugin.json"
+LOCAL_PJ="{installed}/plugin.json"
+
+# Merge: take all fields from local EXCEPT version/channels/groups which stay from marketplace
+jq -s '.[0] as $market | .[1] | .version = $market.version | .channels = $market.channels | .groups = $market.groups' \
+  "$MARKET_PJ" "$LOCAL_PJ" > "${MARKET_PJ}.tmp" && mv "${MARKET_PJ}.tmp" "$MARKET_PJ"
+```
+
+This prevents three problems:
+- **Scoping leak**: local `"channels": ["whatsapp"]` overwriting marketplace `"channels": ["*"]`
+- **Version downgrade**: local `1.0.0` overwriting marketplace `1.0.3` (auto-bumped by CI)
+- **File deletion**: marketplace-only files being removed by `--delete`
 
 Also sync the install skill if it exists in the main repo:
 ```bash
@@ -173,10 +192,11 @@ git commit -m "update: sync {plugin_names} from local"
 git push -u origin "update/${NAMES}"
 ```
 
-Create the pull request:
+Create the pull request. **Must use `--head`** because cwd may not be the marketplace checkout:
 ```bash
 gh pr create \
   --repo TerrifiedBug/nanoclaw-skills \
+  --head "update/${NAMES}" \
   --title "update: {plugin_names}" \
   --body "$(cat <<'PREOF'
 ## Summary
@@ -192,12 +212,28 @@ PREOF
 )"
 ```
 
-## Step 7: Summary
+## Step 7: Auto-label version bump
+
+Analyze the diff from Step 5 and determine the semver bump level:
+
+- **patch** (default — no label needed): Bug fixes, performance improvements, internal refactors that don't change behavior. Examples: fixing a reconnect loop, filtering noisy messages, improving error handling.
+- **minor** (add `minor` label): New features or capabilities. Examples: new config options, new exported functions, new message types handled, new files added.
+- **major** (add `major` label): Breaking changes. Examples: removed functions/config, renamed env vars, changed message format, changed plugin.json schema.
+
+If the bump level is `minor` or `major`, apply the label:
+```bash
+gh pr edit {pr_number} --repo TerrifiedBug/nanoclaw-skills --add-label "{level}"
+```
+
+Tell the user what you chose and why:
+> Version bump: **{level}** — {one-sentence reasoning}
+> You can change this by editing PR labels before merging.
+
+## Step 8: Summary
 
 Show the PR URL.
 
 Tell the user:
-> PR created. When merged, the GitHub Action will auto-bump the plugin version (patch by default).
-> To bump minor or major instead, add a `minor` or `major` label to the PR before merging.
+> PR created. The GitHub Action will auto-bump the version on merge ({level}).
 >
 > After merge, users running `/nanoclaw-update` will see the new version and be offered the update.

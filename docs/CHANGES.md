@@ -136,6 +136,7 @@ Upstream has WhatsApp hardcoded throughout. This fork extracted WhatsApp into a 
 | Change | Details |
 |--------|---------|
 | **WhatsApp extracted** | `src/channels/whatsapp.ts` → `plugins/channels/whatsapp/index.js` |
+| **SQLite auth state** | Replaced Baileys' `useMultiFileAuthState` (1000+ individual JSON files) with a single SQLite database (`auth.db`). Migrates existing JSON files on first run. Eliminates pre-key file sprawl (`plugins/channels/whatsapp/sqlite-auth-state.js`) |
 | **Channel plugin interface** | Any channel implements `connect()`, `sendMessage()`, `sendMedia()`, `getGroups()`, optional `sendFile()` |
 | **File sending** | `sendFile(jid, buffer, mime, fileName, caption)` — agents can send files back to users via IPC. Router delegates to channel plugin. 64MB limit |
 | **Router made generic** | `src/router.ts` routes to any channel based on JID prefix (`wa:`, `dc:`, `tg:`) |
