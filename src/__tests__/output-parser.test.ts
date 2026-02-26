@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createOutputParser, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
-import type { ContainerOutput } from './container-runner.js';
+import { createOutputParser, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from '../output-parser.js';
+import type { ContainerOutput } from '../container-runner.js';
 
 function wrap(json: string): string {
   return `${OUTPUT_START_MARKER}\n${json}\n${OUTPUT_END_MARKER}\n`;

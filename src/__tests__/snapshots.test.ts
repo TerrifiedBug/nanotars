@@ -3,13 +3,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-vi.mock('./config.js', () => ({
+vi.mock('../config.js', () => ({
   DATA_DIR: '/tmp/__will_be_replaced__',
 }));
 
-import { mapTasksToSnapshot, writeTasksSnapshot, writeGroupsSnapshot } from './snapshots.js';
-import * as configMod from './config.js';
-import type { ScheduledTask } from './types.js';
+import { mapTasksToSnapshot, writeTasksSnapshot, writeGroupsSnapshot } from '../snapshots.js';
+import * as configMod from '../config.js';
+import type { ScheduledTask } from '../types.js';
 
 let tmpDir: string;
 

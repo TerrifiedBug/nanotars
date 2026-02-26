@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('./logger.js', () => ({
+vi.mock('../logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('./secret-redact.js', () => ({
+vi.mock('../secret-redact.js', () => ({
   redactSecrets: vi.fn((s: string) => s),
 }));
 
-import { isAuthError, routeOutbound, routeOutboundFile } from './router.js';
-import { redactSecrets } from './secret-redact.js';
-import type { Channel } from './types.js';
-import type { PluginRegistry } from './plugin-loader.js';
+import { isAuthError, routeOutbound, routeOutboundFile } from '../router.js';
+import { redactSecrets } from '../secret-redact.js';
+import type { Channel } from '../types.js';
+import type { PluginRegistry } from '../plugin-loader.js';
 
 function makeChannel(overrides: Partial<Channel> = {}): Channel {
   return {

@@ -3,16 +3,16 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-vi.mock('./logger.js', () => ({
+vi.mock('../logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 // Config mock — MOUNT_ALLOWLIST_PATH will be overridden per test group
-vi.mock('./config.js', () => ({
+vi.mock('../config.js', () => ({
   MOUNT_ALLOWLIST_PATH: '/tmp/__replaced__',
 }));
 
-import * as configMod from './config.js';
+import * as configMod from '../config.js';
 
 let tmpDir: string;
 
@@ -48,7 +48,7 @@ describe('loadMountAllowlist', () => {
   it('returns null when file is missing', async () => {
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = path.join(tmpDir, 'nonexistent.json');
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     expect(loadMountAllowlist()).toBeNull();
   });
 
@@ -56,7 +56,7 @@ describe('loadMountAllowlist', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     const result = loadMountAllowlist();
     expect(result).not.toBeNull();
     expect(result!.allowedRoots).toHaveLength(1);
@@ -67,7 +67,7 @@ describe('loadMountAllowlist', () => {
     const filePath = writeAllowlist(validAllowlist({ blockedPatterns: ['custom-secret'] }));
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     const result = loadMountAllowlist();
     expect(result!.blockedPatterns).toContain('.ssh');
     expect(result!.blockedPatterns).toContain('.gnupg');
@@ -79,7 +79,7 @@ describe('loadMountAllowlist', () => {
     fs.writeFileSync(filePath, 'not json {{{');
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     expect(loadMountAllowlist()).toBeNull();
   });
 
@@ -87,7 +87,7 @@ describe('loadMountAllowlist', () => {
     const filePath = writeAllowlist({ allowedRoots: 'bad', blockedPatterns: [], nonMainReadOnly: false });
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     expect(loadMountAllowlist()).toBeNull();
   });
 
@@ -95,7 +95,7 @@ describe('loadMountAllowlist', () => {
     const filePath = writeAllowlist({ allowedRoots: [], blockedPatterns: 'bad', nonMainReadOnly: false });
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     expect(loadMountAllowlist()).toBeNull();
   });
 
@@ -103,7 +103,7 @@ describe('loadMountAllowlist', () => {
     const filePath = writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: 'yes' });
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     expect(loadMountAllowlist()).toBeNull();
   });
 
@@ -111,7 +111,7 @@ describe('loadMountAllowlist', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { loadMountAllowlist } = await import('./mount-security.js');
+    const { loadMountAllowlist } = await import('../mount-security.js');
     const first = loadMountAllowlist();
     // Modify file — should still return cached
     fs.writeFileSync(filePath, JSON.stringify({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true }));
@@ -129,7 +129,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir }, true);
     expect(result.allowed).toBe(true);
     expect(result.realHostPath).toBe(subDir);
@@ -141,7 +141,7 @@ describe('validateMount', () => {
     }));
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: tmpDir }, true);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('not under any allowed root');
@@ -153,7 +153,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: sshDir }, true);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('.ssh');
@@ -165,7 +165,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: envDir }, true);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('.env');
@@ -177,7 +177,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir, containerPath: '../../escape' }, true);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('..');
@@ -189,7 +189,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir, containerPath: '/etc/shadow' }, true);
     expect(result.allowed).toBe(false);
   });
@@ -202,7 +202,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: linkPath }, true);
     expect(result.allowed).toBe(true);
     expect(result.realHostPath).toBe(realDir);
@@ -219,7 +219,7 @@ describe('validateMount', () => {
     }));
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: linkPath }, true);
     expect(result.allowed).toBe(false);
   });
@@ -228,7 +228,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: path.join(tmpDir, 'nonexistent') }, true);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('does not exist');
@@ -242,7 +242,7 @@ describe('validateMount', () => {
     }));
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     // Use a path we know exists under home
     const result = validateMount({ hostPath: homeDir }, true);
     expect(result.allowed).toBe(true);
@@ -254,7 +254,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist({ nonMainReadOnly: true }));
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir, readonly: false }, false);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(true);
@@ -266,7 +266,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist({ nonMainReadOnly: true }));
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir, readonly: false }, true);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(false);
@@ -280,7 +280,7 @@ describe('validateMount', () => {
     }));
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir, readonly: false }, true);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(true);
@@ -292,7 +292,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir }, true);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(true);
@@ -304,7 +304,7 @@ describe('validateMount', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: subDir }, true);
     expect(result.resolvedContainerPath).toBe('myproject');
   });
@@ -312,7 +312,7 @@ describe('validateMount', () => {
   it('blocks all mounts when no allowlist exists', async () => {
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = path.join(tmpDir, 'nonexistent.json');
-    const { validateMount } = await import('./mount-security.js');
+    const { validateMount } = await import('../mount-security.js');
     const result = validateMount({ hostPath: tmpDir }, true);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('No mount allowlist configured');
@@ -328,7 +328,7 @@ describe('validateAdditionalMounts', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateAdditionalMounts } = await import('./mount-security.js');
+    const { validateAdditionalMounts } = await import('../mount-security.js');
     const result = validateAdditionalMounts(
       [
         { hostPath: goodDir },
@@ -347,7 +347,7 @@ describe('validateAdditionalMounts', () => {
     const filePath = writeAllowlist(validAllowlist());
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
-    const { validateAdditionalMounts } = await import('./mount-security.js');
+    const { validateAdditionalMounts } = await import('../mount-security.js');
     const result = validateAdditionalMounts(
       [{ hostPath: dir, containerPath: 'custom-name' }],
       'test-group',
@@ -360,7 +360,7 @@ describe('validateAdditionalMounts', () => {
   it('returns empty array when no allowlist', async () => {
     vi.resetModules();
     (configMod as any).MOUNT_ALLOWLIST_PATH = path.join(tmpDir, 'nonexistent.json');
-    const { validateAdditionalMounts } = await import('./mount-security.js');
+    const { validateAdditionalMounts } = await import('../mount-security.js');
     const result = validateAdditionalMounts(
       [{ hostPath: tmpDir }],
       'test-group',
@@ -375,7 +375,7 @@ describe('validateAdditionalMounts', () => {
 describe('generateAllowlistTemplate', () => {
   it('generates valid JSON', async () => {
     vi.resetModules();
-    const { generateAllowlistTemplate } = await import('./mount-security.js');
+    const { generateAllowlistTemplate } = await import('../mount-security.js');
     const template = generateAllowlistTemplate();
     const parsed = JSON.parse(template);
     expect(parsed.allowedRoots).toBeInstanceOf(Array);
@@ -385,7 +385,7 @@ describe('generateAllowlistTemplate', () => {
 
   it('includes example roots and patterns', async () => {
     vi.resetModules();
-    const { generateAllowlistTemplate } = await import('./mount-security.js');
+    const { generateAllowlistTemplate } = await import('../mount-security.js');
     const parsed = JSON.parse(generateAllowlistTemplate());
     expect(parsed.allowedRoots.length).toBeGreaterThan(0);
     expect(parsed.blockedPatterns.length).toBeGreaterThan(0);

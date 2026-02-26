@@ -3,11 +3,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-vi.mock('./logger.js', () => ({
+vi.mock('../../logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('./config.js', () => ({
+vi.mock('../../config.js', () => ({
   DATA_DIR: '/tmp/__replaced__',
   GROUPS_DIR: '/tmp/__replaced__',
   IPC_POLL_INTERVAL: 100,
@@ -15,18 +15,18 @@ vi.mock('./config.js', () => ({
   TIMEZONE: 'UTC',
 }));
 
-vi.mock('./db.js', () => ({
+vi.mock('../../db.js', () => ({
   createTask: vi.fn(),
   deleteTask: vi.fn(),
   getTaskById: vi.fn(),
   updateTask: vi.fn(),
 }));
 
-import type { IpcDeps } from './ipc.js';
-import * as configMod from './config.js';
-import { createTask, getTaskById, updateTask } from './db.js';
-import { logger } from './logger.js';
-import type { RegisteredGroup } from './types.js';
+import type { IpcDeps } from '../index.js';
+import * as configMod from '../../config.js';
+import { createTask, getTaskById, updateTask } from '../../db.js';
+import { logger } from '../../logger.js';
+import type { RegisteredGroup } from '../../types.js';
 
 let tmpDir: string;
 
@@ -66,7 +66,7 @@ afterEach(() => {
 describe('startIpcWatcher', () => {
   it('processes message files and deletes them', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const ipcDir = path.join(tmpDir, 'ipc', 'main', 'messages');
@@ -84,7 +84,7 @@ describe('startIpcWatcher', () => {
 
   it('moves broken JSON to errors directory', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const ipcDir = path.join(tmpDir, 'ipc', 'main', 'messages');
@@ -103,7 +103,7 @@ describe('startIpcWatcher', () => {
 
   it('processes react messages', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const ipcDir = path.join(tmpDir, 'ipc', 'main', 'messages');
@@ -120,7 +120,7 @@ describe('startIpcWatcher', () => {
 
   it('blocks unauthorized messages from non-main groups', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps({
       registeredGroups: vi.fn(() => ({
@@ -141,7 +141,7 @@ describe('startIpcWatcher', () => {
 
   it('skips non-json files', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const ipcDir = path.join(tmpDir, 'ipc', 'main', 'messages');
@@ -160,7 +160,7 @@ describe('startIpcWatcher', () => {
 describe('startIpcWatcher: send_file', () => {
   it('translates container path to host path and sends', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const groupDir = path.join(tmpDir, 'groups', 'main');
@@ -190,7 +190,7 @@ describe('startIpcWatcher: send_file', () => {
 
   it('warns when file does not exist', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const ipcDir = path.join(tmpDir, 'ipc', 'main', 'messages');
@@ -211,7 +211,7 @@ describe('startIpcWatcher: send_file', () => {
 
   it('infers MIME type from extension', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const dir = path.join(tmpDir, 'groups', 'main', 'docs');
@@ -238,7 +238,7 @@ describe('startIpcWatcher: send_file', () => {
 
   it('uses custom fileName when provided', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const dir = path.join(tmpDir, 'groups', 'main');
@@ -267,11 +267,11 @@ describe('startIpcWatcher: send_file', () => {
 // --- processTaskIpc: update_task schedule recomputation ---
 
 describe('processTaskIpc: update_task', () => {
-  let processTaskIpc: typeof import('./ipc.js').processTaskIpc;
+  let processTaskIpc: typeof import('../index.js').processTaskIpc;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./ipc.js');
+    const mod = await import('../index.js');
     processTaskIpc = mod.processTaskIpc;
   });
 
@@ -437,7 +437,7 @@ describe('processTaskIpc: update_task', () => {
 describe('startIpcWatcher: task type validation', () => {
   it('quarantines task file with unknown type', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const tasksDir = path.join(tmpDir, 'ipc', 'main', 'tasks');
@@ -460,7 +460,7 @@ describe('startIpcWatcher: task type validation', () => {
 
   it('quarantines task file with missing type field', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const tasksDir = path.join(tmpDir, 'ipc', 'main', 'tasks');
@@ -480,7 +480,7 @@ describe('startIpcWatcher: task type validation', () => {
 
   it('processes valid task types normally', async () => {
     vi.resetModules();
-    const { startIpcWatcher } = await import('./ipc.js');
+    const { startIpcWatcher } = await import('../index.js');
 
     const deps = makeDeps();
     const tasksDir = path.join(tmpDir, 'ipc', 'main', 'tasks');
@@ -513,11 +513,11 @@ describe('startIpcWatcher: task type validation', () => {
 // --- processTaskIpc: schedule_type validation ---
 
 describe('processTaskIpc: schedule_type validation', () => {
-  let processTaskIpc: typeof import('./ipc.js').processTaskIpc;
+  let processTaskIpc: typeof import('../index.js').processTaskIpc;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./ipc.js');
+    const mod = await import('../index.js');
     processTaskIpc = mod.processTaskIpc;
   });
 

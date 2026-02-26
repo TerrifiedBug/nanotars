@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 
-import { _initTestDatabase, getAllChats, storeChatMetadata } from './db.js';
-import { MessageOrchestrator, OrchestratorDeps } from './orchestrator.js';
-import type { Channel } from './types.js';
+import { _initTestDatabase, getAllChats, storeChatMetadata } from '../db.js';
+import { MessageOrchestrator, OrchestratorDeps } from '../orchestrator.js';
+import type { Channel } from '../types.js';
 
 /** Mock WhatsApp-like channel that owns @g.us and @s.whatsapp.net JIDs */
 function mockWhatsAppChannel(): Channel {

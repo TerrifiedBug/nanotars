@@ -21,7 +21,7 @@ import {
   storeChatMetadata,
   storeMessage,
   updateTask,
-} from './db.js';
+} from '../index.js';
 
 beforeEach(() => {
   _initTestDatabase();

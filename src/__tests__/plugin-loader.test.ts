@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-vi.mock('./logger.js', () => ({
+vi.mock('../logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { parseManifest, collectContainerEnvVars, collectSkillPaths, collectContainerHookPaths, mergeMcpConfigs, PluginRegistry } from './plugin-loader.js';
+import { parseManifest, collectContainerEnvVars, collectSkillPaths, collectContainerHookPaths, mergeMcpConfigs, PluginRegistry } from '../plugin-loader.js';
 
 describe('parseManifest', () => {
   it('parses a valid manifest-only plugin', () => {

@@ -7,9 +7,9 @@ import {
   getRegisteredGroup,
   getTaskById,
   setRegisteredGroup,
-} from './db.js';
-import { processTaskIpc, IpcDeps } from './ipc.js';
-import { RegisteredGroup } from './types.js';
+} from '../../db.js';
+import { processTaskIpc, IpcDeps } from '../index.js';
+import { RegisteredGroup } from '../../types.js';
 
 // Set up registered groups used across tests
 const MAIN_GROUP: RegisteredGroup = {

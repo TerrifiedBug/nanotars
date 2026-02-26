@@ -3,7 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { readEnvFile } from './env.js';
+import { readEnvFile } from '../env.js';
 
 let tmpDir: string;
 let cwdSpy: ReturnType<typeof vi.spyOn>;

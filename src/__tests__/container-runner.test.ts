@@ -8,7 +8,7 @@ const OUTPUT_START_MARKER = `---NANOCLAW_OUTPUT_${TEST_NONCE}_START---`;
 const OUTPUT_END_MARKER = `---NANOCLAW_OUTPUT_${TEST_NONCE}_END---`;
 
 // Mock config
-vi.mock('./config.js', () => ({
+vi.mock('../config.js', () => ({
   CONTAINER_IMAGE: 'nanoclaw-agent:latest',
   CONTAINER_MAX_OUTPUT_SIZE: 10485760,
   CONTAINER_TIMEOUT: 1800000, // 30min
@@ -30,7 +30,7 @@ vi.mock('crypto', async () => {
 });
 
 // Mock logger
-vi.mock('./logger.js', () => ({
+vi.mock('../logger.js', () => ({
   logger: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -66,13 +66,13 @@ vi.mock('fs', async () => {
 });
 
 // Mock mount-security
-vi.mock('./mount-security.js', () => ({
+vi.mock('../mount-security.js', () => ({
   validateAdditionalMounts: vi.fn(() => []),
 }));
 
 // Mock container-mounts: buildVolumeMounts is now async
-vi.mock('./container-mounts.js', async () => {
-  const actual = await vi.importActual<typeof import('./container-mounts.js')>('./container-mounts.js');
+vi.mock('../container-mounts.js', async () => {
+  const actual = await vi.importActual<typeof import('../container-mounts.js')>('../container-mounts.js');
   return {
     ...actual,
     buildVolumeMounts: vi.fn(async () => []),
@@ -81,8 +81,8 @@ vi.mock('./container-mounts.js', async () => {
 });
 
 // Mock container-runtime: fixMountPermissions is async and must resolve immediately in tests
-vi.mock('./container-runtime.js', async () => {
-  const actual = await vi.importActual<typeof import('./container-runtime.js')>('./container-runtime.js');
+vi.mock('../container-runtime.js', async () => {
+  const actual = await vi.importActual<typeof import('../container-runtime.js')>('../container-runtime.js');
   return {
     ...actual,
     fixMountPermissions: vi.fn(() => Promise.resolve()),
@@ -121,8 +121,8 @@ vi.mock('child_process', async () => {
   };
 });
 
-import { runContainerAgent, ContainerOutput } from './container-runner.js';
-import type { RegisteredGroup } from './types.js';
+import { runContainerAgent, ContainerOutput } from '../container-runner.js';
+import type { RegisteredGroup } from '../types.js';
 
 const testGroup: RegisteredGroup = {
   name: 'Test Group',
