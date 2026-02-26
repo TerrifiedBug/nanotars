@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
-import { MessageOrchestrator, OrchestratorDeps } from './orchestrator.js';
-import type { RegisteredGroup, NewMessage } from './types.js';
+import { MessageOrchestrator, OrchestratorDeps } from '../orchestrator.js';
+import type { RegisteredGroup, NewMessage } from '../types.js';
 
 function makeDeps(overrides: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
   return {

@@ -3,26 +3,26 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-vi.mock('./logger.js', () => ({
+vi.mock('../logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('./config.js', () => ({
+vi.mock('../config.js', () => ({
   DATA_DIR: '/tmp/__replaced__',
   GROUPS_DIR: '/tmp/__replaced__',
 }));
 
-vi.mock('./mount-security.js', () => ({
+vi.mock('../mount-security.js', () => ({
   validateAdditionalMounts: vi.fn(() => []),
 }));
 
-vi.mock('./env.js', () => ({
+vi.mock('../env.js', () => ({
   readEnvFile: vi.fn(() => ({})),
 }));
 
-import * as configMod from './config.js';
-import { validateAdditionalMounts } from './mount-security.js';
-import type { RegisteredGroup } from './types.js';
+import * as configMod from '../config.js';
+import { validateAdditionalMounts } from '../mount-security.js';
+import type { RegisteredGroup } from '../types.js';
 
 let tmpDir: string;
 let projectRoot: string;
@@ -75,12 +75,12 @@ afterEach(() => {
 // --- Core mount tests ---
 
 describe('buildVolumeMounts: core mounts', () => {
-  let buildVolumeMounts: typeof import('./container-mounts.js').buildVolumeMounts;
-  let setPluginRegistry: typeof import('./container-mounts.js').setPluginRegistry;
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
+  let setPluginRegistry: typeof import('../container-mounts.js').setPluginRegistry;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./container-mounts.js');
+    const mod = await import('../container-mounts.js');
     buildVolumeMounts = mod.buildVolumeMounts;
     setPluginRegistry = mod.setPluginRegistry;
   });
@@ -173,11 +173,11 @@ describe('buildVolumeMounts: core mounts', () => {
 // --- Main vs non-main ---
 
 describe('buildVolumeMounts: main vs non-main', () => {
-  let buildVolumeMounts: typeof import('./container-mounts.js').buildVolumeMounts;
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./container-mounts.js');
+    const mod = await import('../container-mounts.js');
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
@@ -211,11 +211,11 @@ describe('buildVolumeMounts: main vs non-main', () => {
 // --- assertPathWithin (path traversal) ---
 
 describe('buildVolumeMounts: path traversal protection', () => {
-  let buildVolumeMounts: typeof import('./container-mounts.js').buildVolumeMounts;
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./container-mounts.js');
+    const mod = await import('../container-mounts.js');
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
@@ -231,12 +231,12 @@ describe('buildVolumeMounts: path traversal protection', () => {
 // --- Plugin skill and hook mounts ---
 
 describe('buildVolumeMounts: plugin integration', () => {
-  let buildVolumeMounts: typeof import('./container-mounts.js').buildVolumeMounts;
-  let setPluginRegistry: typeof import('./container-mounts.js').setPluginRegistry;
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
+  let setPluginRegistry: typeof import('../container-mounts.js').setPluginRegistry;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./container-mounts.js');
+    const mod = await import('../container-mounts.js');
     buildVolumeMounts = mod.buildVolumeMounts;
     setPluginRegistry = mod.setPluginRegistry;
   });
@@ -365,12 +365,12 @@ describe('buildVolumeMounts: plugin integration', () => {
 // --- Env file construction ---
 
 describe('buildVolumeMounts: env file', () => {
-  let buildVolumeMounts: typeof import('./container-mounts.js').buildVolumeMounts;
-  let setPluginRegistry: typeof import('./container-mounts.js').setPluginRegistry;
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
+  let setPluginRegistry: typeof import('../container-mounts.js').setPluginRegistry;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./container-mounts.js');
+    const mod = await import('../container-mounts.js');
     buildVolumeMounts = mod.buildVolumeMounts;
     setPluginRegistry = mod.setPluginRegistry;
   });
@@ -514,11 +514,11 @@ describe('buildVolumeMounts: env file', () => {
 // --- Additional mounts passthrough ---
 
 describe('buildVolumeMounts: additional mounts', () => {
-  let buildVolumeMounts: typeof import('./container-mounts.js').buildVolumeMounts;
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./container-mounts.js');
+    const mod = await import('../container-mounts.js');
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
@@ -551,11 +551,11 @@ describe('buildVolumeMounts: additional mounts', () => {
 // --- Credentials mount ---
 
 describe('buildVolumeMounts: credentials', () => {
-  let buildVolumeMounts: typeof import('./container-mounts.js').buildVolumeMounts;
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
 
   beforeEach(async () => {
     vi.resetModules();
-    const mod = await import('./container-mounts.js');
+    const mod = await import('../container-mounts.js');
     buildVolumeMounts = mod.buildVolumeMounts;
   });
 
@@ -579,9 +579,9 @@ describe('buildVolumeMounts: credentials', () => {
 describe('readSecrets', () => {
   it('delegates to readEnvFile for auth keys', async () => {
     vi.resetModules();
-    const { readEnvFile } = await import('./env.js');
+    const { readEnvFile } = await import('../env.js');
     vi.mocked(readEnvFile).mockReturnValue({ CLAUDE_CODE_OAUTH_TOKEN: 'tok', ANTHROPIC_API_KEY: 'key' });
-    const { readSecrets } = await import('./container-mounts.js');
+    const { readSecrets } = await import('../container-mounts.js');
     const secrets = readSecrets();
     expect(readEnvFile).toHaveBeenCalledWith(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
     expect(secrets).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'tok', ANTHROPIC_API_KEY: 'key' });

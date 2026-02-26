@@ -8,15 +8,15 @@ let cwdSpy: ReturnType<typeof vi.spyOn>;
 let homeSpy: ReturnType<typeof vi.spyOn>;
 
 // Dynamic import after mocks — fresh module state each test
-let loadSecrets: typeof import('./secret-redact.js').loadSecrets;
-let redactSecrets: typeof import('./secret-redact.js').redactSecrets;
+let loadSecrets: typeof import('../secret-redact.js').loadSecrets;
+let redactSecrets: typeof import('../secret-redact.js').redactSecrets;
 
 beforeEach(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-redact-test-'));
   cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
   homeSpy = vi.spyOn(os, 'homedir').mockReturnValue(tmpDir);
   vi.resetModules();
-  const mod = await import('./secret-redact.js');
+  const mod = await import('../secret-redact.js');
   loadSecrets = mod.loadSecrets;
   redactSecrets = mod.redactSecrets;
 });

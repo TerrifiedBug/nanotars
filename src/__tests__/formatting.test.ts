@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 
-import { TRIGGER_PATTERN, createTriggerPattern, ASSISTANT_NAME } from './config.js';
+import { TRIGGER_PATTERN, createTriggerPattern, ASSISTANT_NAME } from '../config.js';
 import {
   escapeXml,
   formatMessages,
   stripInternalTags,
-} from './router.js';
-import { NewMessage } from './types.js';
+} from '../router.js';
+import { NewMessage } from '../types.js';
 
 function makeMsg(overrides: Partial<NewMessage> = {}): NewMessage {
   return {
