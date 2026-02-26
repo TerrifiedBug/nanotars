@@ -517,7 +517,27 @@ Integration and channel skills (27 total) have been moved to the [skills marketp
 | `src/snapshots.ts` (84 lines) | Task/group snapshot utilities for IPC |
 | `src/container-runner.ts` (467 lines) | Container lifecycle only (spawn, I/O, timeout, logging) |
 
-Re-exports preserve backward compatibility — no consumer import changes needed.
+`db.ts` was 819 lines mixing schema, migrations, chat/message ops, task ops, and state management. Split into domain modules under `src/db/`:
+
+| Module | Responsibility |
+|--------|---------------|
+| `src/db/init.ts` | Schema, migrations, lifecycle, `getDb()` singleton, backup |
+| `src/db/messages.ts` | Chat metadata and message storage/retrieval |
+| `src/db/tasks.ts` | Scheduled task and run log operations |
+| `src/db/state.ts` | Router state, sessions, registered groups |
+| `src/db/migrate.ts` | JSON migration and startup tasks (avoids circular deps) |
+
+`ipc.ts` was 614 lines mixing file I/O, authorization, message dispatch, and task processing. Split into domain modules under `src/ipc/`:
+
+| Module | Responsibility |
+|--------|---------------|
+| `src/ipc/types.ts` | IPC message types, type guards, `IpcDeps` interface |
+| `src/ipc/file-io.ts` | Secure file reading, listing, quarantine |
+| `src/ipc/auth.ts` | JID and task authorization helpers |
+| `src/ipc/messages.ts` | Message dispatch (`processMessageIpc`, extracted from inline) |
+| `src/ipc/tasks.ts` | Task command processing (`processTaskIpc`, `computeNextRun`) |
+
+All splits use barrel re-exports — no consumer import changes needed.
 
 ### Dead code removal
 
@@ -538,8 +558,8 @@ Re-exports preserve backward compatibility — no consumer import changes needed
 
 | Pattern | File | What |
 |---------|------|------|
-| `mapRegisteredGroupRow()` | `src/db.ts` | Extracted duplicated row→object mapping from `getRegisteredGroup` and `getAllRegisteredGroups` |
-| `authorizedTaskAction()` | `src/ipc.ts` | Consolidated identical auth+action pattern across pause/resume/cancel task handlers |
+| `mapRegisteredGroupRow()` | `src/db/state.ts` | Extracted duplicated row→object mapping from `getRegisteredGroup` and `getAllRegisteredGroups` |
+| `authorizedTaskAction()` | `src/ipc/auth.ts` | Consolidated identical auth+action pattern across pause/resume/cancel task handlers |
 | Shared logger | `src/mount-security.ts` | Replaced duplicate pino instance with shared `logger` import |
 
 ---
