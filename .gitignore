@@ -39,9 +39,6 @@ agents-sdk-docs
 # Internal plans
 docs/plans/
 
-# Plugin-deployed scripts (installed by plugin skills, not core code)
-scripts/
-
 # Plugins (personal config, created by skills)
 plugins/*
 !plugins/.gitkeep
