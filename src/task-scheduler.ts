@@ -35,6 +35,31 @@ export interface SchedulerDependencies {
   sendMessage: (jid: string, text: string, sender?: string) => Promise<void>;
 }
 
+/**
+ * Compute the next run time for a task after execution.
+ * Interval tasks anchor to next_run and skip missed intervals to prevent drift.
+ */
+export function computeNextRun(task: ScheduledTask): string | null {
+  if (task.schedule_type === 'cron') {
+    const interval = CronExpressionParser.parse(task.schedule_value, {
+      tz: TIMEZONE,
+    });
+    return interval.next().toISOString();
+  }
+  if (task.schedule_type === 'interval') {
+    const ms = parseInt(task.schedule_value, 10);
+    const now = Date.now();
+    // Anchor to the scheduled time and skip missed intervals
+    let next = task.next_run
+      ? new Date(task.next_run).getTime() + ms
+      : now + ms;
+    while (next <= now) next += ms;
+    return new Date(next).toISOString();
+  }
+  // 'once' tasks have no next run
+  return null;
+}
+
 async function runTask(
   task: ScheduledTask,
   deps: SchedulerDependencies,
@@ -203,17 +228,7 @@ async function runTask(
     error,
   });
 
-  let nextRun: string | null = null;
-  if (task.schedule_type === 'cron') {
-    const interval = CronExpressionParser.parse(task.schedule_value, {
-      tz: TIMEZONE,
-    });
-    nextRun = interval.next().toISOString();
-  } else if (task.schedule_type === 'interval') {
-    const ms = parseInt(task.schedule_value, 10);
-    nextRun = new Date(Date.now() + ms).toISOString();
-  }
-  // 'once' tasks have no next run
+  const nextRun = computeNextRun(task);
 
   const resultSummary = error
     ? `Error: ${error}`

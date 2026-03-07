@@ -144,7 +144,7 @@ export function getNewMessages(
   // Use >= so that messages arriving in the same second as the cursor are
   // not permanently skipped. Callers must track processed IDs to deduplicate.
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp, reply_context
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, reply_context
     FROM messages
     WHERE timestamp >= ? AND chat_jid IN (${placeholders})
       AND is_bot_message = 0 AND content NOT LIKE ?
@@ -159,6 +159,7 @@ export function getNewMessages(
 
   const messages: NewMessage[] = rows.map((row) => ({
     ...row,
+    is_from_me: !!(row as unknown as Record<string, unknown>).is_from_me,
     reply_context: row.reply_context ? JSON.parse(row.reply_context) : undefined,
   }));
 
@@ -178,7 +179,7 @@ export function getMessagesSince(
   // Filter bot messages using both the is_bot_message flag AND the content
   // prefix as a backstop for messages written before the migration ran.
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp, reply_context
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, reply_context
     FROM messages
     WHERE chat_jid = ? AND timestamp > ?
       AND is_bot_message = 0 AND content NOT LIKE ?
@@ -191,6 +192,7 @@ export function getMessagesSince(
     >;
   return rows.map((row) => ({
     ...row,
+    is_from_me: !!(row as unknown as Record<string, unknown>).is_from_me,
     reply_context: row.reply_context ? JSON.parse(row.reply_context) : undefined,
   }));
 }

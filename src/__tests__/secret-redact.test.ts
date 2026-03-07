@@ -179,11 +179,11 @@ describe('redacts all .env values by default (not just named secrets)', () => {
   });
 
   it('redacts vars without KEY/TOKEN/SECRET in name', () => {
-    writeEnv('CLAUDE_MEM_URL=http://172.17.0.1:37777');
+    writeEnv('CLAUDE_MEM_URL=http://host.docker.internal:37777');
     loadSecrets();
 
     // CLAUDE_MEM_URL is not on the safe-list, so its value gets redacted
-    expect(redactSecrets('http://172.17.0.1:37777')).toBe('[REDACTED]');
+    expect(redactSecrets('http://host.docker.internal:37777')).toBe('[REDACTED]');
   });
 });
 
@@ -204,7 +204,7 @@ describe('plugin publicEnvVars (additionalSafeVars)', () => {
   it('merges additionalSafeVars with built-in safe-list', () => {
     writeEnv([
       'ASSISTANT_NAME=TARS-EXTENDED',
-      'CLAUDE_MEM_URL=http://172.17.0.1:37777',
+      'CLAUDE_MEM_URL=http://host.docker.internal:37777',
       'ANTHROPIC_API_KEY=sk-ant-secret-here',
     ].join('\n'));
     loadSecrets(['CLAUDE_MEM_URL']);
@@ -212,7 +212,7 @@ describe('plugin publicEnvVars (additionalSafeVars)', () => {
     // Built-in safe-list
     expect(redactSecrets('TARS-EXTENDED')).toBe('TARS-EXTENDED');
     // Plugin publicEnvVar
-    expect(redactSecrets('http://172.17.0.1:37777')).toBe('http://172.17.0.1:37777');
+    expect(redactSecrets('http://host.docker.internal:37777')).toBe('http://host.docker.internal:37777');
     // Secret
     expect(redactSecrets('sk-ant-secret-here')).toBe('[REDACTED]');
   });
