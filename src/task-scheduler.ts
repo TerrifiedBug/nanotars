@@ -30,6 +30,7 @@ export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSessions: () => Record<string, string>;
   getResumePositions: () => Record<string, string>;
+  clearResumePosition: (groupFolder: string) => void;
   queue: GroupQueue;
   onProcess: (groupJid: string, proc: ChildProcess, containerName: string, groupFolder: string) => void;
   sendMessage: (jid: string, text: string, sender?: string) => Promise<void>;
@@ -200,6 +201,12 @@ async function runTask(
   }
 
   const durationMs = Date.now() - startTime;
+
+  // Clear stale resume position on error so subsequent tasks don't hit the same
+  // "No message found with message.uuid" failure repeatedly
+  if (error && task.context_mode === 'group') {
+    deps.clearResumePosition(task.group_folder);
+  }
 
   // Notify user if the task failed (so they don't get silent failures)
   if (error && !hadSuccessfulResponse) {

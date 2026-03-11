@@ -283,6 +283,7 @@ async function main(): Promise<void> {
     registeredGroups: () => orchestrator.registeredGroups,
     getSessions: () => orchestrator.sessions,
     getResumePositions: () => orchestrator.resumePositions,
+    clearResumePosition: (groupFolder: string) => { delete orchestrator.resumePositions[groupFolder]; },
     queue,
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText, sender) => {
