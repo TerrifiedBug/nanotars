@@ -1,14 +1,20 @@
 /**
- * v2 Channel adapter registry.
+ * Channel adapter registry.
  *
  * Channels self-register on import. The host calls initChannelAdapters() at startup
  * to instantiate and set up all registered adapters.
  */
-import { NetworkError } from '@chat-adapter/shared';
 import type { ChannelAdapter, ChannelRegistration, ChannelSetup } from './adapter.js';
 import { log } from '../log.js';
 
 const SETUP_RETRY_DELAYS_MS = [2000, 5000, 10000];
+
+/** Duck-type check — adapters that throw an Error with `name === 'NetworkError'`
+ * (Chat SDK's `@chat-adapter/shared.NetworkError` and similar) get a retry on
+ * setup. Avoids depending on `@chat-adapter/shared` at trunk level. */
+function isNetworkError(err: unknown): err is Error {
+  return err instanceof Error && err.name === 'NetworkError';
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -64,7 +70,7 @@ export async function initChannelAdapters(setupFn: (adapter: ChannelAdapter) => 
           await adapter.setup(setup);
           break;
         } catch (err) {
-          if (err instanceof NetworkError && attempt < SETUP_RETRY_DELAYS_MS.length) {
+          if (isNetworkError(err) && attempt < SETUP_RETRY_DELAYS_MS.length) {
             const delay = SETUP_RETRY_DELAYS_MS[attempt]!;
             log.warn('Channel adapter setup failed with network error, retrying', {
               channel: name,
