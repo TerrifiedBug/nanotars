@@ -13,4 +13,13 @@ set -e
 
 cat > /tmp/input.json
 
+# Source the per-group env file if it was mounted. The host-spawn path uses
+# its own `bash -c` wrapper that does the same; this branch only runs if
+# the entrypoint override is removed in the future.
+if [ -r /workspace/env-dir/env ]; then
+  set -a
+  . /workspace/env-dir/env
+  set +a
+fi
+
 exec bun run /app/src/index.ts < /tmp/input.json

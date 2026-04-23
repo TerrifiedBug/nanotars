@@ -27,6 +27,7 @@ import { getDb, hasTable } from './db/connection.js';
 import { initGroupFilesystem } from './group-init.js';
 import { stopTypingRefresh } from './modules/typing/index.js';
 import { log } from './log.js';
+import { buildGroupEnvMount } from './modules/group-env/index.js';
 import { validateAdditionalMounts } from './modules/mount-security/index.js';
 // Provider host-side config barrel — each provider that needs host-side
 // container setup self-registers on import.
@@ -288,6 +289,17 @@ function buildMounts(
     mounts.push(...providerContribution.mounts);
   }
 
+  // Per-group env passthrough — merges global .env + groups/<folder>/.env,
+  // filters by container.json.envAllowlist, shell-quotes, writes to
+  // data/env/<agentGroupId>/env, and mounts at /workspace/env-dir (RO).
+  // The spawn command sources this file before execing the agent-runner.
+  const envMount = buildGroupEnvMount({
+    agentGroupId: agentGroup.id,
+    groupFolder: agentGroup.folder,
+    allowlist: containerConfig.envAllowlist ?? [],
+  });
+  if (envMount) mounts.push(envMount);
+
   return mounts;
 }
 
@@ -446,7 +458,14 @@ async function buildContainerArgs(
   const imageTag = containerConfig.imageTag || CONTAINER_IMAGE;
   args.push(imageTag);
 
-  args.push('-c', 'exec bun run /app/src/index.ts');
+  // Source the per-group env file (if mounted) before exec so bun inherits
+  // the vars. `set -a` exports; `set +a` restores default. `[ -r ... ]` is
+  // the guard — when `envAllowlist` is empty, the file is absent and we
+  // just exec bun directly.
+  args.push(
+    '-c',
+    '[ -r /workspace/env-dir/env ] && { set -a; . /workspace/env-dir/env; set +a; }; exec bun run /app/src/index.ts',
+  );
 
   return args;
 }

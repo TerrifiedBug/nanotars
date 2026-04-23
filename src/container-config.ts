@@ -47,6 +47,13 @@ export interface ContainerConfig {
   agentGroupId?: string;
   /** Max messages per prompt. Falls back to code default if unset. */
   maxMessagesPerPrompt?: number;
+  /**
+   * Environment variables to pass through into the container from the
+   * host's `.env` (merged with `groups/<folder>/.env`, group wins).
+   * Opt-in per key: empty or unset = nothing passes through. See
+   * `src/modules/group-env` for the full flow.
+   */
+  envAllowlist?: string[];
 }
 
 function emptyConfig(): ContainerConfig {
@@ -87,6 +94,7 @@ export function readContainerConfig(folder: string): ContainerConfig {
       assistantName: raw.assistantName,
       agentGroupId: raw.agentGroupId,
       maxMessagesPerPrompt: raw.maxMessagesPerPrompt,
+      envAllowlist: raw.envAllowlist,
     };
   } catch (err) {
     console.error(`[container-config] failed to parse ${p}: ${String(err)}`);
