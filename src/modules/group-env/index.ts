@@ -123,7 +123,11 @@ export function buildGroupEnvMount(args: BuildGroupEnvMountArgs): EnvMount | nul
 
   const contents = filtered.map(([k, v]) => `${k}=${shellQuote(v)}`).join('\n') + '\n';
   const envFile = path.join(envDir, 'env');
-  fs.writeFileSync(envFile, contents, { mode: 0o600 });
+  // 0o644 because the file must be readable by the non-root container user
+  // (uid 1000). It sits inside `data/env/<agentGroupId>/` which is under
+  // the project's `data/` tree and therefore inherits the same host-side
+  // access posture as the session DBs.
+  fs.writeFileSync(envFile, contents, { mode: 0o644 });
 
   return {
     hostPath: envDir,
