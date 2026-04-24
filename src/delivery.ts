@@ -23,6 +23,7 @@ import {
 import { log } from './log.js';
 import { normalizeOptions } from './channels/ask-question.js';
 import { clearOutbox, openInboundDb, openOutboundDb, readOutboxFiles } from './session-manager.js';
+import { redactSecrets } from './modules/secret-redaction/index.js';
 import { pauseTypingRefreshAfterDelivery, setTypingAdapter } from './modules/typing/index.js';
 import type { OutboundFile } from './channels/adapter.js';
 import type { Session } from './types.js';
@@ -352,12 +353,18 @@ async function deliverMessage(
       ? readOutboxFiles(session.agent_group_id, session.id, msg.id, content.files as string[])
       : undefined;
 
+  // Redact any leaked secret values in the outbound payload before it
+  // crosses the adapter boundary. The content is a JSON-encoded blob
+  // (e.g. `{"text":"..."}`); we scrub the raw string so every text
+  // field inside gets filtered without per-field walking. See
+  // src/modules/secret-redaction.
+  const redactedContent = redactSecrets(msg.content);
   const platformMsgId = await deliveryAdapter.deliver(
     msg.channel_type,
     msg.platform_id,
     msg.thread_id,
     msg.kind,
-    msg.content,
+    redactedContent,
     files,
   );
   log.info('Message delivered', {
