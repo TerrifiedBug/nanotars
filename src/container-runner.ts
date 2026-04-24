@@ -28,6 +28,7 @@ import { initGroupFilesystem } from './group-init.js';
 import { stopTypingRefresh } from './modules/typing/index.js';
 import { log } from './log.js';
 import { buildGroupEnvMount } from './modules/group-env/index.js';
+import { isPaused } from './modules/lifecycle/index.js';
 import { validateAdditionalMounts } from './modules/mount-security/index.js';
 // Provider host-side config barrel — each provider that needs host-side
 // container setup self-registers on import.
@@ -76,6 +77,10 @@ export function isContainerRunning(sessionId: string): boolean {
  * The container runs the v2 agent-runner which polls the session DB.
  */
 export function wakeContainer(session: Session): Promise<void> {
+  if (isPaused()) {
+    log.info('Wake skipped — host is paused', { sessionId: session.id });
+    return Promise.resolve();
+  }
   if (activeContainers.has(session.id)) {
     log.debug('Container already running', { sessionId: session.id });
     return Promise.resolve();
@@ -177,6 +182,21 @@ async function spawnContainer(session: Session): Promise<void> {
     stopTypingRefresh(session.id);
     log.error('Container spawn error', { sessionId: session.id, err });
   });
+}
+
+/**
+ * Kill every active container. Returns the list of session IDs killed.
+ * Called from the lifecycle module's pause() — separate from
+ * killContainer so the lifecycle module can issue a bulk stop without
+ * knowing session IDs.
+ */
+export function killAllContainers(reason: string): string[] {
+  const killed: string[] = [];
+  for (const sessionId of [...activeContainers.keys()]) {
+    killContainer(sessionId, reason);
+    killed.push(sessionId);
+  }
+  return killed;
 }
 
 /** Kill a container for a session. */
