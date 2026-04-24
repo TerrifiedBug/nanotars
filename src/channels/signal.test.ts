@@ -337,7 +337,7 @@ describe('SignalAdapter', () => {
       await adapter.teardown();
     });
 
-    it('skips messages with attachments but no text', async () => {
+    it('forwards image attachments as [Image: <path>] plus structured attachments array', async () => {
       const adapter = createAdapter();
       const cfg = createMockSetup();
       await adapter.setup(cfg);
@@ -352,7 +352,72 @@ describe('SignalAdapter', () => {
       });
 
       await new Promise((r) => setTimeout(r, 50));
-      expect(cfg.onInbound).not.toHaveBeenCalled();
+      expect(cfg.onInbound).toHaveBeenCalledWith(
+        '+15555550123',
+        null,
+        expect.objectContaining({
+          content: expect.objectContaining({
+            text: expect.stringMatching(/^\[Image: .+att123abc\]$/),
+            attachments: [expect.objectContaining({ contentType: 'image/jpeg' })],
+          }),
+        }),
+      );
+
+      await adapter.teardown();
+    });
+  });
+
+  // --- groupV2 ---
+
+  describe('group routing', () => {
+    it('routes to groupV2.id when present, falling back to legacy groupInfo.groupId', async () => {
+      const adapter = createAdapter();
+      const cfg = createMockSetup();
+      await adapter.setup(cfg);
+
+      pushEvent({
+        sourceNumber: '+15555550123',
+        sourceName: 'Alice',
+        dataMessage: {
+          timestamp: 1700000000000,
+          message: 'hello v2',
+          groupV2: { id: 'v2group=' },
+        },
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+      expect(cfg.onInbound).toHaveBeenCalledWith('group:v2group=', null, expect.anything());
+
+      await adapter.teardown();
+    });
+  });
+
+  // --- mention resolution ---
+
+  describe('mention resolution', () => {
+    it('replaces inline mention placeholders with display names', async () => {
+      const adapter = createAdapter();
+      const cfg = createMockSetup();
+      await adapter.setup(cfg);
+
+      pushEvent({
+        sourceNumber: '+15555550123',
+        sourceName: 'Alice',
+        dataMessage: {
+          timestamp: 1700000000000,
+          message: 'hey ￼ are you here?',
+          mentions: [{ start: 4, length: 1, name: 'Bob', uuid: 'bob-uuid' }],
+        },
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+      expect(cfg.onInbound).toHaveBeenCalledWith(
+        '+15555550123',
+        null,
+        expect.objectContaining({
+          content: expect.objectContaining({ text: 'hey @Bob are you here?' }),
+        }),
+      );
 
       await adapter.teardown();
     });
@@ -361,7 +426,7 @@ describe('SignalAdapter', () => {
   // --- Quote context ---
 
   describe('quote context', () => {
-    it('populates reply_to fields from quoted messages', async () => {
+    it('emits a nested replyTo object matching the formatter contract', async () => {
       const adapter = createAdapter();
       const cfg = createMockSetup();
       await adapter.setup(cfg);
@@ -375,6 +440,7 @@ describe('SignalAdapter', () => {
           quote: {
             id: 1699999999000,
             authorNumber: '+15555550888',
+            authorName: 'Pineapple Pete',
             text: 'Pineapple belongs on pizza',
           },
         },
@@ -387,9 +453,11 @@ describe('SignalAdapter', () => {
         expect.objectContaining({
           content: expect.objectContaining({
             text: 'I disagree',
-            replyToSenderName: '+15555550888',
-            replyToMessageContent: 'Pineapple belongs on pizza',
-            replyToMessageId: '1699999999000',
+            replyTo: {
+              id: '1699999999000',
+              sender: 'Pineapple Pete',
+              text: 'Pineapple belongs on pizza',
+            },
           }),
         }),
       );

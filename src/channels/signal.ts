@@ -7,8 +7,8 @@
  *
  * Ported from v1 — see v1 source for commit history.
  */
-import { execFileSync, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { execFileSync, execSync, spawn } from 'node:child_process';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { createConnection, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -281,15 +281,27 @@ class EchoCache {
 
 interface SignalQuote {
   id?: number;
+  author?: string;
   authorNumber?: string;
   authorUuid?: string;
+  authorName?: string;
   text?: string;
+}
+
+interface SignalMention {
+  start?: number;
+  length?: number;
+  uuid?: string;
+  number?: string;
+  name?: string;
 }
 
 interface SignalDataMessage {
   timestamp?: number;
   message?: string;
+  mentions?: SignalMention[];
   groupInfo?: { groupId?: string; groupName?: string; type?: string };
+  groupV2?: { id?: string };
   quote?: SignalQuote;
   attachments?: Array<{
     id?: string;
@@ -316,6 +328,92 @@ interface SignalEnvelope {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Replace inline `@<placeholder>` mention markers with display names so the
+ * agent sees `@Alice` instead of a raw UUID. Signal's protocol uses a single
+ * placeholder character (typically U+FFFC) at each mention's `start` offset.
+ */
+function resolveMentions(text: string, mentions?: SignalMention[]): string {
+  if (!mentions || mentions.length === 0) return text;
+  const sorted = [...mentions].sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  let result = '';
+  let cursor = 0;
+  for (const m of sorted) {
+    const start = m.start ?? 0;
+    const length = m.length ?? 1;
+    const name = m.name || m.number || (m.uuid ? m.uuid.slice(0, 8) : 'someone');
+    if (start < cursor) continue;
+    result += text.slice(cursor, start) + `@${name}`;
+    cursor = start + length;
+  }
+  result += text.slice(cursor);
+  return result;
+}
+
+/**
+ * Optional voice-note transcription. Tries (in order):
+ *   1. local whisper.cpp CLI when `WHISPER_BIN` is set
+ *   2. OpenAI Whisper API when `OPENAI_API_KEY` is set
+ * Returns null if neither path is configured or transcription fails — caller
+ * falls back to a `[Voice Message]` placeholder.
+ *
+ * Signal voice notes are AAC/ADTS; whisper-cpp wants WAV. ffmpeg is invoked
+ * if available to convert; if ffmpeg is missing the local path is skipped.
+ */
+async function transcribeAudioOptional(filePath: string): Promise<string | null> {
+  const whisperBin = process.env.WHISPER_BIN;
+  if (whisperBin) {
+    try {
+      const wavPath = `${filePath}.wav`;
+      execSync(`ffmpeg -y -loglevel error -i "${filePath}" -ar 16000 -ac 1 "${wavPath}"`, { stdio: 'ignore' });
+      const model = process.env.WHISPER_MODEL || `${homedir()}/.local/share/whisper/models/ggml-base.en.bin`;
+      const out = execSync(`"${whisperBin}" -m "${model}" -f "${wavPath}" -nt -otxt -of "${wavPath}"`, {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      try {
+        unlinkSync(wavPath);
+        unlinkSync(`${wavPath}.txt`);
+      } catch {}
+      const text = out.replace(/\[[^\]]*\]/g, '').trim();
+      if (text) return text;
+    } catch (err) {
+      log.debug('Signal: local whisper transcription failed, trying OpenAI', { err });
+    }
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (apiKey) {
+    try {
+      const buf = readFileSync(filePath);
+      const boundary = `----nanoclaw-${Date.now()}`;
+      const body = Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.aac"\r\nContent-Type: audio/aac\r\n\r\n`,
+        ),
+        buf,
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]);
+      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { text?: string };
+        if (json.text) return json.text.trim();
+      }
+    } catch (err) {
+      log.debug('Signal: OpenAI transcription failed', { err });
+    }
+  }
+
+  return null;
+}
 
 function chunkText(text: string, limit: number): string[] {
   const chunks: string[] = [];
@@ -487,20 +585,26 @@ export function createSignalAdapter(config: {
     const dataMessage = envelope.dataMessage;
     if (!dataMessage) return;
 
-    const text = (dataMessage.message ?? '').trim();
+    const rawText = (dataMessage.message ?? '').trim();
+    const text = rawText ? resolveMentions(rawText, dataMessage.mentions) : '';
 
-    // Check for voice attachments
-    const hasVoice = !text && dataMessage.attachments?.some((a) => a.contentType?.startsWith('audio/'));
+    const audioAttachment = dataMessage.attachments?.find((a) => a.contentType?.startsWith('audio/') && a.id);
+    const imageAttachments = dataMessage.attachments?.filter((a) => a.contentType?.startsWith('image/') && a.id) ?? [];
+    const hasVoice = !text && !!audioAttachment;
 
-    if (!text && !hasVoice) return;
+    if (!text && !hasVoice && imageAttachments.length === 0) return;
 
     const sender = (envelope.sourceNumber ?? envelope.sourceUuid ?? envelope.source ?? '').trim();
     if (!sender) return;
 
     const senderName = (envelope.sourceName?.trim() || sender).trim();
+
+    // Modern Signal groups use groupV2; legacy groupInfo.groupId is the
+    // pre-V2 fallback. Without the V2 read, V2-only groups appear as DMs
+    // because `groupInfo` is undefined.
     const groupInfo = dataMessage.groupInfo;
-    const isGroup = Boolean(groupInfo?.groupId);
-    const groupId = groupInfo?.groupId;
+    const groupId = dataMessage.groupV2?.id ?? groupInfo?.groupId;
+    const isGroup = Boolean(groupId);
 
     const platformId = isGroup ? `group:${groupId}` : sender;
 
@@ -516,29 +620,43 @@ export function createSignalAdapter(config: {
 
     let content = text;
 
-    // Voice attachment — log path, deliver placeholder text.
-    // v2 does not have built-in transcription; a future MCP tool could handle this.
-    if (hasVoice) {
-      const audio = dataMessage.attachments?.find((a) => a.contentType?.startsWith('audio/'));
-      if (audio?.id) {
-        const attachmentPath = join(config.signalDataDir, 'attachments', audio.id);
-        if (existsSync(attachmentPath)) {
-          log.info('Signal: voice attachment received', {
-            platformId,
-            attachmentId: audio.id,
-            path: attachmentPath,
-          });
-          content = '[Voice Message]';
+    // Voice attachment — try transcription if WHISPER_BIN or OPENAI_API_KEY
+    // is configured; otherwise fall back to the original placeholder so
+    // operators who don't want transcription get the same UX as before.
+    if (hasVoice && audioAttachment?.id) {
+      const attachmentPath = join(config.signalDataDir, 'attachments', audioAttachment.id);
+      if (existsSync(attachmentPath)) {
+        log.info('Signal: voice attachment received', {
+          platformId,
+          attachmentId: audioAttachment.id,
+          path: attachmentPath,
+        });
+        const transcript = await transcribeAudioOptional(attachmentPath);
+        if (transcript) {
+          content = `[Voice: ${transcript}]`;
+          log.info('Signal: voice transcribed', { platformId, length: transcript.length });
         } else {
-          log.warn('Signal: voice attachment file not found', {
-            id: audio.id,
-            path: attachmentPath,
-          });
-          content = '[Voice Message - file not found]';
+          content = '[Voice Message]';
         }
       } else {
-        content = '[Voice Message]';
+        log.warn('Signal: voice attachment file not found', {
+          id: audioAttachment.id,
+          path: attachmentPath,
+        });
+        content = '[Voice Message - file not found]';
       }
+    }
+
+    // Image attachments — emit `[Image: <path>]` lines so the agent's Read
+    // tool can pick them up, and surface the structured `attachments` array
+    // for consumers that prefer that shape. Without this, vision-capable
+    // models never see images sent over Signal.
+    const attachmentRefs: Array<{ path: string; contentType: string }> = [];
+    for (const img of imageAttachments) {
+      const imagePath = join(config.signalDataDir, 'attachments', img.id!);
+      const imageLine = `[Image: ${imagePath}]`;
+      content = content ? `${content}\n${imageLine}` : imageLine;
+      attachmentRefs.push({ path: imagePath, contentType: img.contentType || 'image/jpeg' });
     }
 
     const msg: InboundMessage = {
@@ -549,6 +667,7 @@ export function createSignalAdapter(config: {
         sender,
         senderId: `signal:${sender}`,
         senderName,
+        ...(attachmentRefs.length > 0 ? { attachments: attachmentRefs } : {}),
         ...(dataMessage.quote ? quoteToContent(dataMessage.quote) : {}),
       },
       timestamp,
@@ -558,11 +677,25 @@ export function createSignalAdapter(config: {
     log.info('Signal message received', { platformId, sender: senderName });
   }
 
+  /**
+   * Build the `replyTo` object the agent-runner formatter expects (see
+   * `container/agent-runner/src/formatter.ts:formatReplyContext`). The
+   * formatter requires both `sender` and `text` to render the
+   * `<quoted_message>` block; absent either, it omits the block entirely.
+   *
+   * The previous shape (`replyToSenderName` / `replyToMessageContent` /
+   * `replyToMessageId` flat keys) did not match the formatter contract, so
+   * quote-reply context was silently dropped end-to-end.
+   */
   function quoteToContent(quote: SignalQuote): Record<string, unknown> {
+    const sender = quote.authorName || quote.authorNumber || quote.author || quote.authorUuid || 'someone';
+    const text = quote.text || '';
     return {
-      replyToSenderName: quote.authorNumber ?? 'someone',
-      replyToMessageContent: quote.text || undefined,
-      replyToMessageId: quote.id ? String(quote.id) : undefined,
+      replyTo: {
+        id: quote.id ? String(quote.id) : undefined,
+        sender,
+        text,
+      },
     };
   }
 
