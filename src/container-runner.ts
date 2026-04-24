@@ -482,6 +482,64 @@ async function buildContainerArgs(
   return args;
 }
 
+/**
+ * Generate the text of the per-agent-group Dockerfile.
+ *
+ * Layout:
+ *   FROM <base>
+ *   USER root
+ *   [RUN apt ...]        (if apt packages)
+ *   [RUN pnpm -g ...]    (if npm packages)
+ *   [...partial bodies]  (each verbatim, with a `# --- partial: <path> ---` header)
+ *   USER node
+ *
+ * Partials run AFTER apt/npm (so they can depend on installed packages)
+ * and BEFORE USER node (so they run privileged). Each partial path must
+ * resolve under `projectRoot`; escapes throw. Missing files throw.
+ *
+ * Pure — no disk writes, no container calls. Caller writes the output
+ * and invokes the build.
+ */
+export function generateAgentGroupDockerfile(args: {
+  baseImage: string;
+  apt: string[];
+  npm: string[];
+  partials: string[];
+  projectRoot: string;
+}): string {
+  const { baseImage, apt, npm, partials, projectRoot } = args;
+
+  let out = `FROM ${baseImage}\nUSER root\n`;
+
+  if (apt.length > 0) {
+    out += `RUN apt-get update && apt-get install -y ${apt.join(' ')} && rm -rf /var/lib/apt/lists/*\n`;
+  }
+  if (npm.length > 0) {
+    // pnpm skips build scripts unless packages are allowlisted. Append each
+    // to /root/.npmrc (base image sets it up for agent-browser) so packages
+    // with postinstall — e.g. playwright, puppeteer, native addons — don't
+    // install silently broken.
+    const allowlist = npm.map((p) => `echo 'only-built-dependencies[]=${p}' >> /root/.npmrc`).join(' && ');
+    out += `RUN ${allowlist} && pnpm install -g ${npm.join(' ')}\n`;
+  }
+
+  for (const partial of partials) {
+    const resolved = path.resolve(projectRoot, partial);
+    const rel = path.relative(projectRoot, resolved);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`dockerfilePartial escapes project root: ${partial}`);
+    }
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+      throw new Error(`dockerfilePartial not found or not a file: ${partial}`);
+    }
+    const body = fs.readFileSync(resolved, 'utf8').trimEnd();
+    out += `# --- partial: ${rel} ---\n${body}\n`;
+  }
+
+  out += 'USER node\n';
+  return out;
+}
+
 /** Build a per-agent-group Docker image with custom packages. */
 export async function buildAgentGroupImage(agentGroupId: string): Promise<void> {
   const agentGroup = getAgentGroup(agentGroupId);
@@ -490,28 +548,29 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<void> 
   const containerConfig = readContainerConfig(agentGroup.folder);
   const aptPackages = containerConfig.packages.apt;
   const npmPackages = containerConfig.packages.npm;
+  const partials = containerConfig.dockerfilePartials ?? [];
 
-  if (aptPackages.length === 0 && npmPackages.length === 0) {
-    throw new Error('No packages to install. Use install_packages first.');
+  if (aptPackages.length === 0 && npmPackages.length === 0 && partials.length === 0) {
+    throw new Error('Nothing to build. Add apt/npm packages via install_packages, or declare dockerfilePartials.');
   }
 
-  let dockerfile = `FROM ${CONTAINER_IMAGE}\nUSER root\n`;
-  if (aptPackages.length > 0) {
-    dockerfile += `RUN apt-get update && apt-get install -y ${aptPackages.join(' ')} && rm -rf /var/lib/apt/lists/*\n`;
-  }
-  if (npmPackages.length > 0) {
-    // pnpm skips build scripts unless packages are allowlisted. Append each
-    // to /root/.npmrc (base image sets it up for agent-browser) so packages
-    // with postinstall — e.g. playwright, puppeteer, native addons — don't
-    // install silently broken.
-    const allowlist = npmPackages.map((p) => `echo 'only-built-dependencies[]=${p}' >> /root/.npmrc`).join(' && ');
-    dockerfile += `RUN ${allowlist} && pnpm install -g ${npmPackages.join(' ')}\n`;
-  }
-  dockerfile += 'USER node\n';
+  const dockerfile = generateAgentGroupDockerfile({
+    baseImage: CONTAINER_IMAGE,
+    apt: aptPackages,
+    npm: npmPackages,
+    partials,
+    projectRoot: process.cwd(),
+  });
 
   const imageTag = `${CONTAINER_IMAGE_BASE}:${agentGroupId}`;
 
-  log.info('Building per-agent-group image', { agentGroupId, imageTag, apt: aptPackages, npm: npmPackages });
+  log.info('Building per-agent-group image', {
+    agentGroupId,
+    imageTag,
+    apt: aptPackages,
+    npm: npmPackages,
+    partials,
+  });
 
   // Write Dockerfile to temp file and build
   const tmpDockerfile = path.join(DATA_DIR, `Dockerfile.${agentGroupId}`);

@@ -54,6 +54,20 @@ export interface ContainerConfig {
    * `src/modules/group-env` for the full flow.
    */
   envAllowlist?: string[];
+  /**
+   * Dockerfile snippet files to layer into the per-agent-group image
+   * between the apt/npm install steps and the final `USER node` switch.
+   * Paths are relative to the project root. Each file is a partial
+   * Dockerfile (RUN lines, ENV lines, etc.). `COPY`/`ADD` from the host
+   * filesystem won't work — the build context is `data/`, not the
+   * project root, so only installs that pull assets from the network
+   * or from the base image are portable.
+   *
+   * Ported from the v1 nanotars build.sh plugin-partial pattern; see
+   * `buildAgentGroupImage` / `generateAgentGroupDockerfile` for the
+   * concat site.
+   */
+  dockerfilePartials?: string[];
 }
 
 function emptyConfig(): ContainerConfig {
@@ -95,6 +109,7 @@ export function readContainerConfig(folder: string): ContainerConfig {
       agentGroupId: raw.agentGroupId,
       maxMessagesPerPrompt: raw.maxMessagesPerPrompt,
       envAllowlist: raw.envAllowlist,
+      dockerfilePartials: raw.dockerfilePartials,
     };
   } catch (err) {
     console.error(`[container-config] failed to parse ${p}: ${String(err)}`);
