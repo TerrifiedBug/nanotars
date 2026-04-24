@@ -310,9 +310,15 @@ export class ClaudeProvider implements AgentProvider {
         } else if (message.type === 'system' && (message as { subtype?: string }).subtype === 'rate_limit_event') {
           yield { type: 'error', message: 'Rate limit', retryable: false, classification: 'quota' };
         } else if (message.type === 'system' && (message as { subtype?: string }).subtype === 'compact_boundary') {
+          // Auto-compaction is a mid-turn event — the SDK will keep streaming
+          // after it. Previously this yielded type:'result' which the poll
+          // loop treats as turn-complete, ending the reply prematurely and
+          // posting "Context compacted (X tokens compacted)." as the user-
+          // facing message. Just log it and let the for-loop continue to
+          // the actual assistant output.
           const meta = (message as { compact_metadata?: { pre_tokens?: number } }).compact_metadata;
           const detail = meta?.pre_tokens ? ` (${meta.pre_tokens.toLocaleString()} tokens compacted)` : '';
-          yield { type: 'result', text: `Context compacted${detail}.` };
+          log(`[claude-provider] Context compacted${detail} — continuing turn`);
         } else if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
           const tn = message as { summary?: string };
           yield { type: 'progress', message: tn.summary || 'Task notification' };
