@@ -318,6 +318,13 @@ function buildMounts(
     mounts.push({ hostPath: globalDir, containerPath: '/workspace/global', readonly: true });
   }
 
+  // Shared identity / persona files — always read-only. Groups opt in by
+  // adding `@../identity/<file>.md` to their CLAUDE.local.md.
+  const identityDir = path.resolve(process.cwd(), 'identity');
+  if (fs.existsSync(identityDir)) {
+    mounts.push({ hostPath: identityDir, containerPath: '/workspace/identity', readonly: true });
+  }
+
   // Shared CLAUDE.md — read-only, imported by the composed entry point via
   // the `.claude-shared.md` symlink inside the group dir.
   const sharedClaudeMd = path.join(process.cwd(), 'container', 'CLAUDE.md');
