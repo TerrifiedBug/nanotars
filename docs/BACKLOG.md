@@ -55,18 +55,6 @@ The operator no longer uses WhatsApp. These items are valid ports but won't be e
 
 ## Deferred for future scope (non-WhatsApp)
 
-### Per-task model selection (cron model override)
-- **What**: Allow a `scheduled_task` content to carry a `modelOverride` field (e.g. `"claude-haiku-4-5"`); the provider picks it up for that task's turn and reverts after. Lets a cheap Haiku run for a daily digest without changing the agent group's primary model.
-- **Why**: Real cost lever. A daily digest on Sonnet vs. Haiku is ~5–10× price delta.
-- **v1 source**: `src/task-scheduler.ts:127` (model field in ContainerInput), `src/types.ts` (scheduled_tasks.model column).
-- **v2 port plan**:
-  1. Extend `scheduled_task` action content schema with `modelOverride?: string`.
-  2. Persist through to the `messages_in` content JSON for kind='task' rows.
-  3. Plumb from agent-runner's task-message dispatch into the provider's `query({ model })` call for that single turn.
-  4. Optionally: validate the model name against a known-safe list on insert.
-- **Effort**: S–M. Mostly plumbing; provider layer change is the novel part.
-- **Priority**: MED (cost optimization — impact depends on task volume).
-
 ### Host singleton PID guard
 - **What**: Write `host.pid` on startup, refuse to boot if existing PID is alive, clean up on graceful shutdown.
 - **Why**: Prevents accidentally running `pnpm run dev` alongside the live systemd unit — both polling the same session DBs races on delivery.
