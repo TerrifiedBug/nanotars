@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { query as sdkQuery, type HookCallback, type PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
+import { sanitizeBashHook, secretPathBlockHook } from '../security-hooks.js';
 
 import { clearContainerToolInFlight, setContainerToolInFlight } from '../db/connection.js';
 import { registerProvider } from './provider-registry.js';
@@ -281,7 +282,7 @@ export class ClaudeProvider implements AgentProvider {
         settingSources: ['project', 'user'],
         mcpServers: this.mcpServers,
         hooks: {
-          PreToolUse: [{ hooks: [preToolUseHook] }],
+          PreToolUse: [{ hooks: [sanitizeBashHook, secretPathBlockHook, preToolUseHook] }],
           PostToolUse: [{ hooks: [postToolUseHook] }],
           PostToolUseFailure: [{ hooks: [postToolUseHook] }],
           PreCompact: [{ hooks: [createPreCompactHook(this.assistantName)] }],

@@ -28,6 +28,7 @@ import { initGroupFilesystem } from './group-init.js';
 import { stopTypingRefresh } from './modules/typing/index.js';
 import { log } from './log.js';
 import { buildGroupEnvMount } from './modules/group-env/index.js';
+import { isPaused } from './modules/lifecycle/index.js';
 import { validateAdditionalMounts } from './modules/mount-security/index.js';
 // Provider host-side config barrel — each provider that needs host-side
 // container setup self-registers on import.
@@ -76,6 +77,10 @@ export function isContainerRunning(sessionId: string): boolean {
  * The container runs the v2 agent-runner which polls the session DB.
  */
 export function wakeContainer(session: Session): Promise<void> {
+  if (isPaused()) {
+    log.info('Wake skipped — host is paused', { sessionId: session.id });
+    return Promise.resolve();
+  }
   if (activeContainers.has(session.id)) {
     log.debug('Container already running', { sessionId: session.id });
     return Promise.resolve();
@@ -179,6 +184,21 @@ async function spawnContainer(session: Session): Promise<void> {
   });
 }
 
+/**
+ * Kill every active container. Returns the list of session IDs killed.
+ * Called from the lifecycle module's pause() — separate from
+ * killContainer so the lifecycle module can issue a bulk stop without
+ * knowing session IDs.
+ */
+export function killAllContainers(reason: string): string[] {
+  const killed: string[] = [];
+  for (const sessionId of [...activeContainers.keys()]) {
+    killContainer(sessionId, reason);
+    killed.push(sessionId);
+  }
+  return killed;
+}
+
 /** Kill a container for a session. */
 export function killContainer(sessionId: string, reason: string): void {
   const entry = activeContainers.get(sessionId);
@@ -258,6 +278,16 @@ function buildMounts(
 
   // Agent group folder at /workspace/agent (RW for working files + CLAUDE.local.md)
   mounts.push({ hostPath: groupDir, containerPath: '/workspace/agent', readonly: false });
+
+  // /dev/null overlay on groups/<folder>/.env so the agent can't read the
+  // unfiltered source file. The allowlisted subset reaches process.env via
+  // the staged `/workspace/env-dir/env` mount (see modules/group-env). The
+  // raw file (which may contain values the agent isn't allowlisted for)
+  // must not be reachable via the group-dir mount. Ported from nanotars v1.
+  const groupEnvPath = path.join(groupDir, '.env');
+  if (fs.existsSync(groupEnvPath)) {
+    mounts.push({ hostPath: '/dev/null', containerPath: '/workspace/agent/.env', readonly: true });
+  }
 
   // container.json — nested RO mount on top of RW group dir so the agent
   // can read its config but cannot modify it.
