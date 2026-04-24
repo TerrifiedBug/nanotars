@@ -470,31 +470,22 @@ async function buildContainerArgs(
   const imageTag = containerConfig.imageTag || CONTAINER_IMAGE;
   args.push(imageTag);
 
-  // Spawn command does four things before exec:
+  // Spawn command does three things before exec:
   //   1. Source the per-group env file (if mounted). `set -a` exports;
   //      `set +a` restores default. Guard absent-file with `[ -r ... ]`
   //      so `envAllowlist`-empty groups just skip it.
-  //   2. Ensure /home/node/.config exists (base image creates it, but
-  //      mkdir -p is cheap insurance).
-  //   3. For each known XDG-config mount name, if /workspace/extra/<name>
-  //      is present, symlink it into /home/node/.config/<name> so
-  //      tools that follow XDG defaults find their config without a
-  //      --config flag. Container paths like `himalaya`, `gws` in
-  //      container.json's additionalMounts are the trigger.
-  //   4. Exec bun. `exec` replaces the shell so bun is tini's direct
+  //   2. Auto-symlink each subdir under /workspace/extra/tools/ into
+  //      /home/node/.config/<name>. This is how we expose per-tool XDG
+  //      configs (himalaya, gws, etc.) without touching code when a
+  //      new tool is added — just drop a subdir under the host's
+  //      ~/.config/nanoclaw/tools/ and it's picked up next spawn.
+  //   3. Exec bun. `exec` replaces the shell so bun is tini's direct
   //      child and signals forward.
-  const xdgConfigNames = ['himalaya', 'gws'];
-  const xdgLinks = xdgConfigNames
-    .map(
-      (n) =>
-        `[ -d /workspace/extra/${n} ] && ln -sfn /workspace/extra/${n} /home/node/.config/${n}`,
-    )
-    .join('; ');
   args.push(
     '-c',
     `[ -r /workspace/env-dir/env ] && { set -a; . /workspace/env-dir/env; set +a; }; ` +
       `mkdir -p /home/node/.config 2>/dev/null; ` +
-      `${xdgLinks}; ` +
+      `if [ -d /workspace/extra/tools ]; then for d in /workspace/extra/tools/*/; do [ -d "$d" ] && ln -sfn "$d" "/home/node/.config/$(basename "$d")"; done; fi; ` +
       `exec bun run /app/src/index.ts`,
   );
 
