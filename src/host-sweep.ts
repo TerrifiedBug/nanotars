@@ -41,6 +41,7 @@ import {
   syncProcessingAcks,
   type ContainerState,
 } from './db/session-db.js';
+import { getDeliveryAdapter } from './delivery.js';
 import { log } from './log.js';
 import { openInboundDb, openOutboundDb, inboundDbPath, heartbeatPath } from './session-manager.js';
 import { isContainerRunning, killContainer, wakeContainer } from './container-runner.js';
@@ -271,6 +272,14 @@ function resetStuckProcessingRows(
         sessionId: session.id,
         reason,
       });
+      // If the failed message was a scheduled task, notify the user on the
+      // same channel the task was scheduled from. Otherwise the task fails
+      // silently and the user only finds out hours/days later when they
+      // notice the expected output is missing. Ported from nanotars v1
+      // task-scheduler error-notification behaviour.
+      notifyTaskFailure(inDb, msg.id, reason).catch((err) =>
+        log.warn('Task-failure notification path errored', { messageId: msg.id, err }),
+      );
     } else {
       const backoffMs = BACKOFF_BASE_MS * Math.pow(2, msg.tries);
       const backoffSec = Math.floor(backoffMs / 1000);
@@ -282,5 +291,54 @@ function resetStuckProcessingRows(
         reason,
       });
     }
+  }
+}
+
+/**
+ * Send a DM back to the channel a failed scheduled task was scheduled
+ * from, so the user knows. No-op for non-task messages (chat turns
+ * are implicitly visible to the user via the chat itself).
+ *
+ * Routed through the live delivery adapter rather than through
+ * outbound.db so it works even when the container for this session
+ * is dead (which is exactly when a task tends to hit max retries).
+ */
+async function notifyTaskFailure(inDb: Database.Database, messageId: string, reason: string): Promise<void> {
+  const row = inDb
+    .prepare('SELECT kind, platform_id, channel_type, thread_id, content FROM messages_in WHERE id = ?')
+    .get(messageId) as
+    | { kind: string; platform_id: string | null; channel_type: string | null; thread_id: string | null; content: string }
+    | undefined;
+  if (!row || row.kind !== 'task') return;
+  if (!row.channel_type || !row.platform_id) {
+    log.info('Task failed but has no channel routing to notify', { messageId });
+    return;
+  }
+
+  let taskLabel = 'scheduled task';
+  try {
+    const parsed = JSON.parse(row.content) as { prompt?: unknown };
+    if (typeof parsed.prompt === 'string' && parsed.prompt.length > 0) {
+      taskLabel = parsed.prompt.split('\n')[0].slice(0, 60);
+    }
+  } catch {
+    // Fall through with default label
+  }
+
+  const adapter = getDeliveryAdapter();
+  if (!adapter) {
+    log.warn('Task failed but no delivery adapter is set — cannot notify', { messageId });
+    return;
+  }
+
+  const content = JSON.stringify({
+    text: `[Scheduled task failed] ${taskLabel}\nReason: ${reason.slice(0, 200)}`,
+  });
+
+  try {
+    await adapter.deliver(row.channel_type, row.platform_id, row.thread_id, 'chat', content);
+    log.info('Task failure notification sent', { messageId, channelType: row.channel_type });
+  } catch (err) {
+    log.error('Task failure notification failed to deliver', { messageId, err });
   }
 }
