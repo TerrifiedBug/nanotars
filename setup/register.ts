@@ -167,18 +167,16 @@ export async function run(args: string[]): Promise<void> {
   if (!existing) {
     newlyWired = true;
     const mgaId = generateId('mga');
-    const triggerRules = parsed.trigger
-      ? JSON.stringify({
-          pattern: parsed.trigger,
-          requiresTrigger: parsed.requiresTrigger,
-        })
-      : null;
+    const engageMode = parsed.trigger || !parsed.requiresTrigger ? 'pattern' : 'mention';
+    const engagePattern = parsed.trigger ? parsed.trigger : (!parsed.requiresTrigger ? '.' : null);
     createMessagingGroupAgent({
       id: mgaId,
       messaging_group_id: messagingGroup.id,
       agent_group_id: agentGroup.id,
-      trigger_rules: triggerRules,
-      response_scope: 'all',
+      engage_mode: engageMode,
+      engage_pattern: engagePattern,
+      sender_scope: 'all',
+      ignored_message_policy: 'drop',
       session_mode: parsed.sessionMode,
       priority: 0,
       created_at: new Date().toISOString(),

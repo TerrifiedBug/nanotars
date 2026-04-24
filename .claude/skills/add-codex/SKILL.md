@@ -67,7 +67,7 @@ Two edits to `container/Dockerfile`, both idempotent (skip if already present):
 **(a)** In the "Pin CLI versions" ARG block (around line 18), add after `ARG CLAUDE_CODE_VERSION=...`:
 
 ```dockerfile
-ARG CODEX_VERSION=0.121.0
+ARG CODEX_VERSION=0.124.0
 ```
 
 **(b)** Add a new standalone `RUN` block for the Codex CLI, after the existing per-CLI install blocks (around line 106, right after the `@anthropic-ai/claude-code` block). The Dockerfile splits each global CLI into its own layer for cache granularity — keep that pattern; do not collapse them into a single combined `pnpm install -g` call:
