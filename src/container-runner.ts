@@ -240,6 +240,16 @@ function buildMounts(
   // Agent group folder at /workspace/agent (RW for working files + CLAUDE.local.md)
   mounts.push({ hostPath: groupDir, containerPath: '/workspace/agent', readonly: false });
 
+  // /dev/null overlay on groups/<folder>/.env so the agent can't read the
+  // unfiltered source file. The allowlisted subset reaches process.env via
+  // the staged `/workspace/env-dir/env` mount (see modules/group-env). The
+  // raw file (which may contain values the agent isn't allowlisted for)
+  // must not be reachable via the group-dir mount. Ported from nanotars v1.
+  const groupEnvPath = path.join(groupDir, '.env');
+  if (fs.existsSync(groupEnvPath)) {
+    mounts.push({ hostPath: '/dev/null', containerPath: '/workspace/agent/.env', readonly: true });
+  }
+
   // container.json — nested RO mount on top of RW group dir so the agent
   // can read its config but cannot modify it.
   const containerJsonPath = path.join(groupDir, 'container.json');

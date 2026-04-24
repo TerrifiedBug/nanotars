@@ -54,6 +54,10 @@ const DEFAULT_BLOCKED_PATTERNS = [
   'id_ed25519',
   'private_key',
   '.secret',
+  // Ported from nanotars v1 — additional patterns caught from the wild.
+  'secrets.json',
+  'token.json',
+  '.ssh-agent',
 ];
 
 /**
