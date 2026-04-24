@@ -470,13 +470,32 @@ async function buildContainerArgs(
   const imageTag = containerConfig.imageTag || CONTAINER_IMAGE;
   args.push(imageTag);
 
-  // Source the per-group env file (if mounted) before exec so bun inherits
-  // the vars. `set -a` exports; `set +a` restores default. `[ -r ... ]` is
-  // the guard — when `envAllowlist` is empty, the file is absent and we
-  // just exec bun directly.
+  // Spawn command does four things before exec:
+  //   1. Source the per-group env file (if mounted). `set -a` exports;
+  //      `set +a` restores default. Guard absent-file with `[ -r ... ]`
+  //      so `envAllowlist`-empty groups just skip it.
+  //   2. Ensure /home/node/.config exists (base image creates it, but
+  //      mkdir -p is cheap insurance).
+  //   3. For each known XDG-config mount name, if /workspace/extra/<name>
+  //      is present, symlink it into /home/node/.config/<name> so
+  //      tools that follow XDG defaults find their config without a
+  //      --config flag. Container paths like `himalaya`, `gws` in
+  //      container.json's additionalMounts are the trigger.
+  //   4. Exec bun. `exec` replaces the shell so bun is tini's direct
+  //      child and signals forward.
+  const xdgConfigNames = ['himalaya', 'gws'];
+  const xdgLinks = xdgConfigNames
+    .map(
+      (n) =>
+        `[ -d /workspace/extra/${n} ] && ln -sfn /workspace/extra/${n} /home/node/.config/${n}`,
+    )
+    .join('; ');
   args.push(
     '-c',
-    '[ -r /workspace/env-dir/env ] && { set -a; . /workspace/env-dir/env; set +a; }; exec bun run /app/src/index.ts',
+    `[ -r /workspace/env-dir/env ] && { set -a; . /workspace/env-dir/env; set +a; }; ` +
+      `mkdir -p /home/node/.config 2>/dev/null; ` +
+      `${xdgLinks}; ` +
+      `exec bun run /app/src/index.ts`,
   );
 
   return args;
