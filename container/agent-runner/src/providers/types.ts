@@ -47,6 +47,15 @@ export interface QueryInput {
   systemContext?: {
     instructions?: string;
   };
+
+  /**
+   * Optional per-turn model override — typically set from a scheduled
+   * task's `model` field so a cheap cron can run on Haiku while the rest
+   * of the agent group stays on Sonnet/Opus. Provider passes through to
+   * the SDK's `model` option. When absent, the provider SDK picks the
+   * installed default.
+   */
+  modelOverride?: string;
 }
 
 export interface McpServerConfig {

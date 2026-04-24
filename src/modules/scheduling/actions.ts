@@ -26,6 +26,11 @@ export async function handleScheduleTask(
   const script = content.script as string | null;
   const processAfter = content.processAfter as string;
   const recurrence = (content.recurrence as string) || null;
+  // Per-task model override. Validated upstream in the MCP tool (must start
+  // with "claude-"); re-check defensively in case the system action was
+  // written by a different code path.
+  const rawModel = typeof content.model === 'string' ? content.model : null;
+  const model = rawModel && rawModel.startsWith('claude-') ? rawModel : null;
 
   insertTask(inDb, {
     id: taskId,
@@ -34,9 +39,9 @@ export async function handleScheduleTask(
     platformId: (content.platformId as string) ?? null,
     channelType: (content.channelType as string) ?? null,
     threadId: (content.threadId as string) ?? null,
-    content: JSON.stringify({ prompt, script }),
+    content: JSON.stringify({ prompt, script, model }),
   });
-  log.info('Scheduled task created', { taskId, processAfter, recurrence });
+  log.info('Scheduled task created', { taskId, processAfter, recurrence, model });
 }
 
 export async function handleCancelTask(

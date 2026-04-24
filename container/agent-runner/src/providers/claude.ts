@@ -277,6 +277,10 @@ export class ClaudeProvider implements AgentProvider {
         allowedTools: TOOL_ALLOWLIST,
         disallowedTools: SDK_DISALLOWED_TOOLS,
         env: this.env,
+        // Per-turn model override — set from a scheduled task's `model` field.
+        // Absent for interactive chat turns; present when a task wants a
+        // cheaper/stronger model than the agent group's default.
+        ...(input.modelOverride ? { model: input.modelOverride } : {}),
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         settingSources: ['project', 'user'],
