@@ -147,13 +147,21 @@ export async function runPollLoop(config: PollLoopConfig): Promise<void> {
     // provider natively handles slash commands), others get XML.
     const prompt = formatMessagesWithCommands(keep, config.provider.supportsNativeSlashCommands);
 
-    log(`Processing ${keep.length} message(s), kinds: ${[...new Set(keep.map((m) => m.kind))].join(',')}`);
+    // Per-task model override: if any task in the batch carries a `model`
+    // in its content, use it for this turn. Tasks are expected to fire
+    // singly (one cron tick = one task); in the rare case where multiple
+    // tasks land in the same batch with different models, the first one
+    // wins and we log a warning. Non-task messages never set this.
+    const modelOverride = extractTaskModelOverride(keep);
+
+    log(`Processing ${keep.length} message(s), kinds: ${[...new Set(keep.map((m) => m.kind))].join(',')}${modelOverride ? ` model=${modelOverride}` : ''}`);
 
     const query = config.provider.query({
       prompt,
       continuation,
       cwd: config.cwd,
       systemContext: config.systemContext,
+      modelOverride,
     });
 
     // Process the query while concurrently polling for new messages
@@ -422,4 +430,39 @@ function sendToDestination(dest: DestinationEntry, body: string, routing: Routin
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Scan the batch for a scheduled-task model override. Returns the first
+ * `model` value found inside a kind='task' row's parsed content, or
+ * undefined if no task sets one. Logs a warning if multiple tasks in the
+ * same batch disagree — caller uses the first and accepts the others
+ * will run on the same model this turn.
+ *
+ * Why "first": tasks normally fire one-per-batch (a cron tick coincides
+ * with at most one task by design). Multi-task batches only happen when
+ * two separate tasks were scheduled for the same wall-clock instant, which
+ * is rare and operator-induced; still, don't want to silently run the
+ * second one on an unintended model.
+ */
+function extractTaskModelOverride(messages: MessageInRow[]): string | undefined {
+  let first: string | undefined;
+  for (const msg of messages) {
+    if (msg.kind !== 'task') continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(msg.content);
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== 'object') continue;
+    const model = (parsed as { model?: unknown }).model;
+    if (typeof model !== 'string' || model.length === 0) continue;
+    if (first === undefined) {
+      first = model;
+    } else if (first !== model) {
+      log(`extractTaskModelOverride: batch has mixed models (${first} vs ${model}); using ${first}`);
+    }
+  }
+  return first;
 }

@@ -52,6 +52,11 @@ export const scheduleTask: McpToolDefinition = {
             'Cron expression for recurring tasks (e.g., "0 9 * * 1-5" = weekdays at 9am user-local). Evaluated in the user\'s timezone.',
         },
         script: { type: 'string', description: 'Optional pre-agent script to run before processing' },
+        model: {
+          type: 'string',
+          description:
+            'Optional per-task Claude model override (e.g. "claude-haiku-4-5-20251001" for cheap recurring digests, "claude-opus-4-7" for heavy analysis). When omitted, the agent group\'s default model runs the task. Must start with "claude-"; unrecognised ids will surface as a task failure at run time.',
+        },
       },
       required: ['prompt', 'processAfter'],
     },
@@ -60,6 +65,10 @@ export const scheduleTask: McpToolDefinition = {
     const prompt = args.prompt as string;
     const processAfterIn = args.processAfter as string;
     if (!prompt || !processAfterIn) return err('prompt and processAfter are required');
+    const model = typeof args.model === 'string' && args.model.length > 0 ? (args.model as string) : null;
+    if (model !== null && !model.startsWith('claude-')) {
+      return err(`invalid model "${model}" — expected a claude-* model id (e.g. claude-haiku-4-5-20251001)`);
+    }
 
     let processAfter: string;
     try {
@@ -89,11 +98,17 @@ export const scheduleTask: McpToolDefinition = {
         script,
         processAfter,
         recurrence,
+        model,
       }),
     });
 
-    log(`schedule_task: ${id} at ${processAfter}${recurrence ? ` (recurring: ${recurrence})` : ''}`);
-    return ok(`Task scheduled (id: ${id}, runs at: ${processAfter}${recurrence ? `, recurrence: ${recurrence}` : ''})`);
+    log(
+      `schedule_task: ${id} at ${processAfter}${recurrence ? ` (recurring: ${recurrence})` : ''}${model ? ` model=${model}` : ''}`,
+    );
+    const modelNote = model ? `, model: ${model}` : '';
+    return ok(
+      `Task scheduled (id: ${id}, runs at: ${processAfter}${recurrence ? `, recurrence: ${recurrence}` : ''}${modelNote})`,
+    );
   },
 };
 
