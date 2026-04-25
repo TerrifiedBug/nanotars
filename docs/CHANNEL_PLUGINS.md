@@ -412,6 +412,29 @@ If no connected channel with `sendFile` support owns the JID, `routeOutboundFile
 
 ---
 
+## Long Messages — use `splitForLimit`
+
+Channels with a per-message size limit (Discord's 2000 characters, Telegram's 4096 characters) should use the `splitForLimit` helper from `src/channel-helpers.ts` to split outbound text rather than hard-cutting at the limit.
+
+The helper splits at semantic boundaries: the last paragraph break (`\n\n`) before the limit, falling back to single newline, then space, then a hard character cut if no boundary is found. Each chunk is `.trimEnd()`-ed and the next chunk's leading whitespace is `.trimStart()`-ed.
+
+### Example
+
+```javascript
+import { splitForLimit } from 'nanoclaw/channel-helpers.js';
+
+async sendMessage(jid, text, sender, replyTo) {
+  const chunks = splitForLimit(text, 2000);  // Discord 2000-char limit
+  for (const chunk of chunks) {
+    await sendOneMessage(jid, chunk, sender, replyTo);
+  }
+}
+```
+
+For marketplace-installed plugins like nanoclaw-discord and nanoclaw-telegram, use the helper to handle long agent responses gracefully. Without it, a lengthy response gets hard-truncated mid-word at the platform limit, breaking readability and potentially cutting off important information.
+
+---
+
 ## Plugin Scoping
 
 Non-channel plugins can restrict which containers they're injected into. This is useful for channel-specific tools (e.g. a WhatsApp voice transcription plugin shouldn't be mounted in Telegram containers).
