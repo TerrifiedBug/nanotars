@@ -127,6 +127,19 @@ export interface Channel {
    * implementation to do so.
    */
   openDM?(handle: string): Promise<string>;
+  /**
+   * Optional: extract reply context from a channel-platform-native raw message.
+   *
+   * Returns the normalized ReplyContext if the message is a reply, or null
+   * otherwise. Receives the raw platform message (Baileys WAMessage, Telegram
+   * update payload, etc.); the channel knows how to interpret its own format.
+   *
+   * If the hook is undefined, the inbound flow uses whatever reply_context
+   * the channel itself populated on the NewMessage object during message
+   * delivery. Hook callers run during inbound processing — see future
+   * router-side wiring for the integration point.
+   */
+  extractReplyContext?(rawMessage: unknown): ReplyContext | null;
   sendFile?(jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string): Promise<void>;
   react?(jid: string, messageId: string, emoji: string, participant?: string, fromMe?: boolean): Promise<void>;
   isConnected(): boolean;
