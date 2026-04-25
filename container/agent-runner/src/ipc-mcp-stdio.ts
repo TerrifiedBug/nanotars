@@ -355,6 +355,11 @@ Use available_groups.json to find the JID for a group. The folder name should be
     // IPC reader (src/ipc/tasks.ts: data.containerConfig). The MCP tool
     // accepts the camelCase name from the agent, and the wire payload below
     // is also camelCase so the host's reader can pick it up.
+    channel: z.string().optional().describe(
+      'Channel adapter name (e.g. "telegram", "whatsapp"). Optional; when omitted, '
+      + 'host falls back to adapter ownsJid resolution. Recommended on multi-channel '
+      + 'installs to avoid silent misroutes. Phase 4A H1.',
+    ),
     containerConfig: z.object({
       additionalMounts: z.array(z.object({
         hostPath: z.string(),
@@ -381,6 +386,9 @@ Use available_groups.json to find the JID for a group. The folder name should be
       engage_mode: args.engage_mode ?? 'pattern',
       sender_scope: args.sender_scope ?? 'all',
       ignored_message_policy: args.ignored_message_policy ?? 'drop',
+      // H1: forward optional channel hint to host. Host uses it to skip
+      // ownsJid resolution on multi-channel installs (src/ipc/tasks.ts:66).
+      channel: args.channel,
       // A5-review M2: camelCase field name matches the host-side reader at
       // src/ipc/tasks.ts:271 (data.containerConfig) and the TypeScript
       // RegisteredGroup.containerConfig field. Previously this was
