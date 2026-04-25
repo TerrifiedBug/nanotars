@@ -48,6 +48,48 @@ export interface RegisteredGroup {
   ignored_message_policy: IgnoredMessagePolicy;
 }
 
+// --- Phase 4A entity model ---
+//
+// Successor to RegisteredGroup. The legacy registered_groups table splits into:
+//   agent_groups          — the bot-side identity (folder, container config)
+//   messaging_groups      — the chat-side identity (channel + platform_id)
+//   messaging_group_agents — wiring between the two (engage rules)
+//
+// Existing RegisteredGroup accessors are preserved for the plugin-types
+// contract until A7's cleanup; new code should prefer these types.
+
+export interface AgentGroup {
+  id: string;
+  name: string;
+  folder: string;
+  agent_provider: string | null;
+  container_config: string | null; // JSON-serialized; consumers parse on read
+  created_at: string;
+}
+
+export interface MessagingGroup {
+  id: string;
+  channel_type: string;
+  platform_id: string;
+  name: string | null;
+  is_group: number; // 0 | 1
+  unknown_sender_policy: 'strict' | 'request_approval' | 'public';
+  created_at: string;
+}
+
+export interface MessagingGroupAgent {
+  id: string;
+  messaging_group_id: string;
+  agent_group_id: string;
+  engage_mode: 'pattern' | 'always' | 'mention-sticky';
+  engage_pattern: string | null;
+  sender_scope: 'all' | 'known';
+  ignored_message_policy: 'drop' | 'observe';
+  session_mode: string | null;
+  priority: number;
+  created_at: string;
+}
+
 export interface ReplyContext {
   sender_name: string;
   text: string | null; // null = non-text message (photo, sticker, etc.)

@@ -6,3 +6,18 @@ export { createTask, getTaskById, getTasksForGroup, getAllTasks, updateTask, del
 export { getRouterState, setRouterState, getSession, setSession, getAllSessions, isValidGroupFolder, getRegisteredGroup, setRegisteredGroup, getAllRegisteredGroups } from './state.js';
 export { recordUnregisteredSender, listUnregisteredSenders, clearUnregisteredSender } from './unregistered-senders.js';
 export type { UnregisteredSenderRow } from './unregistered-senders.js';
+export {
+  getAgentGroupById,
+  getAgentGroupByFolder,
+  getAllAgentGroups,
+  createAgentGroup,
+  getMessagingGroup,
+  getMessagingGroupById,
+  createMessagingGroup,
+  getWiringForMessagingGroup,
+  getWiringForAgentGroup,
+  getWiring,
+  createWiring,
+  deleteWiring,
+  resolveAgentsForInbound,
+} from './agent-groups.js';
