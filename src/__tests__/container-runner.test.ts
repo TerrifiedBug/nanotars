@@ -359,5 +359,38 @@ describe('buildContainerArgs OneCLI integration', () => {
 
     // Test passes if no throw escapes buildContainerArgs.
     expect(args).toContain('--rm');
+    expect(applyContainerConfig).not.toHaveBeenCalled();
+    expect(args.find((a) => typeof a === 'string' && a.startsWith('HTTPS_PROXY'))).toBeUndefined();
+  });
+
+  it('skips ensureAgent when agentIdentifier is undefined but still calls applyContainerConfig', async () => {
+    const ensureAgent = vi.fn().mockResolvedValue(undefined);
+    const applyContainerConfig = vi.fn().mockResolvedValue(false);
+    vi.doMock('@onecli-sh/sdk', () => ({
+      OneCLI: class {
+        ensureAgent = ensureAgent;
+        applyContainerConfig = applyContainerConfig;
+      },
+    }));
+    vi.doMock('../config.js', () => ({
+      CONTAINER_IMAGE: 'nanoclaw-agent:latest',
+      CONTAINER_MAX_OUTPUT_SIZE: 10485760,
+      CONTAINER_TIMEOUT: 1800000,
+      DATA_DIR: '/tmp/nanoclaw-test-data',
+      GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+      IDLE_TIMEOUT: 1800000,
+      INSTALL_SLUG: 'nanoclaw-test',
+      ONECLI_URL: 'http://127.0.0.1:10254',
+      ONECLI_API_KEY: '',
+    }));
+    vi.doMock('../logger.js', () => ({
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    }));
+
+    const { buildContainerArgsForTesting } = await import('../container-runner.js');
+    const args = await buildContainerArgsForTesting([], 'nc-test', undefined);
+    expect(ensureAgent).not.toHaveBeenCalled();
+    expect(applyContainerConfig).toHaveBeenCalledWith(args, expect.objectContaining({ agent: undefined }));
+    expect(args).toContain('--rm');
   });
 });

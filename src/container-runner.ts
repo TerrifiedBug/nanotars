@@ -79,7 +79,7 @@ function resolveFromParser(
 async function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
-  agentIdentifier: string,
+  agentIdentifier?: string,
 ): Promise<string[]> {
   const args: string[] = [
     'run', '-i', '--rm', '--name', containerName,
@@ -94,7 +94,9 @@ async function buildContainerArgs(
   // runContainerAgent) is the no-OneCLI fallback for Anthropic creds, so
   // non-OneCLI installs keep working unchanged.
   try {
-    await onecli.ensureAgent({ name: agentIdentifier, identifier: agentIdentifier });
+    if (agentIdentifier) {
+      await onecli.ensureAgent({ name: agentIdentifier, identifier: agentIdentifier });
+    }
     const applied = await onecli.applyContainerConfig(args, {
       addHostMapping: false,
       agent: agentIdentifier,
