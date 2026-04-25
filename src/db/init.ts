@@ -87,6 +87,16 @@ export function createSchema(database: Database.Database): void {
       requires_trigger INTEGER DEFAULT 1,
       channel TEXT
     );
+    CREATE TABLE IF NOT EXISTS unregistered_senders (
+      channel TEXT NOT NULL,
+      platform_id TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 1,
+      first_seen TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      PRIMARY KEY (channel, platform_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_unregistered_last_seen ON unregistered_senders(last_seen);
   `);
 
   runMigrations(database);
