@@ -57,16 +57,13 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY container/agent-runner/package*.json ./
 
-# Install all dependencies (including devDependencies for build)
+# Install dependencies (devDeps pruned below; kept here for npm install compatibility)
 RUN npm install
 
-# Copy source code
-COPY container/agent-runner/ ./
+# Source code is mounted RO at runtime (/app/src → container/agent-runner/src).
+# No COPY or tsc build needed — tsx resolves from the mount at startup.
 
-# Build TypeScript
-RUN npm run build
-
-# Install tsx for fast TypeScript execution at startup (replaces tsc recompilation)
+# Install tsx for fast TypeScript execution at startup
 RUN npm install -g tsx@${TSX_VERSION}
 
 # Remove dev dependencies from production image
