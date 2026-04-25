@@ -9,6 +9,7 @@ import {
   getAgentGroupByFolder,
   getAgentGroupById,
   getAllAgentGroups,
+  getAllSynthesizedGroupRows,
   getDb,
   getMessagingGroup,
   getMessagingGroupById,
@@ -240,5 +241,96 @@ describe('resolveAgentsForInbound', () => {
     expect(resolved).toHaveLength(2);
     expect(resolved[0].agentGroup.id).toBe(ag2.id); // higher priority first
     expect(resolved[1].agentGroup.id).toBe(ag1.id);
+  });
+});
+
+describe('getAllSynthesizedGroupRows', () => {
+  it('returns empty array on empty DB', () => {
+    expect(getAllSynthesizedGroupRows()).toEqual([]);
+  });
+
+  it('returns a single row with all fields populated for a single wiring', () => {
+    const ag = createAgentGroup({
+      name: 'Solo',
+      folder: 'solo',
+      container_config: '{"timeout":1500}',
+    });
+    const mg = createMessagingGroup({
+      channel_type: 'discord',
+      platform_id: 'channel-123',
+      name: 'Discord Channel',
+    });
+    const w = createWiring({
+      messaging_group_id: mg.id,
+      agent_group_id: ag.id,
+      engage_mode: 'always',
+      engage_pattern: '@bot',
+      sender_scope: 'known',
+      ignored_message_policy: 'observe',
+    });
+
+    const rows = getAllSynthesizedGroupRows();
+    expect(rows).toHaveLength(1);
+    const r = rows[0];
+    expect(r.platform_id).toBe('channel-123');
+    expect(r.channel_type).toBe('discord');
+    expect(r.agent_group_id).toBe(ag.id);
+    expect(r.agent_group_name).toBe('Solo');
+    expect(r.agent_group_folder).toBe('solo');
+    expect(r.agent_group_created_at).toBe(ag.created_at);
+    expect(r.agent_group_container_config).toBe('{"timeout":1500}');
+    expect(r.wiring_engage_mode).toBe('always');
+    expect(r.wiring_engage_pattern).toBe('@bot');
+    expect(r.wiring_sender_scope).toBe('known');
+    expect(r.wiring_ignored_message_policy).toBe('observe');
+    expect(r.wiring_priority).toBe(0);
+    expect(r.wiring_created_at).toBe(w.created_at);
+    expect(r.wiring_id).toBe(w.id);
+  });
+
+  it('orders multi-wiring on same chat by priority DESC, created_at ASC, id ASC', () => {
+    const ag1 = createAgentGroup({ name: 'A1', folder: 'a1' });
+    const ag2 = createAgentGroup({ name: 'A2', folder: 'a2' });
+    const ag3 = createAgentGroup({ name: 'A3', folder: 'a3' });
+    const mg = createMessagingGroup({
+      channel_type: 'whatsapp',
+      platform_id: 'multi@g.us',
+    });
+    createWiring({ messaging_group_id: mg.id, agent_group_id: ag1.id });
+    createWiring({ messaging_group_id: mg.id, agent_group_id: ag2.id });
+    createWiring({ messaging_group_id: mg.id, agent_group_id: ag3.id });
+    // Bump ag2's wiring priority highest.
+    getDb()
+      .prepare(`UPDATE messaging_group_agents SET priority = 10 WHERE agent_group_id = ?`)
+      .run(ag2.id);
+    // Bump ag3's wiring priority middle.
+    getDb()
+      .prepare(`UPDATE messaging_group_agents SET priority = 5 WHERE agent_group_id = ?`)
+      .run(ag3.id);
+
+    const rows = getAllSynthesizedGroupRows();
+    expect(rows).toHaveLength(3);
+    expect(rows[0].agent_group_id).toBe(ag2.id); // priority 10
+    expect(rows[1].agent_group_id).toBe(ag3.id); // priority 5
+    expect(rows[2].agent_group_id).toBe(ag1.id); // priority 0
+  });
+
+  it('returns multiple rows across distinct chats', () => {
+    const ag = createAgentGroup({ name: 'Multi', folder: 'multi' });
+    const mg1 = createMessagingGroup({
+      channel_type: 'whatsapp',
+      platform_id: 'chat1@g.us',
+    });
+    const mg2 = createMessagingGroup({
+      channel_type: 'discord',
+      platform_id: 'chat2',
+    });
+    createWiring({ messaging_group_id: mg1.id, agent_group_id: ag.id });
+    createWiring({ messaging_group_id: mg2.id, agent_group_id: ag.id });
+
+    const rows = getAllSynthesizedGroupRows();
+    expect(rows).toHaveLength(2);
+    const platforms = rows.map((r) => r.platform_id).sort();
+    expect(platforms).toEqual(['chat1@g.us', 'chat2']);
   });
 });

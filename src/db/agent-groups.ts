@@ -216,6 +216,67 @@ export function deleteWiring(
 // --- Convenience: legacy-compat lookup (used by router refactor in A3) ---
 
 /**
+ * Single-query synthesis of the legacy RegisteredGroup-shape join.
+ * Returns one row per (messaging_group, agent_group) wiring pair, ordered by
+ * priority DESC, created_at ASC, id ASC. Used by the orchestrator's plugin-API
+ * shim — multi-wiring scenarios can collapse to "first wins" deterministically
+ * with the same ordering as resolveAgentsForInbound, so the synthesizer and
+ * resolver agree on which wiring is "first".
+ */
+export interface SynthesizedGroupRow {
+  platform_id: string;
+  channel_type: string;
+  agent_group_id: string;
+  agent_group_name: string;
+  agent_group_folder: string;
+  agent_group_created_at: string;
+  agent_group_container_config: string | null;
+  wiring_engage_mode: string;
+  wiring_engage_pattern: string | null;
+  wiring_sender_scope: string;
+  wiring_ignored_message_policy: string;
+  wiring_priority: number;
+  wiring_created_at: string;
+  wiring_id: string;
+}
+
+export function getAllSynthesizedGroupRows(): SynthesizedGroupRow[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT
+         mg.platform_id              AS platform_id,
+         mg.channel_type             AS channel_type,
+         ag.id                       AS agent_group_id,
+         ag.name                     AS agent_group_name,
+         ag.folder                   AS agent_group_folder,
+         ag.created_at               AS agent_group_created_at,
+         ag.container_config         AS agent_group_container_config,
+         w.engage_mode               AS wiring_engage_mode,
+         w.engage_pattern            AS wiring_engage_pattern,
+         w.sender_scope              AS wiring_sender_scope,
+         w.ignored_message_policy    AS wiring_ignored_message_policy,
+         w.priority                  AS wiring_priority,
+         w.created_at                AS wiring_created_at,
+         w.id                        AS wiring_id
+       FROM messaging_groups mg
+       JOIN messaging_group_agents w ON w.messaging_group_id = mg.id
+       JOIN agent_groups ag ON ag.id = w.agent_group_id
+       ORDER BY w.priority DESC, w.created_at ASC, w.id ASC`,
+    )
+    .all() as SynthesizedGroupRow[];
+  return rows.filter((r) => {
+    if (!isValidGroupFolder(r.agent_group_folder)) {
+      logger.warn(
+        { id: r.agent_group_id, folder: r.agent_group_folder },
+        'getAllSynthesizedGroupRows skipping agent group with invalid folder',
+      );
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
  * Resolve all wiring rows for an inbound message keyed by (channel, platform_id).
  * Returns [] if no messaging group is registered. Each returned row carries the
  * resolved AgentGroup, MessagingGroupAgent, and MessagingGroup for routing

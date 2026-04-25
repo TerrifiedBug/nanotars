@@ -20,4 +20,6 @@ export {
   createWiring,
   deleteWiring,
   resolveAgentsForInbound,
+  getAllSynthesizedGroupRows,
 } from './agent-groups.js';
+export type { SynthesizedGroupRow } from './agent-groups.js';

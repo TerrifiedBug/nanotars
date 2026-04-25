@@ -687,8 +687,10 @@ describe('MessageOrchestrator', () => {
       });
       expect(second.agentGroup.id).toBe(first.agentGroup.id);
       expect(second.messagingGroup.id).toBe(first.messagingGroup.id);
-      // Wirings are not deduped today — addAgentForChat creates a new wiring row.
-      // The synthesized shim picks the first wiring per JID with a warning.
+      // Wirings ARE deduped: the (messaging_group_id, agent_group_id) UNIQUE
+      // constraint is enforced and addAgentForChat returns the existing wiring
+      // when one already matches the pair.
+      expect(second.wiring.id).toBe(first.wiring.id);
       expect(orch.registeredGroups['shared@g.us']).toBeDefined();
     });
   });

@@ -30,11 +30,9 @@ import {
   createMessagingGroup,
   createWiring,
   getAgentGroupByFolder,
-  getAllAgentGroups,
+  getAllSynthesizedGroupRows,
   getMessagingGroup,
-  getMessagingGroupById,
   getWiring,
-  getWiringForAgentGroup,
   resolveAgentsForInbound,
 } from './db/agent-groups.js';
 
@@ -133,43 +131,48 @@ export class MessageOrchestrator {
   }
 
   private synthesizeRegisteredGroups(): Record<string, RegisteredGroup> {
+    const rows = getAllSynthesizedGroupRows();
     const result: Record<string, RegisteredGroup> = {};
-    for (const ag of getAllAgentGroups()) {
-      const wirings = getWiringForAgentGroup(ag.id);
-      for (const w of wirings) {
-        const mg = getMessagingGroupById(w.messaging_group_id);
-        if (!mg) continue;
-        const jid = mg.platform_id;
-        if (result[jid]) {
-          this.deps.logger.warn(
-            { jid, folder: ag.folder, existingFolder: result[jid].folder },
-            'Multiple wirings on same chat; legacy registeredGroups shim picking first',
-          );
-          continue;
-        }
-        let containerConfig: ContainerConfig | undefined;
-        if (ag.container_config) {
-          try {
-            containerConfig = JSON.parse(ag.container_config) as ContainerConfig;
-          } catch (err) {
-            this.deps.logger.warn(
-              { folder: ag.folder, err },
-              'Failed to parse agent_groups.container_config; ignoring',
-            );
-          }
-        }
-        result[jid] = {
-          name: ag.name,
-          folder: ag.folder,
-          pattern: w.engage_pattern ?? '',
-          added_at: ag.created_at,
-          channel: mg.channel_type,
-          containerConfig,
-          engage_mode: w.engage_mode,
-          sender_scope: w.sender_scope,
-          ignored_message_policy: w.ignored_message_policy,
-        };
+    for (const row of rows) {
+      if (result[row.platform_id]) {
+        // Already keyed (from a higher-priority wiring per ORDER BY); skip with warn.
+        this.deps.logger.warn(
+          {
+            jid: row.platform_id,
+            folder: row.agent_group_folder,
+            existingFolder: result[row.platform_id].folder,
+          },
+          'Multiple wirings on same chat; legacy registeredGroups shim picking first by priority',
+        );
+        continue;
       }
+      let containerConfig: ContainerConfig | undefined;
+      if (row.agent_group_container_config) {
+        try {
+          containerConfig = JSON.parse(row.agent_group_container_config) as ContainerConfig;
+        } catch (err) {
+          this.deps.logger.warn(
+            { folder: row.agent_group_folder, err },
+            'Failed to parse agent_groups.container_config; ignoring',
+          );
+        }
+      }
+      result[row.platform_id] = {
+        name: row.agent_group_name,
+        folder: row.agent_group_folder,
+        pattern: row.wiring_engage_pattern ?? '',
+        // The legacy RegisteredGroup.added_at semantically maps to "when this
+        // chat was registered for this agent" — i.e. the wiring's birth, not
+        // the agent group's creation (which may have happened earlier when the
+        // group was first created for a different chat).
+        added_at: row.wiring_created_at,
+        channel: row.channel_type,
+        containerConfig,
+        engage_mode: row.wiring_engage_mode as RegisteredGroup['engage_mode'],
+        sender_scope: row.wiring_sender_scope as RegisteredGroup['sender_scope'],
+        ignored_message_policy:
+          row.wiring_ignored_message_policy as RegisteredGroup['ignored_message_policy'],
+      };
     }
     return result;
   }
@@ -292,13 +295,21 @@ export class MessageOrchestrator {
   registerGroup(jid: string, group: RegisteredGroup): void {
     // Resolve channel for the JID. Prefer group.channel (set by callers that
     // know which adapter owns the JID, e.g. IPC); fall back to the connected
-    // channel that owns the JID; final fallback to 'whatsapp' for legacy code
-    // paths predating channel-aware registration.
-    const channel =
-      group.channel ?? this.channels.find((ch) => ch.ownsJid(jid))?.name ?? 'whatsapp';
+    // channel that owns the JID. There is no literal default — silently
+    // writing 'whatsapp' on a Discord/Telegram-only install would corrupt
+    // routing (subsequent resolveAgentsForInbound('discord', jid) would find
+    // nothing and messages would drop with no diagnostic). Throw instead.
+    const resolvedChannel =
+      group.channel ?? this.channels.find((ch) => ch.ownsJid(jid))?.name;
+    if (!resolvedChannel) {
+      throw new Error(
+        `Cannot register group ${jid}: no channel adapter claims this JID and no channel was specified. ` +
+          `Connected adapters: ${this.channels.map((c) => c.name).join(', ') || '(none)'}.`,
+      );
+    }
 
     this.addAgentForChat({
-      channel,
+      channel: resolvedChannel,
       platformId: jid,
       name: group.name,
       folder: group.folder,
@@ -315,7 +326,7 @@ export class MessageOrchestrator {
     fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
 
     this.deps.logger.info(
-      { jid, name: group.name, folder: group.folder, channel },
+      { jid, name: group.name, folder: group.folder, channel: resolvedChannel },
       'Group registered',
     );
   }
