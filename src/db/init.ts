@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import Database from 'better-sqlite3';
 import { EventEmitter } from 'events';
 import fs from 'fs';
@@ -100,6 +101,43 @@ export function createSchema(database: Database.Database): void {
       PRIMARY KEY (channel, platform_id)
     );
     CREATE INDEX IF NOT EXISTS idx_unregistered_last_seen ON unregistered_senders(last_seen);
+
+    CREATE TABLE IF NOT EXISTS agent_groups (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL,
+      folder          TEXT NOT NULL UNIQUE,
+      agent_provider  TEXT,
+      container_config TEXT,
+      created_at      TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS messaging_groups (
+      id                    TEXT PRIMARY KEY,
+      channel_type          TEXT NOT NULL,
+      platform_id           TEXT NOT NULL,
+      name                  TEXT,
+      is_group              INTEGER DEFAULT 0,
+      unknown_sender_policy TEXT NOT NULL DEFAULT 'public',
+      created_at            TEXT NOT NULL,
+      UNIQUE(channel_type, platform_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS messaging_group_agents (
+      id                     TEXT PRIMARY KEY,
+      messaging_group_id     TEXT NOT NULL REFERENCES messaging_groups(id),
+      agent_group_id         TEXT NOT NULL REFERENCES agent_groups(id),
+      engage_mode            TEXT NOT NULL DEFAULT 'pattern',
+      engage_pattern         TEXT,
+      sender_scope           TEXT NOT NULL DEFAULT 'all',
+      ignored_message_policy TEXT NOT NULL DEFAULT 'drop',
+      session_mode           TEXT DEFAULT 'shared',
+      priority               INTEGER DEFAULT 0,
+      created_at             TEXT NOT NULL,
+      UNIQUE(messaging_group_id, agent_group_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_mg ON messaging_group_agents(messaging_group_id);
+    CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_ag ON messaging_group_agents(agent_group_id);
   `);
 
   runMigrations(database);
@@ -182,6 +220,79 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       }
       if (cols.includes('requires_trigger')) {
         db.exec(`UPDATE registered_groups SET engage_mode = CASE WHEN requires_trigger = 0 THEN 'always' ELSE 'pattern' END WHERE engage_mode = 'pattern'`);
+      }
+    },
+  },
+  {
+    name: '008_split_registered_groups',
+    up: (db) => {
+      // 1. Ensure the three new tables exist (idempotent; createSchema also creates them)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_groups (
+          id              TEXT PRIMARY KEY,
+          name            TEXT NOT NULL,
+          folder          TEXT NOT NULL UNIQUE,
+          agent_provider  TEXT,
+          container_config TEXT,
+          created_at      TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS messaging_groups (
+          id                    TEXT PRIMARY KEY,
+          channel_type          TEXT NOT NULL,
+          platform_id           TEXT NOT NULL,
+          name                  TEXT,
+          is_group              INTEGER DEFAULT 0,
+          unknown_sender_policy TEXT NOT NULL DEFAULT 'public',
+          created_at            TEXT NOT NULL,
+          UNIQUE(channel_type, platform_id)
+        );
+        CREATE TABLE IF NOT EXISTS messaging_group_agents (
+          id                     TEXT PRIMARY KEY,
+          messaging_group_id     TEXT NOT NULL REFERENCES messaging_groups(id),
+          agent_group_id         TEXT NOT NULL REFERENCES agent_groups(id),
+          engage_mode            TEXT NOT NULL DEFAULT 'pattern',
+          engage_pattern         TEXT,
+          sender_scope           TEXT NOT NULL DEFAULT 'all',
+          ignored_message_policy TEXT NOT NULL DEFAULT 'drop',
+          session_mode           TEXT DEFAULT 'shared',
+          priority               INTEGER DEFAULT 0,
+          created_at             TEXT NOT NULL,
+          UNIQUE(messaging_group_id, agent_group_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_mg ON messaging_group_agents(messaging_group_id);
+        CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_ag ON messaging_group_agents(agent_group_id);
+      `);
+
+      // 2. If registered_groups exists, copy its rows into the new tables.
+      // Skip if already migrated (idempotent: re-running won't duplicate).
+      const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='registered_groups'`).all() as any[]);
+      if (tables.length === 0) return;
+
+      const rows = db.prepare(`SELECT * FROM registered_groups`).all() as any[];
+      if (rows.length === 0) return;
+
+      const insertAg = db.prepare(`INSERT OR IGNORE INTO agent_groups (id, name, folder, agent_provider, container_config, created_at) VALUES (?, ?, ?, ?, ?, ?)`);
+      const insertMg = db.prepare(`INSERT OR IGNORE INTO messaging_groups (id, channel_type, platform_id, name, is_group, unknown_sender_policy, created_at) VALUES (?, ?, ?, ?, 0, 'public', ?)`);
+      const findAg = db.prepare(`SELECT id FROM agent_groups WHERE folder = ?`);
+      const findMg = db.prepare(`SELECT id FROM messaging_groups WHERE channel_type = ? AND platform_id = ?`);
+      const insertMga = db.prepare(`INSERT OR IGNORE INTO messaging_group_agents (id, messaging_group_id, agent_group_id, engage_mode, engage_pattern, sender_scope, ignored_message_policy, session_mode, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'shared', 0, ?)`);
+
+      for (const row of rows) {
+        const channelType = row.channel ?? 'whatsapp'; // Phase 1 default — pre-channel-aware rows
+        insertAg.run(crypto.randomUUID(), row.name, row.folder, null, row.container_config, row.added_at);
+        insertMg.run(crypto.randomUUID(), channelType, row.jid, row.name, row.added_at);
+        const ag = findAg.get(row.folder) as { id: string };
+        const mg = findMg.get(channelType, row.jid) as { id: string };
+        insertMga.run(
+          crypto.randomUUID(),
+          mg.id,
+          ag.id,
+          row.engage_mode ?? 'pattern',
+          row.pattern,
+          row.sender_scope ?? 'all',
+          row.ignored_message_policy ?? 'drop',
+          row.added_at,
+        );
       }
     },
   },
