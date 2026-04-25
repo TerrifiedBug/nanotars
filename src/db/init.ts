@@ -92,6 +92,26 @@ export function createSchema(database: Database.Database): void {
   runMigrations(database);
 }
 
+/**
+ * Check whether a table exists in the connected database.
+ *
+ * `name` must be a SQL-identifier-shaped string ([A-Za-z_][A-Za-z0-9_]*).
+ * Throws on unsafe input — protects against accidental injection through
+ * the parameterized `sqlite_master` lookup, which uses the value as a
+ * literal string.
+ *
+ * Ported from upstream nanoclaw v2 src/db/schema.ts hasTable utility.
+ */
+export function hasTable(db: Database.Database, name: string): boolean {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid table name: ${JSON.stringify(name)}`);
+  }
+  const row = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+    .get(name) as { name: string } | undefined;
+  return row !== undefined;
+}
+
 /** Safely add a column, ignoring "duplicate column name" errors. */
 function safeAddColumn(db: Database.Database, sql: string): void {
   try { db.exec(sql); } catch (err: any) {

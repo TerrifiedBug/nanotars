@@ -16,6 +16,7 @@ import {
   getRegisteredGroup,
   getTaskById,
   getTasksForGroup,
+  hasTable,
   insertExternalMessage,
   isValidGroupFolder,
   setRegisteredGroup,
@@ -514,6 +515,26 @@ describe('folder validation', () => {
     expect(isValidGroupFolder('.hidden')).toBe(false);
     expect(isValidGroupFolder('global')).toBe(false);
     expect(isValidGroupFolder('a'.repeat(65))).toBe(false);
+  });
+});
+
+// --- hasTable ---
+
+describe('hasTable', () => {
+  it('returns false for a missing table', () => {
+    const db = new Database(':memory:');
+    expect(hasTable(db, 'no_such_table')).toBe(false);
+  });
+
+  it('returns true for an existing table', () => {
+    const db = new Database(':memory:');
+    createSchema(db);
+    expect(hasTable(db, 'messages')).toBe(true);
+  });
+
+  it('rejects table names that are not safe identifiers', () => {
+    const db = new Database(':memory:');
+    expect(() => hasTable(db, "messages'; DROP TABLE messages--")).toThrow();
   });
 });
 
