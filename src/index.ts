@@ -168,7 +168,7 @@ async function main(): Promise<void> {
   setPluginRegistry(plugins);
 
   // Load secret redaction AFTER plugins so publicEnvVars are available
-  loadSecrets(plugins.getPublicEnvVars());
+  loadSecrets({ additionalSafeVars: plugins.getPublicEnvVars() });
 
   // Load sender allowlist for drop-mode filtering
   const senderAllowlistCfg = loadSenderAllowlist();

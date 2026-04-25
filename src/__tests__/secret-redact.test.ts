@@ -346,3 +346,71 @@ describe('NEVER_EXEMPT: critical secrets cannot be exempted', () => {
     expect(redactSecrets('dash-secret-never-exempt')).toBe('[REDACTED]');
   });
 });
+
+describe('length-sorted redaction', () => {
+  it('matches the longer secret when one secret is a prefix of another', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-redact-sort-'));
+    try {
+      fs.writeFileSync(path.join(tmp, '.env'), 'A_KEY=token12345\nB_KEY=token1234567890\n');
+      loadSecrets({ projectRoot: tmp });
+      // Without length-sort, the shorter 'token12345' would match first, leaving '67890' exposed
+      expect(redactSecrets('say token1234567890 here')).toBe('say [REDACTED] here');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Set-dedup', () => {
+  it('deduplicates secret values so duplicate entries do not break redaction', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-redact-dedup-'));
+    try {
+      // Same value in .env and credentials.json — should still redact fine
+      fs.writeFileSync(path.join(tmp, '.env'), 'SOME_TOKEN=shared-secret-token-12345\n');
+      const credPath = path.join(tmp, 'creds.json');
+      fs.writeFileSync(credPath, JSON.stringify({ accessToken: 'shared-secret-token-12345' }));
+      loadSecrets({ projectRoot: tmp, credentialsPath: credPath });
+      expect(redactSecrets('found shared-secret-token-12345 here')).toBe('found [REDACTED] here');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('ONECLI_API_KEY NEVER_EXEMPT', () => {
+  it('still redacts ONECLI_API_KEY even when added to additionalSafeVars', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-redact-onecli-'));
+    try {
+      fs.writeFileSync(path.join(tmp, '.env'), 'ONECLI_API_KEY=onecli-secret-12345\n');
+      loadSecrets({ projectRoot: tmp, additionalSafeVars: ['ONECLI_API_KEY'] });
+      expect(redactSecrets('the key is onecli-secret-12345 yo')).toBe('the key is [REDACTED] yo');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('injectable paths', () => {
+  it('reads .env from a custom projectRoot', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-redact-root-'));
+    try {
+      fs.writeFileSync(path.join(tmp, '.env'), 'TEST_KEY=test-secret-12345\n');
+      loadSecrets({ projectRoot: tmp });
+      expect(redactSecrets('saw test-secret-12345 in the wild')).toBe('saw [REDACTED] in the wild');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('reads credentials from a custom credentialsPath', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-redact-creds-'));
+    try {
+      const credPath = path.join(tmp, 'creds.json');
+      fs.writeFileSync(credPath, JSON.stringify({ accessToken: 'oauth-token-67890' }));
+      loadSecrets({ projectRoot: tmp, credentialsPath: credPath });
+      expect(redactSecrets('token oauth-token-67890 here')).toBe('token [REDACTED] here');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
