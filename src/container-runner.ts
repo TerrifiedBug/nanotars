@@ -14,6 +14,7 @@ import {
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
+  INSTALL_SLUG,
 } from './config.js';
 import { buildVolumeMounts, getHomeDir, readSecrets, VolumeMount } from './container-mounts.js';
 import * as containerRuntime from './container-runtime.js';
@@ -68,6 +69,7 @@ function resolveFromParser(
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
   const args: string[] = [
     'run', '-i', '--rm', '--name', containerName,
+    '--label', `nanoclaw.install=${INSTALL_SLUG}`,
     ...containerRuntime.extraRunArgs(),
   ];
 

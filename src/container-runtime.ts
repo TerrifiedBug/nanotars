@@ -9,6 +9,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import { Writable } from 'stream';
+import { INSTALL_SLUG } from './config.js';
 import { logger } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -84,21 +85,18 @@ export function ensureRunning(): void {
 /** List and stop/remove orphaned NanoClaw containers */
 function cleanupOrphanedContainers(): void {
   const runtime = detectRuntime();
+  const labelFilter = `label=nanoclaw.install=${INSTALL_SLUG}`;
 
   try {
     if (runtime === 'apple-container') {
-      const output = execFileSync('container', ['ls', '--format', 'json'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        encoding: 'utf-8',
-      });
+      const output = execFileSync(
+        'container', ['ls', '--format', 'json', '--filter', labelFilter],
+        { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
+      );
       const containers: { status: string; configuration: { id: string } }[] =
         JSON.parse(output || '[]');
       const orphans = containers
-        .filter(
-          (c) =>
-            c.status === 'running' &&
-            c.configuration.id.startsWith('nanoclaw-'),
-        )
+        .filter((c) => c.status === 'running')
         .map((c) => c.configuration.id);
       for (const name of orphans) {
         try {
@@ -114,9 +112,9 @@ function cleanupOrphanedContainers(): void {
         );
       }
     } else {
-      // Docker: list by name filter, stop, then remove
+      // Docker: list by install label, stop, then remove
       const output = execFileSync(
-        'docker', ['ps', '-a', '--format', '{{.Names}}', '--filter', 'name=nanoclaw-'],
+        'docker', ['ps', '-a', '--format', '{{.Names}}', '--filter', labelFilter],
         { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
       );
       const names = output

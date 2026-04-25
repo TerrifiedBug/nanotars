@@ -86,4 +86,14 @@ export function createTriggerPattern(trigger: string): RegExp {
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+/**
+ * Per-install identifier used as a Docker label so multiple nanoclaw installs
+ * sharing a host don't step on each other's container cleanup.
+ *
+ * Derived from the project root's basename — deterministic per checkout/clone.
+ * Override with NANOCLAW_INSTALL_SLUG env var if needed (e.g., for CI runners
+ * with non-canonical project paths).
+ */
+export const INSTALL_SLUG =
+  process.env.NANOCLAW_INSTALL_SLUG ?? path.basename(process.cwd()).toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
