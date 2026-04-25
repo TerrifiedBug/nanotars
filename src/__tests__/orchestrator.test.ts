@@ -1,18 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { vi } from 'vitest';
 import { EventEmitter } from 'events';
 
-// Spy on the permissions module so we can assert the stubs are invoked
-// from the orchestrator's inbound-routing path (Phase 4A anchor points).
-vi.mock('../permissions.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../permissions.js')>();
-  return {
-    resolveSender: vi.fn(actual.resolveSender),
-    canAccessAgentGroup: vi.fn(actual.canAccessAgentGroup),
-  };
-});
-
 import { MessageOrchestrator, OrchestratorDeps } from '../orchestrator.js';
-import * as permissions from '../permissions.js';
 import type { Channel, NewMessage } from '../types.js';
 import {
   _initTestDatabase,
@@ -20,6 +10,9 @@ import {
   createMessagingGroup,
   createWiring,
 } from '../db/index.js';
+import { ensureUser } from '../permissions/users.js';
+import { grantRole } from '../permissions/user-roles.js';
+import { addMember } from '../permissions/agent-group-members.js';
 
 /**
  * Test helper: seed a (channel, jid, folder) tuple into the new entity-model
@@ -146,10 +139,17 @@ function makeMessage(overrides: Partial<NewMessage> = {}): NewMessage {
   };
 }
 
+/**
+ * Phase 4B note: orchestrator's routing path admits everyone under the
+ * default `sender_scope='all'`; admin gating happens elsewhere
+ * (command-gate.ts). Tests that exercise the strict `sender_scope='known'`
+ * path seed users + roles + memberships explicitly. Existing routing /
+ * engage_mode / trigger tests therefore need no RBAC setup.
+ */
+const DEFAULT_USER_ID = 'whatsapp:user@s';
+
 beforeEach(() => {
   _initTestDatabase();
-  vi.mocked(permissions.resolveSender).mockClear();
-  vi.mocked(permissions.canAccessAgentGroup).mockClear();
 });
 
 describe('MessageOrchestrator', () => {
@@ -505,10 +505,10 @@ describe('MessageOrchestrator', () => {
       expect(deps.runContainerAgent).not.toHaveBeenCalled();
     });
 
-    it('sender_scope=known is a no-op until Phase 4 — engages with engage_mode=always regardless', async () => {
-      // sender_scope='known' is reserved for Phase 4 (where channel adapters would
-      // filter to known senders). Until then it must be ignored so no messages are
-      // silently dropped just because the user_dms cache doesn't exist yet.
+    it('sender_scope=known drops messages from non-members (Phase 4B real gate)', async () => {
+      // Phase 4B: sender_scope='known' is now enforced. Non-members of the
+      // agent group are dropped at the orchestrator gate even when engage_mode
+      // would otherwise admit them.
       seedAgent({
         jid: 'known@g.us',
         name: 'Known Scope Group',
@@ -531,8 +531,12 @@ describe('MessageOrchestrator', () => {
       orch.setChannels([mockWhatsAppChannel()]);
 
       const result = await orch.processGroupMessages('known@g.us');
-      expect(result).toBe(true);
-      expect(deps.runContainerAgent).toHaveBeenCalled();
+      expect(result).toBe(true); // observed, but not dispatched
+      expect(deps.runContainerAgent).not.toHaveBeenCalled();
+      expect(deps.logger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({ jid: 'known@g.us', folder: 'known-scope' }),
+        expect.stringContaining('sender_scope=known'),
+      );
     });
   });
 
@@ -757,137 +761,243 @@ describe('MessageOrchestrator', () => {
     });
   });
 
-  describe('permissions hooks (Phase 4A anchor points)', () => {
-    it('processGroupMessages calls resolveSender + canAccessAgentGroup before dispatch', async () => {
-      seedAgent(mainSeed);
-      const deps = makeDeps({
-        getMessagesSince: vi.fn(() => [
-          makeMessage({
-            timestamp: '2024-01-01T00:00:05.000Z',
-            sender: 'sender-1@s',
-            sender_name: 'Sender One',
-          }),
-        ]),
-      });
-      const orch = new MessageOrchestrator(deps);
-      orch.setChannels([mockWhatsAppChannel()]);
+  describe('Phase 4B: real RBAC + sender-scope gate', () => {
+    // Phase 4A anchored the orchestrator to call resolveSender +
+    // canAccessAgentGroup; Phase 4B replaced the stubs with real
+    // implementations and made the sender_scope wiring column the
+    // governing knob. The describe block below covers both dispatch
+    // sites (processGroupMessages, startMessageLoop) under the four
+    // matrix cells: { sender_scope: 'all' | 'known' } x
+    // { user: non-member | member-or-admin }.
 
-      await orch.processGroupMessages('main@g.us');
-
-      expect(permissions.resolveSender).toHaveBeenCalledWith(
-        expect.objectContaining({
-          channel: 'whatsapp',
-          platform_id: 'main@g.us',
-          sender_handle: 'sender-1@s',
-          sender_name: 'Sender One',
-        }),
-      );
-      expect(permissions.canAccessAgentGroup).toHaveBeenCalledWith(
-        undefined, // resolveSender stub returns undefined
-        expect.any(String), // agent_group.id
-      );
-      expect(deps.runContainerAgent).toHaveBeenCalled();
-    });
-
-    it('processGroupMessages skips dispatch when canAccessAgentGroup returns false', async () => {
-      seedAgent(mainSeed);
-      vi.mocked(permissions.canAccessAgentGroup).mockReturnValueOnce(false);
-      const deps = makeDeps({
-        getMessagesSince: vi.fn(() => [
-          makeMessage({ timestamp: '2024-01-01T00:00:05.000Z' }),
-        ]),
-      });
-      const orch = new MessageOrchestrator(deps);
-      orch.setChannels([mockWhatsAppChannel()]);
-
-      const result = await orch.processGroupMessages('main@g.us');
-      expect(result).toBe(true);
-      expect(deps.runContainerAgent).not.toHaveBeenCalled();
-      expect(deps.logger.debug).toHaveBeenCalledWith(
-        expect.objectContaining({ jid: 'main@g.us', folder: 'main' }),
-        expect.stringContaining('Access denied'),
-      );
-    });
-
-    it('startMessageLoop calls resolveSender + canAccessAgentGroup before piping', async () => {
-      seedAgent(mainSeed);
-      const dbEvents = new EventEmitter();
-      const deps = makeDeps({
-        dbEvents,
-        pollInterval: 60000,
-        getNewMessages: vi.fn(() => ({
-          messages: [
+    describe('processGroupMessages', () => {
+      it('sender_scope=all: non-member is dispatched (admin gating happens elsewhere)', async () => {
+        seedAgent({ ...mainSeed, sender_scope: 'all' });
+        const deps = makeDeps({
+          getMessagesSince: vi.fn(() => [
             makeMessage({
-              id: 'm1',
-              chat_jid: 'main@g.us',
-              sender: 'sender-2@s',
-              sender_name: 'Sender Two',
-              timestamp: '2024-01-01T00:00:02.000Z',
+              timestamp: '2024-01-01T00:00:05.000Z',
+              sender: 'stranger@s',
+              sender_name: 'Stranger',
             }),
-          ],
-          newTimestamp: '2024-01-01T00:00:02.000Z',
-        })),
+          ]),
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.setChannels([mockWhatsAppChannel()]);
+
+        await orch.processGroupMessages('main@g.us');
+        expect(deps.runContainerAgent).toHaveBeenCalled();
       });
-      const orch = new MessageOrchestrator(deps);
-      orch.channels = [mockWhatsAppChannel()];
 
-      const loopPromise = orch.startMessageLoop();
-      await new Promise((r) => setTimeout(r, 50));
-      orch.stop();
-      await loopPromise;
+      it('sender_scope=known: non-member is dropped with debug log', async () => {
+        seedAgent({
+          jid: 'strict@g.us',
+          name: 'Strict',
+          folder: 'strict',
+          pattern: '@TARS',
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        const deps = makeDeps({
+          getMessagesSince: vi.fn(() => [
+            makeMessage({
+              chat_jid: 'strict@g.us',
+              timestamp: '2024-01-01T00:00:05.000Z',
+              sender: 'stranger@s',
+            }),
+          ]),
+          mainGroupFolder: 'other-main',
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.setChannels([mockWhatsAppChannel()]);
 
-      expect(permissions.resolveSender).toHaveBeenCalledWith(
-        expect.objectContaining({
-          channel: 'whatsapp',
-          platform_id: 'main@g.us',
-          sender_handle: 'sender-2@s',
-          sender_name: 'Sender Two',
-        }),
-      );
-      expect(permissions.canAccessAgentGroup).toHaveBeenCalled();
+        const result = await orch.processGroupMessages('strict@g.us');
+        expect(result).toBe(true);
+        expect(deps.runContainerAgent).not.toHaveBeenCalled();
+        expect(deps.logger.debug).toHaveBeenCalledWith(
+          expect.objectContaining({ folder: 'strict' }),
+          expect.stringContaining('sender_scope=known'),
+        );
+      });
+
+      it('sender_scope=known: explicit member is dispatched', async () => {
+        const ag = createAgentGroup({ name: 'Strict2', folder: 'strict-2' });
+        const mg = createMessagingGroup({
+          channel_type: 'whatsapp',
+          platform_id: 'strict2@g.us',
+          name: 'Strict2',
+        });
+        createWiring({
+          messaging_group_id: mg.id,
+          agent_group_id: ag.id,
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        ensureUser({ id: 'whatsapp:member@s', kind: 'whatsapp' });
+        addMember({ user_id: 'whatsapp:member@s', agent_group_id: ag.id });
+
+        const deps = makeDeps({
+          getMessagesSince: vi.fn(() => [
+            makeMessage({
+              chat_jid: 'strict2@g.us',
+              sender: 'member@s',
+              timestamp: '2024-01-01T00:00:05.000Z',
+            }),
+          ]),
+          mainGroupFolder: 'other-main',
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.setChannels([mockWhatsAppChannel()]);
+
+        await orch.processGroupMessages('strict2@g.us');
+        expect(deps.runContainerAgent).toHaveBeenCalled();
+      });
+
+      it('sender_scope=known: global admin is dispatched (implicit member)', async () => {
+        const ag = createAgentGroup({ name: 'Strict3', folder: 'strict-3' });
+        const mg = createMessagingGroup({
+          channel_type: 'whatsapp',
+          platform_id: 'strict3@g.us',
+          name: 'Strict3',
+        });
+        createWiring({
+          messaging_group_id: mg.id,
+          agent_group_id: ag.id,
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        ensureUser({ id: 'whatsapp:admin@s', kind: 'whatsapp' });
+        grantRole({ user_id: 'whatsapp:admin@s', role: 'admin' }); // global admin
+
+        const deps = makeDeps({
+          getMessagesSince: vi.fn(() => [
+            makeMessage({
+              chat_jid: 'strict3@g.us',
+              sender: 'admin@s',
+              timestamp: '2024-01-01T00:00:05.000Z',
+            }),
+          ]),
+          mainGroupFolder: 'other-main',
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.setChannels([mockWhatsAppChannel()]);
+
+        await orch.processGroupMessages('strict3@g.us');
+        expect(deps.runContainerAgent).toHaveBeenCalled();
+      });
+
+      it('resolveSender lazily creates the users row for unknown senders', async () => {
+        seedAgent(mainSeed);
+        const deps = makeDeps({
+          getMessagesSince: vi.fn(() => [
+            makeMessage({
+              timestamp: '2024-01-01T00:00:05.000Z',
+              sender: 'first-time@s',
+              sender_name: 'First Time',
+            }),
+          ]),
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.setChannels([mockWhatsAppChannel()]);
+
+        await orch.processGroupMessages('main@g.us');
+        // The resolver-created user is queryable.
+        const { getUserById } = await import('../permissions/users.js');
+        const u = getUserById('whatsapp:first-time@s');
+        expect(u).toBeDefined();
+        expect(u!.kind).toBe('whatsapp');
+        expect(u!.display_name).toBe('First Time');
+      });
     });
 
-    it('startMessageLoop skips dispatch when canAccessAgentGroup returns false', async () => {
-      seedAgent(mainSeed);
-      // Both processGroupMessages and startMessageLoop will check; force all false.
-      vi.mocked(permissions.canAccessAgentGroup).mockReturnValue(false);
-      const dbEvents = new EventEmitter();
-      const sendMessage = vi.fn(() => false);
-      const enqueueMessageCheck = vi.fn();
-      const deps = makeDeps({
-        dbEvents,
-        pollInterval: 60000,
-        getNewMessages: vi.fn(() => ({
-          messages: [
-            makeMessage({
-              id: 'm1',
-              chat_jid: 'main@g.us',
-              timestamp: '2024-01-01T00:00:02.000Z',
-            }),
-          ],
-          newTimestamp: '2024-01-01T00:00:02.000Z',
-        })),
-        queue: {
-          enqueueMessageCheck,
-          sendMessage,
-          closeStdin: vi.fn(),
-          registerProcess: vi.fn(),
-        } as any,
+    describe('startMessageLoop', () => {
+      it('sender_scope=all: non-member is dispatched (piped to running session)', async () => {
+        seedAgent({ ...mainSeed, sender_scope: 'all' });
+        const dbEvents = new EventEmitter();
+        const enqueueMessageCheck = vi.fn();
+        const deps = makeDeps({
+          dbEvents,
+          pollInterval: 60000,
+          getNewMessages: vi.fn(() => ({
+            messages: [
+              makeMessage({
+                id: 'm-all',
+                chat_jid: 'main@g.us',
+                sender: 'stranger@s',
+                timestamp: '2024-01-01T00:00:02.000Z',
+              }),
+            ],
+            newTimestamp: '2024-01-01T00:00:02.000Z',
+          })),
+          queue: {
+            enqueueMessageCheck,
+            sendMessage: vi.fn(() => false),
+            closeStdin: vi.fn(),
+            registerProcess: vi.fn(),
+          } as any,
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.channels = [mockWhatsAppChannel()];
+
+        const loopPromise = orch.startMessageLoop();
+        await new Promise((r) => setTimeout(r, 50));
+        orch.stop();
+        await loopPromise;
+
+        expect(enqueueMessageCheck).toHaveBeenCalledWith('main@g.us');
       });
-      const orch = new MessageOrchestrator(deps);
-      orch.channels = [mockWhatsAppChannel()];
 
-      const loopPromise = orch.startMessageLoop();
-      await new Promise((r) => setTimeout(r, 50));
-      orch.stop();
-      await loopPromise;
+      it('sender_scope=known: non-member does not enqueue or pipe', async () => {
+        seedAgent({
+          jid: 'strict-loop@g.us',
+          name: 'StrictLoop',
+          folder: 'strict-loop',
+          pattern: '@TARS',
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        const dbEvents = new EventEmitter();
+        const sendMessage = vi.fn(() => false);
+        const enqueueMessageCheck = vi.fn();
+        const deps = makeDeps({
+          dbEvents,
+          pollInterval: 60000,
+          mainGroupFolder: 'other-main',
+          getNewMessages: vi.fn(() => ({
+            messages: [
+              makeMessage({
+                id: 'm-strict',
+                chat_jid: 'strict-loop@g.us',
+                sender: 'stranger@s',
+                timestamp: '2024-01-01T00:00:02.000Z',
+              }),
+            ],
+            newTimestamp: '2024-01-01T00:00:02.000Z',
+          })),
+          queue: {
+            enqueueMessageCheck,
+            sendMessage,
+            closeStdin: vi.fn(),
+            registerProcess: vi.fn(),
+          } as any,
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.channels = [mockWhatsAppChannel()];
 
-      // Restore default for subsequent tests
-      vi.mocked(permissions.canAccessAgentGroup).mockImplementation(() => true);
+        const loopPromise = orch.startMessageLoop();
+        await new Promise((r) => setTimeout(r, 50));
+        orch.stop();
+        await loopPromise;
 
-      // No piping or enqueue when access is denied
-      expect(sendMessage).not.toHaveBeenCalled();
-      expect(enqueueMessageCheck).not.toHaveBeenCalled();
+        expect(sendMessage).not.toHaveBeenCalled();
+        expect(enqueueMessageCheck).not.toHaveBeenCalled();
+      });
+    });
+
+    it('DEFAULT_USER_ID constant matches resolveSender keying convention', () => {
+      // Anchored here so we notice if the convention changes (e.g., adding
+      // a normalisation step in sender-resolver.ts).
+      expect(DEFAULT_USER_ID).toBe('whatsapp:user@s');
     });
   });
 });

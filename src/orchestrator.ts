@@ -39,11 +39,9 @@ import {
   getWiring,
   resolveAgentsForInbound,
 } from './db/agent-groups.js';
-import {
-  canAccessAgentGroup,
-  resolveSender,
-  type SenderInfo,
-} from './permissions.js';
+import { canAccessAgentGroup } from './permissions/access.js';
+import { resolveSender, type SenderInfo } from './permissions/sender-resolver.js';
+import { isMember } from './permissions/agent-group-members.js';
 
 /** Dependency injection interface for the orchestrator. */
 export interface OrchestratorDeps {
@@ -447,11 +445,22 @@ export class MessageOrchestrator {
 
     const lastTriggerMessageId = missedMessages[missedMessages.length - 1]?.id;
 
-    // Phase 4A permissions hook (stubs return undefined / true so behavior is
-    // unchanged; Phase 4B replaces with real users / user_roles checks). The
-    // callsite is anchored here, just before any dispatch, so 4B can short-
-    // circuit message processing for unauthorized senders without churning
-    // the routing shape.
+    // Phase 4B permissions enforcement.
+    //
+    // resolveSender lazily creates a users row keyed by
+    // `<channel>:<sender_handle>` and always returns a userId.
+    //
+    // The wiring's sender_scope governs admittance:
+    //   sender_scope='all'   (default) — everyone is admitted; admin-only
+    //                          actions are still gated separately by
+    //                          command-gate.ts.
+    //   sender_scope='known' (strict)  — only owner / global-admin /
+    //                          scoped-admin / explicit-member of the agent
+    //                          group can interact. Anyone else is dropped.
+    //
+    // The strict path delegates to canAccessAgentGroup, whose decision
+    // order is owner → global-admin → scoped-admin → member → deny and
+    // whose returned reason gets logged so denials are debuggable.
     const channel = this.channels.find((ch) => ch.ownsJid(chatJid));
     const lastMsg = missedMessages[missedMessages.length - 1];
     const senderInfo: SenderInfo = {
@@ -462,12 +471,25 @@ export class MessageOrchestrator {
     };
     const userId = resolveSender(senderInfo);
     const agentGroupRow = getAgentGroupByFolder(group.folder);
-    if (agentGroupRow && !canAccessAgentGroup(userId, agentGroupRow.id)) {
-      this.deps.logger.debug(
-        { jid: chatJid, folder: group.folder, userId },
-        'Access denied by permissions hook',
-      );
-      return true;
+    if (agentGroupRow && group.sender_scope === 'known') {
+      const access = canAccessAgentGroup(userId, agentGroupRow.id);
+      if (!access.allowed) {
+        this.deps.logger.debug(
+          { jid: chatJid, folder: group.folder, userId, reason: access.reason },
+          'Dropped by sender_scope=known gate',
+        );
+        return true;
+      }
+      // Defence-in-depth: canAccessAgentGroup admits owner/admin via isMember
+      // check internally, so this cannot diverge today, but keeps the gate
+      // intent explicit if the access decision ever loosens.
+      if (!isMember(userId, agentGroupRow.id)) {
+        this.deps.logger.debug(
+          { jid: chatJid, folder: group.folder, userId },
+          'Dropped by sender_scope=known gate (membership)',
+        );
+        return true;
+      }
     }
 
     // For non-main groups, check if trigger is required and present
@@ -762,10 +784,10 @@ export class MessageOrchestrator {
               continue;
             }
 
-            // Phase 4A permissions hook (stubs return undefined / true so
-            // behavior is unchanged; Phase 4B replaces with real users /
-            // user_roles checks). Anchored here, before trigger evaluation,
-            // so 4B can short-circuit dispatch for unauthorized senders.
+            // Phase 4B permissions enforcement. See processGroupMessages
+            // above for the gate semantics: sender_scope='all' admits
+            // everyone (admin gating happens in command-gate); sender_scope=
+            // 'known' restricts to owner/admin/member via canAccessAgentGroup.
             const channel = this.channels.find((ch) => ch.ownsJid(chatJid));
             const lastMsg = groupMessages[groupMessages.length - 1];
             const senderInfo: SenderInfo = {
@@ -776,12 +798,22 @@ export class MessageOrchestrator {
             };
             const userId = resolveSender(senderInfo);
             const agentGroupRow = getAgentGroupByFolder(group.folder);
-            if (agentGroupRow && !canAccessAgentGroup(userId, agentGroupRow.id)) {
-              this.deps.logger.debug(
-                { jid: chatJid, folder: group.folder, userId },
-                'Access denied by permissions hook',
-              );
-              continue;
+            if (agentGroupRow && group.sender_scope === 'known') {
+              const access = canAccessAgentGroup(userId, agentGroupRow.id);
+              if (!access.allowed) {
+                this.deps.logger.debug(
+                  { jid: chatJid, folder: group.folder, userId, reason: access.reason },
+                  'Dropped by sender_scope=known gate',
+                );
+                continue;
+              }
+              if (!isMember(userId, agentGroupRow.id)) {
+                this.deps.logger.debug(
+                  { jid: chatJid, folder: group.folder, userId },
+                  'Dropped by sender_scope=known gate (membership)',
+                );
+                continue;
+              }
             }
 
             const isMainGroup = group.folder === this.deps.mainGroupFolder;
