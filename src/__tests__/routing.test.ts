@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 
-import { _initTestDatabase, getAllChats, storeChatMetadata } from '../db.js';
+import {
+  _initTestDatabase,
+  createAgentGroup,
+  createMessagingGroup,
+  createWiring,
+  getAllChats,
+  storeChatMetadata,
+} from '../db.js';
 import { MessageOrchestrator, OrchestratorDeps } from '../orchestrator.js';
 import type { Channel } from '../types.js';
 
@@ -23,8 +30,7 @@ function makeDeps(): OrchestratorDeps {
     setRouterState: vi.fn(),
     getAllSessions: vi.fn(() => ({})),
     setSession: vi.fn(),
-    getAllRegisteredGroups: vi.fn(() => ({})),
-    setRegisteredGroup: vi.fn(),
+    recordUnregisteredSender: vi.fn(),
     getMessagesSince: vi.fn(() => []),
     getNewMessages: vi.fn(() => ({ messages: [], newTimestamp: '' })),
     getAllChats,
@@ -54,7 +60,6 @@ beforeEach(() => {
   _initTestDatabase();
   const deps = makeDeps();
   orchestrator = new MessageOrchestrator(deps);
-  orchestrator.registeredGroups = {};
   orchestrator.setChannels([mockWhatsAppChannel()]);
 });
 
@@ -106,14 +111,18 @@ describe('getAvailableGroups', () => {
     storeChatMetadata('reg@g.us', '2024-01-01T00:00:01.000Z', 'Registered');
     storeChatMetadata('unreg@g.us', '2024-01-01T00:00:02.000Z', 'Unregistered');
 
-    orchestrator.registeredGroups = {
-      'reg@g.us': {
-        name: 'Registered',
-        folder: 'registered',
-        trigger: '@TARS',
-        added_at: '2024-01-01T00:00:00.000Z',
-      },
-    };
+    // Seed via the new entity-model accessors instead of writing to a cache.
+    const ag = createAgentGroup({ name: 'Registered', folder: 'registered' });
+    const mg = createMessagingGroup({
+      channel_type: 'whatsapp',
+      platform_id: 'reg@g.us',
+      name: 'Registered',
+    });
+    createWiring({
+      messaging_group_id: mg.id,
+      agent_group_id: ag.id,
+      engage_pattern: '@TARS',
+    });
 
     const groups = orchestrator.getAvailableGroups();
     const reg = groups.find((g) => g.jid === 'reg@g.us');

@@ -6,7 +6,15 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 
-import type { Channel, NewMessage, RegisteredGroup } from './types.js';
+import type {
+  AgentGroup,
+  Channel,
+  ContainerConfig,
+  MessagingGroup,
+  MessagingGroupAgent,
+  NewMessage,
+  RegisteredGroup,
+} from './types.js';
 import type { ContainerOutput } from './container-runner.js';
 import type { AvailableGroup } from './snapshots.js';
 import type { GroupQueue } from './group-queue.js';
@@ -17,6 +25,18 @@ import {
   loadSenderAllowlist,
   type SenderAllowlistConfig,
 } from './sender-allowlist.js';
+import {
+  createAgentGroup,
+  createMessagingGroup,
+  createWiring,
+  getAgentGroupByFolder,
+  getAllAgentGroups,
+  getMessagingGroup,
+  getMessagingGroupById,
+  getWiring,
+  getWiringForAgentGroup,
+  resolveAgentsForInbound,
+} from './db/agent-groups.js';
 
 /** Dependency injection interface for the orchestrator. */
 export interface OrchestratorDeps {
@@ -26,8 +46,6 @@ export interface OrchestratorDeps {
   recordUnregisteredSender: (channel: string, platformId: string, senderName: string) => void;
   getAllSessions: () => Record<string, string>;
   setSession: (groupFolder: string, sessionId: string) => void;
-  getAllRegisteredGroups: () => Record<string, RegisteredGroup>;
-  setRegisteredGroup: (jid: string, group: RegisteredGroup, channel?: string) => void;
   getMessagesSince: (chatJid: string, since: string, botPrefix: string) => NewMessage[];
   getNewMessages: (jids: string[], lastTs: string, botPrefix: string) => { messages: NewMessage[]; newTimestamp: string };
   getAllChats: () => Array<{ jid: string; name: string; last_message_time: string }>;
@@ -88,7 +106,6 @@ export class MessageOrchestrator {
   private lastTimestamp = '';
   sessions: Record<string, string> = {};
   resumePositions: Record<string, string> = {};
-  registeredGroups: Record<string, RegisteredGroup> = {};
   private lastAgentTimestamp: Record<string, string> = {};
   private consecutiveErrors: Record<string, number> = {};
   private processedIds = new Set<string>();
@@ -102,6 +119,103 @@ export class MessageOrchestrator {
     this.senderAllowlist = loadSenderAllowlist();
   }
 
+  /**
+   * Legacy-compat shim: synthesize Record<jid, RegisteredGroup> from the
+   * new entity-model tables. Plugins, IPC handlers, and the scheduler still
+   * consume this shape; it's recomputed on every access (no cache).
+   *
+   * Multi-agent-per-chat (multiple wirings on the same messaging_group)
+   * collapses to the first wiring with a warning. v1 doesn't enable
+   * multi-agent today; this is forward-compat for Phase 4D.
+   */
+  get registeredGroups(): Record<string, RegisteredGroup> {
+    return this.synthesizeRegisteredGroups();
+  }
+
+  private synthesizeRegisteredGroups(): Record<string, RegisteredGroup> {
+    const result: Record<string, RegisteredGroup> = {};
+    for (const ag of getAllAgentGroups()) {
+      const wirings = getWiringForAgentGroup(ag.id);
+      for (const w of wirings) {
+        const mg = getMessagingGroupById(w.messaging_group_id);
+        if (!mg) continue;
+        const jid = mg.platform_id;
+        if (result[jid]) {
+          this.deps.logger.warn(
+            { jid, folder: ag.folder, existingFolder: result[jid].folder },
+            'Multiple wirings on same chat; legacy registeredGroups shim picking first',
+          );
+          continue;
+        }
+        let containerConfig: ContainerConfig | undefined;
+        if (ag.container_config) {
+          try {
+            containerConfig = JSON.parse(ag.container_config) as ContainerConfig;
+          } catch (err) {
+            this.deps.logger.warn(
+              { folder: ag.folder, err },
+              'Failed to parse agent_groups.container_config; ignoring',
+            );
+          }
+        }
+        result[jid] = {
+          name: ag.name,
+          folder: ag.folder,
+          pattern: w.engage_pattern ?? '',
+          added_at: ag.created_at,
+          channel: mg.channel_type,
+          containerConfig,
+          engage_mode: w.engage_mode,
+          sender_scope: w.sender_scope,
+          ignored_message_policy: w.ignored_message_policy,
+        };
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Resolve an inbound chat JID to its registered group, scoped to the
+   * channel that owns the JID. Returns undefined when no wiring exists.
+   * If multiple wirings exist (Phase 4D multi-agent), the first is returned
+   * with a warning — legacy single-agent semantics.
+   */
+  private resolveGroupForChat(chatJid: string): RegisteredGroup | undefined {
+    const channel = this.channels.find((ch) => ch.ownsJid(chatJid));
+    if (!channel) return undefined;
+    const resolved = resolveAgentsForInbound(channel.name, chatJid);
+    if (resolved.length === 0) return undefined;
+    if (resolved.length > 1) {
+      this.deps.logger.warn(
+        { chatJid, channel: channel.name, count: resolved.length },
+        'Multi-agent wiring on chat; routing to first agent only (Phase 4D pending)',
+      );
+    }
+    const { agentGroup: ag, wiring: w, messagingGroup: mg } = resolved[0];
+    let containerConfig: ContainerConfig | undefined;
+    if (ag.container_config) {
+      try {
+        containerConfig = JSON.parse(ag.container_config) as ContainerConfig;
+      } catch (err) {
+        this.deps.logger.warn(
+          { folder: ag.folder, err },
+          'Failed to parse agent_groups.container_config; ignoring',
+        );
+      }
+    }
+    return {
+      name: ag.name,
+      folder: ag.folder,
+      pattern: w.engage_pattern ?? '',
+      added_at: ag.created_at,
+      channel: mg.channel_type,
+      containerConfig,
+      engage_mode: w.engage_mode,
+      sender_scope: w.sender_scope,
+      ignored_message_policy: w.ignored_message_policy,
+    };
+  }
+
   loadState(): void {
     this.lastTimestamp = this.deps.getRouterState('last_timestamp') || '';
     const agentTs = this.deps.getRouterState('last_agent_timestamp');
@@ -112,11 +226,8 @@ export class MessageOrchestrator {
       this.lastAgentTimestamp = {};
     }
     this.sessions = this.deps.getAllSessions();
-    this.registeredGroups = this.deps.getAllRegisteredGroups();
-    this.deps.logger.info(
-      { groupCount: Object.keys(this.registeredGroups).length },
-      'State loaded',
-    );
+    const groupCount = Object.keys(this.synthesizeRegisteredGroups()).length;
+    this.deps.logger.info({ groupCount }, 'State loaded');
   }
 
   private saveState(): void {
@@ -127,22 +238,91 @@ export class MessageOrchestrator {
     );
   }
 
+  /**
+   * Compound write: ensure messaging_group + agent_group + wiring rows exist
+   * for an (channel, platformId, folder) tuple. Replaces v1's single-table
+   * `setRegisteredGroup` call. Idempotent on (channel, platformId), (folder),
+   * and on (mg_id, ag_id) — repeated calls reuse all three rows.
+   *
+   * Note: when a wiring already exists, this method returns the existing
+   * wiring unchanged. To update wiring fields (engage_mode, pattern, …)
+   * the caller should delete + recreate or use a future updateWiring helper.
+   */
+  addAgentForChat(args: {
+    channel: string;
+    platformId: string;
+    name: string;
+    folder: string;
+    engage_mode?: 'pattern' | 'always' | 'mention-sticky';
+    pattern?: string | null;
+    sender_scope?: 'all' | 'known';
+    ignored_message_policy?: 'drop' | 'observe';
+    container_config?: string | null;
+  }): { agentGroup: AgentGroup; messagingGroup: MessagingGroup; wiring: MessagingGroupAgent } {
+    let mg = getMessagingGroup(args.channel, args.platformId);
+    if (!mg) {
+      mg = createMessagingGroup({
+        channel_type: args.channel,
+        platform_id: args.platformId,
+        name: args.name,
+      });
+    }
+    let ag = getAgentGroupByFolder(args.folder);
+    if (!ag) {
+      ag = createAgentGroup({
+        name: args.name,
+        folder: args.folder,
+        container_config: args.container_config ?? null,
+      });
+    }
+    const existing = getWiring(mg.id, ag.id);
+    const wiring =
+      existing ??
+      createWiring({
+        messaging_group_id: mg.id,
+        agent_group_id: ag.id,
+        engage_mode: args.engage_mode ?? 'pattern',
+        engage_pattern: args.pattern ?? null,
+        sender_scope: args.sender_scope ?? 'all',
+        ignored_message_policy: args.ignored_message_policy ?? 'drop',
+      });
+    return { agentGroup: ag, messagingGroup: mg, wiring };
+  }
+
   registerGroup(jid: string, group: RegisteredGroup): void {
-    this.registeredGroups[jid] = group;
-    this.deps.setRegisteredGroup(jid, group);
+    // Resolve channel for the JID. Prefer group.channel (set by callers that
+    // know which adapter owns the JID, e.g. IPC); fall back to the connected
+    // channel that owns the JID; final fallback to 'whatsapp' for legacy code
+    // paths predating channel-aware registration.
+    const channel =
+      group.channel ?? this.channels.find((ch) => ch.ownsJid(jid))?.name ?? 'whatsapp';
+
+    this.addAgentForChat({
+      channel,
+      platformId: jid,
+      name: group.name,
+      folder: group.folder,
+      engage_mode: group.engage_mode,
+      pattern: group.pattern || null,
+      sender_scope: group.sender_scope,
+      ignored_message_policy: group.ignored_message_policy,
+      container_config: group.containerConfig
+        ? JSON.stringify(group.containerConfig)
+        : null,
+    });
 
     const groupDir = path.join(this.deps.groupsDir, group.folder);
     fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
 
     this.deps.logger.info(
-      { jid, name: group.name, folder: group.folder },
+      { jid, name: group.name, folder: group.folder, channel },
       'Group registered',
     );
   }
 
   getAvailableGroups(): AvailableGroup[] {
     const chats = this.deps.getAllChats();
-    const registeredJids = new Set(Object.keys(this.registeredGroups));
+    const registeredJids = new Set(Object.keys(this.synthesizeRegisteredGroups()));
 
     return chats
       .filter((c) => c.jid !== '__group_sync__' && this.channels.some(ch => ch.ownsJid(c.jid)))
@@ -155,7 +335,7 @@ export class MessageOrchestrator {
   }
 
   getRegisteredGroups(): Record<string, RegisteredGroup> {
-    return this.registeredGroups;
+    return this.synthesizeRegisteredGroups();
   }
 
   getSessions(): Record<string, string> {
@@ -202,7 +382,7 @@ export class MessageOrchestrator {
   }
 
   async processGroupMessages(chatJid: string): Promise<boolean> {
-    const group = this.registeredGroups[chatJid];
+    const group = this.resolveGroupForChat(chatJid);
     if (!group) return true;
 
     const isMainGroup = group.folder === this.deps.mainGroupFolder;
@@ -368,7 +548,7 @@ export class MessageOrchestrator {
       group.folder,
       isMain,
       availableGroups,
-      new Set(Object.keys(this.registeredGroups)),
+      new Set(Object.keys(this.synthesizeRegisteredGroups())),
     );
 
     const wrappedOnOutput = onOutput
@@ -433,7 +613,8 @@ export class MessageOrchestrator {
 
     while (!this.stopRequested) {
       try {
-        const jids = Object.keys(this.registeredGroups);
+        const allRegistered = this.synthesizeRegisteredGroups();
+        const jids = Object.keys(allRegistered);
         const { messages: rawMessages, newTimestamp } = this.deps.getNewMessages(
           jids,
           this.lastTimestamp,
@@ -472,7 +653,7 @@ export class MessageOrchestrator {
           }
 
           for (const [chatJid, groupMessages] of messagesByGroup) {
-            const group = this.registeredGroups[chatJid];
+            const group = allRegistered[chatJid];
             if (!group) {
               // Record inbound messages from JIDs with no registered group so
               // the unregistered_senders table fills with real diagnostic data.
@@ -564,7 +745,7 @@ export class MessageOrchestrator {
   }
 
   recoverPendingMessages(): void {
-    for (const [chatJid, group] of Object.entries(this.registeredGroups)) {
+    for (const [chatJid, group] of Object.entries(this.synthesizeRegisteredGroups())) {
       const sinceTimestamp = this.lastAgentTimestamp[chatJid] || '';
       const pending = this.deps.getMessagesSince(chatJid, sinceTimestamp, this.deps.assistantName);
       if (pending.length > 0) {
