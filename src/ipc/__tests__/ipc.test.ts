@@ -309,6 +309,18 @@ describe('processTaskIpc: update_task', () => {
     expect(updateTask).toHaveBeenCalledWith('t1', expect.objectContaining({ model: 'opus' }));
   });
 
+  it('passes script through to updateTask when set on the IPC payload', async () => {
+    vi.mocked(getTaskById).mockReturnValue(makeTask());
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      { type: 'update_task', taskId: 't1', script: 'cd /tmp && echo hi' },
+      'main', true, deps,
+    );
+
+    expect(updateTask).toHaveBeenCalledWith('t1', expect.objectContaining({ script: 'cd /tmp && echo hi' }));
+  });
+
   it('recomputes next_run for cron schedule change', async () => {
     vi.mocked(getTaskById).mockReturnValue(makeTask());
     const deps = makeDeps();

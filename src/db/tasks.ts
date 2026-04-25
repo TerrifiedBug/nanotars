@@ -50,7 +50,7 @@ export function updateTask(
   updates: Partial<
     Pick<
       ScheduledTask,
-      'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status' | 'model'
+      'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status' | 'model' | 'script'
     >
   >,
 ): void {
@@ -80,6 +80,10 @@ export function updateTask(
   if (updates.model !== undefined) {
     fields.push('model = ?');
     values.push(updates.model);
+  }
+  if (updates.script !== undefined) {
+    fields.push('script = ?');
+    values.push(updates.script);
   }
 
   if (fields.length === 0) return;

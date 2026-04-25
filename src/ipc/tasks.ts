@@ -151,10 +151,11 @@ export async function processTaskIpc(
       if (data.taskId) {
         const task = getTaskById(data.taskId);
         if (task && (isMain || task.group_folder === sourceGroup)) {
-          const updates: { prompt?: string; schedule_type?: 'cron' | 'interval' | 'once'; schedule_value?: string; next_run?: string | null; model?: string | null } = {};
+          const updates: { prompt?: string; schedule_type?: 'cron' | 'interval' | 'once'; schedule_value?: string; next_run?: string | null; model?: string | null; script?: string | null } = {};
           const trimmedPrompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
           if (trimmedPrompt) updates.prompt = trimmedPrompt;
           if (data.model) updates.model = data.model as string;
+          if (typeof data.script === 'string') updates.script = data.script;
 
           // If schedule changed, recompute next_run
           if (data.schedule_type && data.schedule_value) {

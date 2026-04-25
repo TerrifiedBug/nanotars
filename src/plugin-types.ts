@@ -82,7 +82,7 @@ export interface PluginContext {
   getTaskById(id: string): ScheduledTask | undefined;
   getTasksForGroup(folder: string): ScheduledTask[];
   createTask(task: Omit<ScheduledTask, 'last_run' | 'last_result'>): void;
-  updateTask(id: string, updates: Partial<Pick<ScheduledTask, 'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status' | 'model'>>): void;
+  updateTask(id: string, updates: Partial<Pick<ScheduledTask, 'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status' | 'model' | 'script'>>): void;
   deleteTask(id: string): void;
   getTaskRunLogs(taskId: string, limit?: number): TaskRunLog[];
 
