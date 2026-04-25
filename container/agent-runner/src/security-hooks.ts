@@ -59,7 +59,7 @@ export function createSanitizeBashHook(): HookCallback {
 
     // Block common file-reading tools targeting credentials or /proc/ paths
     const sensitivePathPattern = /(?:\.credentials|\/proc\/)/;
-    const readTools = /\b(?:cat|less|head|tail|base64|xxd|strings|python|node|perl|ruby)\b/;
+    const readTools = /\b(?:cat|less|more|head|tail|base64|xxd|strings|od|hexdump|python|python3|node|bun|perl|ruby|awk|sed)\b/;
     if (readTools.test(command) && sensitivePathPattern.test(command)) {
       return {
         hookSpecificOutput: {

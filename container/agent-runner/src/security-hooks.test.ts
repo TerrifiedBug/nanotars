@@ -55,6 +55,48 @@ describe('createSanitizeBashHook', () => {
     expect(output.permissionDecision).toBe('deny');
   });
 
+  it('blocks more reading /proc/self/environ', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'more /proc/self/environ' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks od reading /proc/1/environ', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'od -c /proc/1/environ' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks hexdump reading .credentials.json', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'hexdump -C ~/.claude/.credentials.json' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks python3 reading /proc/self/environ', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'python3 -c "open(\'/proc/self/environ\').read()"' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks bun reading .credentials.json', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'bun -e "console.log(require(\'fs\').readFileSync(\'/home/node/.claude/.credentials.json\').toString())"' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks awk reading /proc/1/environ', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'awk \'{print}\' /proc/1/environ' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
+  it('blocks sed reading .credentials.json', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'sed -n 1p ~/.claude/.credentials.json' }));
+    const output = (result as any).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('deny');
+  });
+
   it('ignores non-Bash tools', async () => {
     const result = await hook(makePreToolUseInput('Read', { file_path: '/etc/passwd' }));
     expect(result).toEqual({});
