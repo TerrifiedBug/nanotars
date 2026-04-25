@@ -55,46 +55,53 @@ describe('createSanitizeBashHook', () => {
     expect(output.permissionDecision).toBe('deny');
   });
 
-  it('blocks more reading /proc/self/environ', async () => {
-    const result = await hook(makePreToolUseInput('Bash', { command: 'more /proc/self/environ' }));
+  it('blocks more reading /proc/cpuinfo', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'more /proc/cpuinfo' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
+    expect(output.reason).toMatch(/sensitive paths/);
   });
 
-  it('blocks od reading /proc/1/environ', async () => {
-    const result = await hook(makePreToolUseInput('Bash', { command: 'od -c /proc/1/environ' }));
+  it('blocks od reading /proc/version', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'od -c /proc/version' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
+    expect(output.reason).toMatch(/sensitive paths/);
   });
 
-  it('blocks hexdump reading .credentials.json', async () => {
-    const result = await hook(makePreToolUseInput('Bash', { command: 'hexdump -C ~/.claude/.credentials.json' }));
+  it('blocks hexdump reading /proc/self/maps', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'hexdump -C /proc/self/maps' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
+    expect(output.reason).toMatch(/sensitive paths/);
   });
 
-  it('blocks python3 reading /proc/self/environ', async () => {
-    const result = await hook(makePreToolUseInput('Bash', { command: 'python3 -c "open(\'/proc/self/environ\').read()"' }));
+  it('blocks python3 reading /proc/cpuinfo', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'python3 -c "open(\'/proc/cpuinfo\').read()"' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
+    expect(output.reason).toMatch(/sensitive paths/);
   });
 
-  it('blocks bun reading .credentials.json', async () => {
-    const result = await hook(makePreToolUseInput('Bash', { command: 'bun -e "console.log(require(\'fs\').readFileSync(\'/home/node/.claude/.credentials.json\').toString())"' }));
+  it('blocks bun reading /proc/cpuinfo', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'bun -e "console.log(require(\'fs\').readFileSync(\'/proc/cpuinfo\').toString())"' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
+    expect(output.reason).toMatch(/sensitive paths/);
   });
 
-  it('blocks awk reading /proc/1/environ', async () => {
-    const result = await hook(makePreToolUseInput('Bash', { command: 'awk \'{print}\' /proc/1/environ' }));
+  it('blocks awk reading /proc/cpuinfo', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'awk \'{print}\' /proc/cpuinfo' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
+    expect(output.reason).toMatch(/sensitive paths/);
   });
 
-  it('blocks sed reading .credentials.json', async () => {
-    const result = await hook(makePreToolUseInput('Bash', { command: 'sed -n 1p ~/.claude/.credentials.json' }));
+  it('blocks sed reading /proc/version', async () => {
+    const result = await hook(makePreToolUseInput('Bash', { command: 'sed -n 1p /proc/version' }));
     const output = (result as any).hookSpecificOutput;
     expect(output.permissionDecision).toBe('deny');
+    expect(output.reason).toMatch(/sensitive paths/);
   });
 
   it('ignores non-Bash tools', async () => {
