@@ -185,17 +185,29 @@ Bundle by dependency cluster.
 **Cluster E — Secret redaction port + tests:**
 - Secret redaction module body (Area 6, PORT small) — length-sort, Set-dedup, injectable paths, `ONECLI_API_KEY` exempt
 
-### Phase 3 — Large architecture-preserving (~weeks 13-18)
+### Phase 3 — Large architecture-preserving (~weeks 13-18) — DONE 2026-04-25
 
-**Cluster F — OneCLI gateway only:**
+**Cluster F — OneCLI gateway only:** DONE
 - OneCLI gateway credential model (Area 6, ADOPT medium-large) — credential injection only
 - `init-onecli` skill port (Area 6, conditional ADOPT)
-- `manage-group-env` skill port (Area 6, conditional ADOPT)
+- `use-native-credential-proxy` skill port (Area 6, conditional ADOPT) — adapted as v1's switch-back-to-default-path doc
+- `manage-group-env` skill — SKIP-ALT: v1's plugin-loader env passthrough is structurally different from v2's `container.json:envAllowlist`; "different but not strictly better" under the technical-merit lens
 
-The OneCLI **manual-approval handler** moves to Phase 4 because it depends on `pickApprover` (Phase 4 RBAC).
+The OneCLI **manual-approval handler** moves to Phase 4C because it depends on `pickApprover` (Phase 4B RBAC).
 
-**Cluster G — pnpm migration (optional under corrected lens):**
-- pnpm + `onlyBuiltDependencies` allowlist (Area 6, ADOPT medium) — supply-chain hygiene; not gated on observable pain but lower priority than Phase 4 multi-user work. Could defer if Phase 4-5 are urgent.
+**Cluster G — pnpm migration:** RESEQUENCED to Phase 4.5 (was Phase 3 G, optional under the original lens).
+
+Rationale for resequencing: pnpm hardening unlocks no other phase; it's pure hygiene. Phase 4 (RBAC + entity model) adds zero new runtime deps — all schema + code, no lockfile churn. Phase 5 (self-modification: agents installing packages dynamically into per-group images) is where `minimumReleaseAge` actually pays off. Landing Cluster G as a short Phase 4.5 between RBAC and self-mod means: (1) Phase 5 is born under pnpm policy from day one, so agent-installed packages are subject to the 3-day release-age gate; (2) Phase 4 RBAC churn doesn't have to be aware of pnpm semantics; (3) the lockfile-format flip is a single bounded migration rather than a parallel concern through Phase 4.
+
+### Phase 4.5 — Supply-chain hardening (short, optional, between Phase 4 and Phase 5)
+
+**Cluster G — pnpm migration:**
+- pnpm + `minimumReleaseAge: 4320` (3-day registry hold) (Area 6, ADOPT medium)
+- `onlyBuiltDependencies` allowlist (Area 6, ADOPT medium)
+- `.npmrc` `minReleaseAge=3d` fallback for non-pnpm consumers
+- `CLAUDE.md` "Supply Chain Security" section mirroring v2's
+
+Triggered before Phase 5 self-mod so that `install_packages` agents inherit the release-age policy.
 
 ### Phase 4 — Multi-user RBAC + entity model (~weeks 19-32)
 
@@ -413,7 +425,7 @@ Wait — checking carefully: AgentProvider abstraction is conceptually reimpleme
 | Label-scoped orphan cleanup (per-install slug) | ADOPT | small | high | Phase 2 D | Per-install label vs name-prefix |
 | `tini` as PID 1 + signal forwarding | ADOPT | trivial | high | Phase 1 | Cosmetic switch from `--init` |
 | Pinned CLI ARG versions in Dockerfile | ADOPT | trivial | high | Phase 1 | `CLAUDE_CODE_VERSION` etc. pinning |
-| pnpm `only-built-dependencies` allowlist | ADOPT | small | medium | Phase 3 G | Bundled with pnpm migration |
+| pnpm `only-built-dependencies` allowlist | ADOPT | small | medium | Phase 4.5 | Bundled with pnpm migration; resequenced from Phase 3 G |
 | Source-as-RO-bind-mount (no source baked) | ADOPT | small | high | Phase 2 D | Drop COPY+tsc, mirror v2 |
 | Two-DB session split + heartbeat-driven stuck detection | PORT-ARCH | large | high | Phase 6 | Genuinely better; gated on per-session container |
 | Per-session container model | PORT-ARCH | large | high | Phase 6 | The keystone of Phase 6 |
@@ -592,7 +604,7 @@ Per-area totals (revised): PORT=3, KEEP=6, **ADOPT=6** (was 5), **PORT-ARCH=1** 
 | Logging (pino vs hand-rolled) | KEEP v1 | — | high | — | pino wins |
 | Vitest + GH Actions CI | ADOPT v2 → v1 | small | high | Phase 2 D | v1 has zero workflow files |
 | `minimumReleaseAge` supply-chain hold | ADOPT v2 → v1 | trivial | high | Phase 1 | `.npmrc` works on npm |
-| pnpm + `onlyBuiltDependencies` | ADOPT v2 → v1 | medium | medium | Phase 3 G | Optional / lower priority |
+| pnpm + `onlyBuiltDependencies` | ADOPT v2 → v1 | medium | medium | Phase 4.5 | Resequenced from Phase 3 G — see rationale in Phase 4.5 section |
 | Version pinning (exact `4.26.0` not `^4.26.0`) | ADOPT v2 → v1 | trivial | high | Phase 1 | |
 | Bun split for agent-runner | SKIP-ALT (was SKIP-ARCH) | — | high | — | Alternative runtime |
 | `manage-mounts` skill | ADOPT v2 → v1 | trivial | high | Phase 1 | |
