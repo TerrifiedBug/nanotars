@@ -61,7 +61,7 @@ export function computeNextRun(task: ScheduledTask): string | null {
   return null;
 }
 
-async function runTask(
+export async function runTask(
   task: ScheduledTask,
   deps: SchedulerDependencies,
 ): Promise<void> {
@@ -151,6 +151,8 @@ async function runTask(
         isMain,
         isScheduledTask: true,
         model: task.model || 'claude-sonnet-4-5',
+        taskScript: task.script ?? undefined,
+        taskId: task.id,
       },
       (proc, containerName) => deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
       async (streamedOutput: ContainerOutput) => {

@@ -127,4 +127,25 @@ describe('composeGroupClaudeMd', () => {
 
     expect(first).toBe(second);
   });
+
+  // Test 9: Falls back to SKILL.md when instructions.md is absent
+  it('falls back to SKILL.md when instructions.md is absent', () => {
+    const dir = path.join(tmpDir, 'plugins', 'p', 'container-skills', 's');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), '# legacy\n');
+    composeGroupClaudeMd({ folder: 'g' }, { projectRoot: tmpDir });
+    const frag = path.join(tmpDir, 'groups/g/.claude-fragments/skill-s.md');
+    expect(fs.readFileSync(frag, 'utf-8')).toBe('# legacy\n');
+  });
+
+  // Test 10: Prefers instructions.md when both files exist
+  it('prefers instructions.md when both files exist', () => {
+    const dir = path.join(tmpDir, 'plugins', 'p', 'container-skills', 's');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), '# legacy\n');
+    fs.writeFileSync(path.join(dir, 'instructions.md'), '# preferred\n');
+    composeGroupClaudeMd({ folder: 'g' }, { projectRoot: tmpDir });
+    const frag = path.join(tmpDir, 'groups/g/.claude-fragments/skill-s.md');
+    expect(fs.readFileSync(frag, 'utf-8')).toBe('# preferred\n');
+  });
 });

@@ -39,6 +39,8 @@ export interface ContainerInput {
   model?: string;
   secrets?: Record<string, string>;
   outputNonce?: string;
+  taskScript?: string;
+  taskId?: string;
 }
 
 export interface ContainerOutput {
