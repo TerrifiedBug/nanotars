@@ -1,30 +1,25 @@
 /**
  * Split outbound text into chunks each ≤ `limit` characters.
  *
- * Prefers splitting at the last newline before the limit; falls back to a
- * hard-split when no newline is available. Returns `['']` for empty input
- * rather than `[]` so callers always have at least one chunk to send.
+ * Four-tier fallback for the split point: `\n\n` (paragraph break) → `\n`
+ * (line break) → ` ` (word break) → hard cut at `limit`. Each chunk is
+ * `.trimEnd()`-ed, and the next chunk's leading whitespace is `.trimStart()`-ed.
  *
- * Adopted from upstream nanoclaw v2 src/channels/chat-sdk-bridge.ts:104-118.
+ * Adopted verbatim from upstream nanoclaw v2
+ * src/channels/chat-sdk-bridge.ts:104-118.
  */
 export function splitForLimit(text: string, limit: number): string[] {
-  if (text.length === 0) return [''];
-
+  if (text.length <= limit) return [text];
   const chunks: string[] = [];
   let remaining = text;
-
   while (remaining.length > limit) {
-    const slice = remaining.slice(0, limit + 1);
-    const lastNewline = slice.lastIndexOf('\n');
-    const splitAt = lastNewline > 0 ? lastNewline : limit;
-    chunks.push(remaining.slice(0, splitAt));
-    // Skip the newline character itself when split on a newline boundary
-    remaining = remaining.slice(lastNewline > 0 ? splitAt + 1 : splitAt);
+    let cut = remaining.lastIndexOf('\n\n', limit);
+    if (cut <= 0) cut = remaining.lastIndexOf('\n', limit);
+    if (cut <= 0) cut = remaining.lastIndexOf(' ', limit);
+    if (cut <= 0) cut = limit;
+    chunks.push(remaining.slice(0, cut).trimEnd());
+    remaining = remaining.slice(cut).trimStart();
   }
-
-  if (remaining.length > 0) {
-    chunks.push(remaining);
-  }
-
+  if (remaining.length > 0) chunks.push(remaining);
   return chunks;
 }
