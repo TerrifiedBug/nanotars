@@ -11,6 +11,7 @@ import {
   deleteTask,
   deleteTasksForGroup,
   getAllChats,
+  getDb,
   getMessagesSince,
   getNewMessages,
   getRegisteredGroup,
@@ -436,8 +437,9 @@ describe('schema_version', () => {
       CREATE TABLE IF NOT EXISTS sessions (group_folder TEXT PRIMARY KEY, session_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS registered_groups (
         jid TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL UNIQUE,
-        trigger_pattern TEXT NOT NULL, added_at TEXT NOT NULL, container_config TEXT,
-        requires_trigger INTEGER DEFAULT 1, channel TEXT
+        pattern TEXT NOT NULL, added_at TEXT NOT NULL, container_config TEXT,
+        engage_mode TEXT NOT NULL DEFAULT 'pattern', sender_scope TEXT NOT NULL DEFAULT 'all',
+        ignored_message_policy TEXT NOT NULL DEFAULT 'drop', channel TEXT
       );
     `);
     // No schema_version table, no is_bot_message column — partial old-system state
@@ -489,16 +491,18 @@ describe('folder validation', () => {
   it('rejects folders longer than 64 characters', () => {
     const longFolder = 'a'.repeat(65);
     setRegisteredGroup('test@g.us', {
-      name: 'Test', folder: longFolder, trigger: '@Bot',
+      name: 'Test', folder: longFolder, pattern: '@Bot',
       added_at: new Date().toISOString(),
+      engage_mode: 'pattern', sender_scope: 'all', ignored_message_policy: 'drop',
     });
     expect(getRegisteredGroup('test@g.us')).toBeUndefined();
   });
 
   it('rejects reserved folder name "global"', () => {
     setRegisteredGroup('test@g.us', {
-      name: 'Test', folder: 'global', trigger: '@Bot',
+      name: 'Test', folder: 'global', pattern: '@Bot',
       added_at: new Date().toISOString(),
+      engage_mode: 'pattern', sender_scope: 'all', ignored_message_policy: 'drop',
     });
     expect(getRegisteredGroup('test@g.us')).toBeUndefined();
   });
@@ -515,6 +519,62 @@ describe('folder validation', () => {
     expect(isValidGroupFolder('.hidden')).toBe(false);
     expect(isValidGroupFolder('global')).toBe(false);
     expect(isValidGroupFolder('a'.repeat(65))).toBe(false);
+  });
+});
+
+// --- four-axis engage model schema ---
+
+describe('four-axis engage model schema', () => {
+  function getColumns(tableName: string): string[] {
+    const rows = getDb()
+      .prepare(`PRAGMA table_info(${tableName})`)
+      .all() as Array<{ name: string }>;
+    return rows.map((r) => r.name);
+  }
+
+  it('createSchema includes engage_mode, pattern, sender_scope, ignored_message_policy columns', () => {
+    const cols = getColumns('registered_groups');
+    expect(cols).toContain('engage_mode');
+    expect(cols).toContain('pattern');
+    expect(cols).toContain('sender_scope');
+    expect(cols).toContain('ignored_message_policy');
+  });
+
+  it('createSchema does NOT include trigger_pattern or requires_trigger columns (start-fresh decision)', () => {
+    const cols = getColumns('registered_groups');
+    expect(cols).not.toContain('trigger_pattern');
+    expect(cols).not.toContain('requires_trigger');
+  });
+
+  it('round-trip insert + read preserves all four engage axes', () => {
+    setRegisteredGroup('axis@g.us', {
+      name: 'Axis Group',
+      folder: 'axis-group',
+      pattern: '@Bot',
+      added_at: '2024-06-01T00:00:00.000Z',
+      engage_mode: 'mention-sticky',
+      sender_scope: 'known',
+      ignored_message_policy: 'observe',
+    });
+    const row = getRegisteredGroup('axis@g.us');
+    expect(row).toBeDefined();
+    expect(row!.pattern).toBe('@Bot');
+    expect(row!.engage_mode).toBe('mention-sticky');
+    expect(row!.sender_scope).toBe('known');
+    expect(row!.ignored_message_policy).toBe('observe');
+  });
+
+  it('default values applied when engage axes are not overridden', () => {
+    // Insert via raw SQL without specifying engage axes to test DB defaults
+    getDb().prepare(
+      `INSERT INTO registered_groups (jid, name, folder, pattern, added_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run('default@g.us', 'Default Group', 'default-group', '@Bot', '2024-06-01T00:00:00.000Z');
+    const row = getRegisteredGroup('default@g.us');
+    expect(row).toBeDefined();
+    expect(row!.engage_mode).toBe('pattern');
+    expect(row!.sender_scope).toBe('all');
+    expect(row!.ignored_message_policy).toBe('drop');
   });
 });
 

@@ -32,14 +32,20 @@ export interface ContainerConfig {
   timeout?: number; // Default: 300000 (5 minutes)
 }
 
+export type EngageMode = 'pattern' | 'always' | 'mention-sticky';
+export type SenderScope = 'all' | 'known';
+export type IgnoredMessagePolicy = 'drop' | 'observe';
+
 export interface RegisteredGroup {
   name: string;
   folder: string;
-  trigger: string;
+  pattern: string;
   added_at: string;
   channel?: string; // Which channel plugin registered this group (e.g. 'whatsapp', 'discord')
   containerConfig?: ContainerConfig;
-  requiresTrigger?: boolean; // Default: true for groups, false for solo chats
+  engage_mode: EngageMode;
+  sender_scope: SenderScope;
+  ignored_message_policy: IgnoredMessagePolicy;
 }
 
 export interface ReplyContext {

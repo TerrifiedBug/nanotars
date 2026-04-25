@@ -15,22 +15,31 @@ import { RegisteredGroup } from '../../types.js';
 const MAIN_GROUP: RegisteredGroup = {
   name: 'Main',
   folder: 'main',
-  trigger: 'always',
+  pattern: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
+  engage_mode: 'always',
+  sender_scope: 'all',
+  ignored_message_policy: 'drop',
 };
 
 const OTHER_GROUP: RegisteredGroup = {
   name: 'Other',
   folder: 'other-group',
-  trigger: '@TARS',
+  pattern: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
+  engage_mode: 'pattern',
+  sender_scope: 'all',
+  ignored_message_policy: 'drop',
 };
 
 const THIRD_GROUP: RegisteredGroup = {
   name: 'Third',
   folder: 'third-group',
-  trigger: '@TARS',
+  pattern: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
+  engage_mode: 'pattern',
+  sender_scope: 'all',
+  ignored_message_policy: 'drop',
 };
 
 let groups: Record<string, RegisteredGroup>;
@@ -293,7 +302,7 @@ describe('register_group authorization', () => {
         jid: 'new@g.us',
         name: 'New Group',
         folder: 'new-group',
-        trigger: '@TARS',
+        pattern: '@TARS',
       },
       'other-group',
       false,
@@ -565,7 +574,7 @@ describe('register_group path traversal', () => {
         jid: 'evil@g.us',
         name: 'Evil Group',
         folder: '../../.ssh',
-        trigger: '@TARS',
+        pattern: '@TARS',
       },
       'main',
       true,
@@ -583,7 +592,7 @@ describe('register_group path traversal', () => {
         jid: 'slash@g.us',
         name: 'Slash Group',
         folder: 'foo/bar',
-        trigger: '@TARS',
+        pattern: '@TARS',
       },
       'main',
       true,
@@ -600,7 +609,7 @@ describe('register_group path traversal', () => {
         jid: 'dot@g.us',
         name: 'Dot Group',
         folder: '.hidden',
-        trigger: '@TARS',
+        pattern: '@TARS',
       },
       'main',
       true,
@@ -617,7 +626,7 @@ describe('register_group path traversal', () => {
         jid: 'good@g.us',
         name: 'Good Group',
         folder: 'family-chat',
-        trigger: '@TARS',
+        pattern: '@TARS',
       },
       'main',
       true,
@@ -660,7 +669,7 @@ describe('register_group success', () => {
         jid: 'new@g.us',
         name: 'New Group',
         folder: 'new-group',
-        trigger: '@TARS',
+        pattern: '@TARS',
       },
       'main',
       true,
@@ -672,7 +681,7 @@ describe('register_group success', () => {
     expect(group).toBeDefined();
     expect(group!.name).toBe('New Group');
     expect(group!.folder).toBe('new-group');
-    expect(group!.trigger).toBe('@TARS');
+    expect(group!.pattern).toBe('@TARS');
   });
 
   it('register_group rejects request with missing fields', async () => {
@@ -681,7 +690,7 @@ describe('register_group success', () => {
         type: 'register_group',
         jid: 'partial@g.us',
         name: 'Partial',
-        // missing folder and trigger
+        // missing folder and pattern
       },
       'main',
       true,

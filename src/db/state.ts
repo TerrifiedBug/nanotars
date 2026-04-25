@@ -1,4 +1,4 @@
-import { RegisteredGroup } from '../types.js';
+import { RegisteredGroup, EngageMode, SenderScope, IgnoredMessagePolicy } from '../types.js';
 import { logger } from '../logger.js';
 import { getDb } from './init.js';
 
@@ -49,10 +49,12 @@ interface RegisteredGroupRow {
   jid: string;
   name: string;
   folder: string;
-  trigger_pattern: string;
+  pattern: string;
   added_at: string;
   container_config: string | null;
-  requires_trigger: number | null;
+  engage_mode: string;
+  sender_scope: string;
+  ignored_message_policy: string;
   channel: string | null;
 }
 
@@ -60,13 +62,15 @@ function mapRegisteredGroupRow(row: RegisteredGroupRow): RegisteredGroup {
   return {
     name: row.name,
     folder: row.folder,
-    trigger: row.trigger_pattern,
+    pattern: row.pattern,
     added_at: row.added_at,
     channel: row.channel || undefined,
     containerConfig: row.container_config
       ? JSON.parse(row.container_config)
       : undefined,
-    requiresTrigger: row.requires_trigger === null ? undefined : row.requires_trigger === 1,
+    engage_mode: (row.engage_mode as EngageMode) || 'pattern',
+    sender_scope: (row.sender_scope as SenderScope) || 'all',
+    ignored_message_policy: (row.ignored_message_policy as IgnoredMessagePolicy) || 'drop',
   };
 }
 
@@ -98,16 +102,18 @@ export function setRegisteredGroup(
   channel?: string,
 ): void {
   getDb().prepare(
-    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, channel)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, pattern, added_at, container_config, engage_mode, sender_scope, ignored_message_policy, channel)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     jid,
     group.name,
     group.folder,
-    group.trigger,
+    group.pattern,
     group.added_at,
     group.containerConfig ? JSON.stringify(group.containerConfig) : null,
-    group.requiresTrigger === undefined ? 1 : group.requiresTrigger ? 1 : 0,
+    group.engage_mode ?? 'pattern',
+    group.sender_scope ?? 'all',
+    group.ignored_message_policy ?? 'drop',
     channel || null,
   );
 }

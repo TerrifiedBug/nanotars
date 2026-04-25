@@ -215,8 +215,10 @@ export class MessageOrchestrator {
     const lastTriggerMessageId = missedMessages[missedMessages.length - 1]?.id;
 
     // For non-main groups, check if trigger is required and present
-    if (!isMainGroup && group.requiresTrigger !== false) {
-      const pattern = this.deps.createTriggerPattern(group.trigger);
+    // engage_mode='always' skips the trigger check entirely.
+    // engage_mode='pattern' and 'mention-sticky' (Phase 4 forward-compat) require a trigger.
+    if (!isMainGroup && group.engage_mode !== 'always') {
+      const pattern = this.deps.createTriggerPattern(group.pattern);
       const hasTrigger = missedMessages.some((m) =>
         pattern.test(m.content.trim()) &&
         (m.is_from_me || isTriggerAllowed(chatJid, m.sender, this.senderAllowlist)),
@@ -491,10 +493,12 @@ export class MessageOrchestrator {
             }
 
             const isMainGroup = group.folder === this.deps.mainGroupFolder;
-            const needsTrigger = !isMainGroup && group.requiresTrigger !== false;
+            // engage_mode='always' skips the trigger check entirely.
+            // engage_mode='pattern' and 'mention-sticky' (Phase 4 forward-compat) require a trigger.
+            const needsTrigger = !isMainGroup && group.engage_mode !== 'always';
 
             if (needsTrigger) {
-              const pattern = this.deps.createTriggerPattern(group.trigger);
+              const pattern = this.deps.createTriggerPattern(group.pattern);
               const hasTrigger = groupMessages.some((m) =>
                 pattern.test(m.content.trim()) &&
                 (m.is_from_me || isTriggerAllowed(chatJid, m.sender, this.senderAllowlist)),
@@ -503,7 +507,12 @@ export class MessageOrchestrator {
               const hasReplyToBot = groupMessages.some((m) =>
                 m.reply_context?.sender_name === this.deps.assistantName,
               );
-              if (!hasTrigger && !hasReplyToBot) continue;
+              if (!hasTrigger && !hasReplyToBot) {
+                // ignored_message_policy='observe': messages are already stored in DB;
+                // we skip agent invocation. 'drop' (default) does the same — the
+                // distinction matters for callers that want chat-history capture.
+                continue;
+              }
             }
 
             const allPending = this.deps.getMessagesSince(

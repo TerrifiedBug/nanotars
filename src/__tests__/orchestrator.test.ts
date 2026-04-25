@@ -53,16 +53,21 @@ function makeDeps(overrides: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
 const mainGroup: RegisteredGroup = {
   name: 'Main Chat',
   folder: 'main',
-  trigger: '@TARS',
+  pattern: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
+  engage_mode: 'always',
+  sender_scope: 'all',
+  ignored_message_policy: 'drop',
 };
 
 const secondaryGroup: RegisteredGroup = {
   name: 'Secondary',
   folder: 'secondary',
-  trigger: '@TARS',
+  pattern: '@TARS',
   added_at: '2024-01-01T00:00:00.000Z',
-  requiresTrigger: true,
+  engage_mode: 'pattern',
+  sender_scope: 'all',
+  ignored_message_policy: 'drop',
 };
 
 function makeMessage(overrides: Partial<NewMessage> = {}): NewMessage {
@@ -265,6 +270,158 @@ describe('MessageOrchestrator', () => {
       const result = await orch.processGroupMessages('sec@g.us');
       expect(result).toBe(true);
       expect(deps.runContainerAgent).toHaveBeenCalled();
+    });
+  });
+
+  describe('engage_mode semantics (processGroupMessages)', () => {
+    it('engage_mode=always engages on every message regardless of pattern match', async () => {
+      const alwaysGroup: RegisteredGroup = {
+        name: 'Always',
+        folder: 'always-group',
+        pattern: '@TARS',
+        added_at: '2024-01-01T00:00:00.000Z',
+        engage_mode: 'always',
+        sender_scope: 'all',
+        ignored_message_policy: 'drop',
+      };
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ chat_jid: 'always@g.us', content: 'no trigger at all' }),
+        ]),
+        mainGroupFolder: 'other-main', // so always-group is not the main group
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'always@g.us': alwaysGroup };
+
+      const result = await orch.processGroupMessages('always@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).toHaveBeenCalled();
+    });
+
+    it('engage_mode=pattern only engages on pattern-matching messages', async () => {
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ chat_jid: 'sec@g.us', content: 'no trigger here' }),
+        ]),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'sec@g.us': secondaryGroup }; // engage_mode: 'pattern'
+
+      const result = await orch.processGroupMessages('sec@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).not.toHaveBeenCalled();
+    });
+
+    it('engage_mode=mention-sticky (Phase 4 forward-compat) currently treated as pattern', async () => {
+      const mentionStickyGroup: RegisteredGroup = {
+        name: 'Sticky',
+        folder: 'sticky-group',
+        pattern: '@TARS',
+        added_at: '2024-01-01T00:00:00.000Z',
+        engage_mode: 'mention-sticky',
+        sender_scope: 'all',
+        ignored_message_policy: 'drop',
+      };
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ chat_jid: 'sticky@g.us', content: 'no trigger here' }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'sticky@g.us': mentionStickyGroup };
+
+      // Without trigger: should NOT engage (behaves as pattern mode)
+      const result = await orch.processGroupMessages('sticky@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).not.toHaveBeenCalled();
+    });
+
+    it('engage_mode=mention-sticky engages when trigger pattern matches', async () => {
+      const mentionStickyGroup: RegisteredGroup = {
+        name: 'Sticky',
+        folder: 'sticky-group',
+        pattern: '@TARS',
+        added_at: '2024-01-01T00:00:00.000Z',
+        engage_mode: 'mention-sticky',
+        sender_scope: 'all',
+        ignored_message_policy: 'drop',
+      };
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ chat_jid: 'sticky@g.us', content: '@TARS hello' }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'sticky@g.us': mentionStickyGroup };
+
+      const result = await orch.processGroupMessages('sticky@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).toHaveBeenCalled();
+    });
+
+    it('ignored_message_policy=observe: non-trigger messages do not invoke agent (messages already stored in DB)', async () => {
+      const observeGroup: RegisteredGroup = {
+        name: 'Observer',
+        folder: 'observer-group',
+        pattern: '@TARS',
+        added_at: '2024-01-01T00:00:00.000Z',
+        engage_mode: 'pattern',
+        sender_scope: 'all',
+        ignored_message_policy: 'observe',
+      };
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ chat_jid: 'obs@g.us', content: 'just a chat message, no trigger' }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'obs@g.us': observeGroup };
+
+      // No trigger match → agent not invoked (message already stored by channel adapter)
+      const result = await orch.processGroupMessages('obs@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).not.toHaveBeenCalled();
+    });
+
+    it('ignored_message_policy=observe: trigger messages DO invoke agent', async () => {
+      const observeGroup: RegisteredGroup = {
+        name: 'Observer',
+        folder: 'observer-group',
+        pattern: '@TARS',
+        added_at: '2024-01-01T00:00:00.000Z',
+        engage_mode: 'pattern',
+        sender_scope: 'all',
+        ignored_message_policy: 'observe',
+      };
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ chat_jid: 'obs@g.us', content: '@TARS process this' }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'obs@g.us': observeGroup };
+
+      const result = await orch.processGroupMessages('obs@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).toHaveBeenCalled();
+    });
+
+    it('ignored_message_policy=drop (default): non-trigger messages silently skipped', async () => {
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ chat_jid: 'sec@g.us', content: 'no trigger here' }),
+        ]),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'sec@g.us': secondaryGroup }; // ignored_message_policy: 'drop'
+
+      const result = await orch.processGroupMessages('sec@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).not.toHaveBeenCalled();
     });
   });
 

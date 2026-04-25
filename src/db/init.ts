@@ -81,10 +81,12 @@ export function createSchema(database: Database.Database): void {
       jid TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       folder TEXT NOT NULL UNIQUE,
-      trigger_pattern TEXT NOT NULL,
+      pattern TEXT NOT NULL,
       added_at TEXT NOT NULL,
       container_config TEXT,
-      requires_trigger INTEGER DEFAULT 1,
+      engage_mode TEXT NOT NULL DEFAULT 'pattern',
+      sender_scope TEXT NOT NULL DEFAULT 'all',
+      ignored_message_policy TEXT NOT NULL DEFAULT 'drop',
       channel TEXT
     );
     CREATE TABLE IF NOT EXISTS unregistered_senders (

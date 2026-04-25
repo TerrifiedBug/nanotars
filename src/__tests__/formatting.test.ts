@@ -247,68 +247,73 @@ describe('stripInternalTags', () => {
   });
 });
 
-// --- Trigger gating with requiresTrigger flag ---
+// --- Trigger gating with engage_mode ---
 
-describe('trigger gating (requiresTrigger interaction)', () => {
+import type { EngageMode } from '../types.js';
+
+describe('trigger gating (engage_mode)', () => {
   // Replicates the exact logic from processGroupMessages and startMessageLoop:
-  //   if (!isMainGroup && group.requiresTrigger !== false) { check trigger }
+  //   if (!isMainGroup && group.engage_mode !== 'always') { check trigger }
   function shouldRequireTrigger(
     isMainGroup: boolean,
-    requiresTrigger: boolean | undefined,
+    engage_mode: EngageMode,
   ): boolean {
-    return !isMainGroup && requiresTrigger !== false;
+    return !isMainGroup && engage_mode !== 'always';
   }
 
   function shouldProcess(
     isMainGroup: boolean,
-    requiresTrigger: boolean | undefined,
+    engage_mode: EngageMode,
     messages: NewMessage[],
-    trigger?: string,
+    pattern?: string,
   ): boolean {
-    if (!shouldRequireTrigger(isMainGroup, requiresTrigger)) return true;
-    const pattern = createTriggerPattern(trigger || `@${ASSISTANT_NAME}`);
-    return messages.some((m) => pattern.test(m.content.trim()));
+    if (!shouldRequireTrigger(isMainGroup, engage_mode)) return true;
+    const re = createTriggerPattern(pattern || `@${ASSISTANT_NAME}`);
+    return messages.some((m) => re.test(m.content.trim()));
   }
 
   it('main group always processes (no trigger needed)', () => {
     const msgs = [makeMsg({ content: 'hello no trigger' })];
-    expect(shouldProcess(true, undefined, msgs)).toBe(true);
+    expect(shouldProcess(true, 'pattern', msgs)).toBe(true);
   });
 
-  it('main group processes even with requiresTrigger=true', () => {
+  it('main group processes even with engage_mode=pattern', () => {
     const msgs = [makeMsg({ content: 'hello no trigger' })];
-    expect(shouldProcess(true, true, msgs)).toBe(true);
+    expect(shouldProcess(true, 'pattern', msgs)).toBe(true);
   });
 
-  it('non-main group with requiresTrigger=undefined requires trigger (defaults to true)', () => {
+  it('non-main group with engage_mode=pattern requires trigger', () => {
     const msgs = [makeMsg({ content: 'hello no trigger' })];
-    expect(shouldProcess(false, undefined, msgs)).toBe(false);
+    expect(shouldProcess(false, 'pattern', msgs)).toBe(false);
   });
 
-  it('non-main group with requiresTrigger=true requires trigger', () => {
-    const msgs = [makeMsg({ content: 'hello no trigger' })];
-    expect(shouldProcess(false, true, msgs)).toBe(false);
-  });
-
-  it('non-main group with requiresTrigger=true processes when trigger present', () => {
+  it('non-main group with engage_mode=pattern processes when trigger present', () => {
     const msgs = [makeMsg({ content: `@${ASSISTANT_NAME} do something` })];
-    expect(shouldProcess(false, true, msgs)).toBe(true);
+    expect(shouldProcess(false, 'pattern', msgs)).toBe(true);
   });
 
-  it('non-main group with requiresTrigger=false always processes (no trigger needed)', () => {
+  it('non-main group with engage_mode=always always processes (no trigger needed)', () => {
     const msgs = [makeMsg({ content: 'hello no trigger' })];
-    expect(shouldProcess(false, false, msgs)).toBe(true);
+    expect(shouldProcess(false, 'always', msgs)).toBe(true);
   });
 
-  it('uses per-group trigger instead of global ASSISTANT_NAME', () => {
+  it('non-main group with engage_mode=mention-sticky behaves as pattern (Phase 4 forward-compat)', () => {
+    const msgs = [makeMsg({ content: 'hello no trigger' })];
+    // mention-sticky treated as pattern for now — no trigger = no process
+    expect(shouldProcess(false, 'mention-sticky', msgs)).toBe(false);
+    // with trigger present it fires
+    expect(shouldProcess(false, 'mention-sticky', [makeMsg({ content: `@${ASSISTANT_NAME} hi` })])).toBe(true);
+  });
+
+  it('uses per-group pattern instead of global ASSISTANT_NAME', () => {
     const msgs = [makeMsg({ content: '@CustomBot do something' })];
-    expect(shouldProcess(false, true, msgs, '@CustomBot')).toBe(true);
+    expect(shouldProcess(false, 'pattern', msgs, '@CustomBot')).toBe(true);
     // Same message should NOT trigger with global default
-    expect(shouldProcess(false, true, msgs)).toBe(false);
+    expect(shouldProcess(false, 'pattern', msgs)).toBe(false);
   });
 
-  it('per-group trigger is case-insensitive', () => {
+  it('per-group pattern is case-insensitive', () => {
     const msgs = [makeMsg({ content: '@custombot do something' })];
-    expect(shouldProcess(false, true, msgs, '@CustomBot')).toBe(true);
+    expect(shouldProcess(false, 'pattern', msgs, '@CustomBot')).toBe(true);
   });
 });

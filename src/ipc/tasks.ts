@@ -3,7 +3,7 @@ import { CronExpressionParser } from 'cron-parser';
 import { TIMEZONE } from '../config.js';
 import { createTask, deleteTask, getTaskById, isValidGroupFolder, updateTask } from '../db.js';
 import { logger } from '../logger.js';
-import { RegisteredGroup } from '../types.js';
+import { RegisteredGroup, EngageMode, SenderScope, IgnoredMessagePolicy } from '../types.js';
 import { authorizedTaskAction } from './auth.js';
 import { IpcDeps } from './types.js';
 
@@ -57,8 +57,10 @@ export async function processTaskIpc(
     jid?: string;
     name?: string;
     folder?: string;
-    trigger?: string;
-    requiresTrigger?: boolean;
+    pattern?: string;
+    engage_mode?: EngageMode;
+    sender_scope?: SenderScope;
+    ignored_message_policy?: IgnoredMessagePolicy;
     containerConfig?: RegisteredGroup['containerConfig'];
   },
   sourceGroup: string, // Verified identity from IPC directory
@@ -218,7 +220,7 @@ export async function processTaskIpc(
         );
         break;
       }
-      if (data.jid && data.name && data.folder && data.trigger) {
+      if (data.jid && data.name && data.folder && data.pattern) {
         // Validate folder name: allowlist of safe characters only
         if (!isValidGroupFolder(data.folder)) {
           logger.warn(
@@ -230,10 +232,12 @@ export async function processTaskIpc(
         deps.registerGroup(data.jid, {
           name: data.name,
           folder: data.folder,
-          trigger: data.trigger,
+          pattern: data.pattern,
           added_at: new Date().toISOString(),
           containerConfig: data.containerConfig,
-          requiresTrigger: data.requiresTrigger,
+          engage_mode: data.engage_mode ?? 'pattern',
+          sender_scope: data.sender_scope ?? 'all',
+          ignored_message_policy: data.ignored_message_policy ?? 'drop',
         });
       } else {
         logger.warn(
