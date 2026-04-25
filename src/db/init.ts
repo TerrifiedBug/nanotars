@@ -162,9 +162,32 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
     name: '006_add_task_script',
     up: (db) => safeAddColumn(db, `ALTER TABLE scheduled_tasks ADD COLUMN script TEXT`),
   },
+  {
+    name: '007_add_engage_mode_axes',
+    up: (db) => {
+      // Phase 2 commit 1e086d2 replaced requires_trigger + trigger_pattern
+      // with the 4-axis engage model directly in createSchema DDL. Backfill
+      // for any dev DB that pre-dates that commit. safeAddColumn is
+      // idempotent — re-running is a no-op when the column already exists.
+      safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN engage_mode TEXT NOT NULL DEFAULT 'pattern'`);
+      safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN pattern TEXT`);
+      safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN sender_scope TEXT NOT NULL DEFAULT 'all'`);
+      safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN ignored_message_policy TEXT NOT NULL DEFAULT 'drop'`);
+
+      // Best-effort copy from old columns if they exist. SQLite ≤3.35 has
+      // no DROP COLUMN; legacy columns stay as unused dead weight.
+      const cols = (db.pragma('table_info(registered_groups)') as Array<{ name: string }>).map((c) => c.name);
+      if (cols.includes('trigger_pattern')) {
+        db.exec(`UPDATE registered_groups SET pattern = trigger_pattern WHERE pattern IS NULL AND trigger_pattern IS NOT NULL`);
+      }
+      if (cols.includes('requires_trigger')) {
+        db.exec(`UPDATE registered_groups SET engage_mode = CASE WHEN requires_trigger = 0 THEN 'always' ELSE 'pattern' END WHERE engage_mode = 'pattern'`);
+      }
+    },
+  },
 ];
 
-function runMigrations(database: Database.Database): void {
+export function runMigrations(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS schema_version (
       version TEXT PRIMARY KEY,
