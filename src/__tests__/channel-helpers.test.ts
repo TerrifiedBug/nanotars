@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitForLimit } from '../channel-helpers.js';
+import { splitForLimit, mediaKindFromExtension } from '../channel-helpers.js';
 
 describe('splitForLimit', () => {
   it('returns single chunk when text fits within limit', () => {
@@ -56,5 +56,41 @@ describe('splitForLimit', () => {
     //   remaining = '     \n     bbbb'.trimStart() = 'bbbb'  (4 ≤ 6, exits loop)
     const out = splitForLimit('aaaa     \n     bbbb', 6);
     expect(out).toEqual(['aaaa', 'bbbb']);
+  });
+});
+
+describe('mediaKindFromExtension', () => {
+  it('returns "photo" for image extensions', () => {
+    expect(mediaKindFromExtension('foo.jpg')).toBe('photo');
+    expect(mediaKindFromExtension('foo.jpeg')).toBe('photo');
+    expect(mediaKindFromExtension('foo.png')).toBe('photo');
+    expect(mediaKindFromExtension('foo.gif')).toBe('photo');
+    expect(mediaKindFromExtension('foo.webp')).toBe('photo');
+  });
+  it('returns "video" for video extensions', () => {
+    expect(mediaKindFromExtension('foo.mp4')).toBe('video');
+    expect(mediaKindFromExtension('foo.webm')).toBe('video');
+    expect(mediaKindFromExtension('foo.mov')).toBe('video');
+    expect(mediaKindFromExtension('foo.mkv')).toBe('video');
+  });
+  it('returns "audio" for audio extensions', () => {
+    expect(mediaKindFromExtension('foo.mp3')).toBe('audio');
+    expect(mediaKindFromExtension('foo.ogg')).toBe('audio');
+    expect(mediaKindFromExtension('foo.opus')).toBe('audio');
+    expect(mediaKindFromExtension('foo.m4a')).toBe('audio');
+    expect(mediaKindFromExtension('foo.wav')).toBe('audio');
+  });
+  it('returns "document" for unknown extensions', () => {
+    expect(mediaKindFromExtension('foo.txt')).toBe('document');
+    expect(mediaKindFromExtension('foo.zip')).toBe('document');
+    expect(mediaKindFromExtension('foo.pdf')).toBe('document');
+  });
+  it('returns "document" for files with no extension', () => {
+    expect(mediaKindFromExtension('README')).toBe('document');
+  });
+  it('handles uppercase and mixed-case extensions', () => {
+    expect(mediaKindFromExtension('foo.JPG')).toBe('photo');
+    expect(mediaKindFromExtension('foo.Mp4')).toBe('video');
+    expect(mediaKindFromExtension('foo.MP3')).toBe('audio');
   });
 });
