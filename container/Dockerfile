@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     jq \
     git \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
@@ -86,5 +87,9 @@ USER node
 # Set working directory to group workspace
 WORKDIR /workspace/group
 
-# Entry point reads JSON from stdin, outputs JSON to stdout
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Use tini as PID 1 to ensure proper signal forwarding and zombie reaping.
+# The -- separates tini's arguments from the actual command.
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# The entrypoint script runs the agent-runner
+CMD ["/app/entrypoint.sh"]

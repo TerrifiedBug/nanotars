@@ -154,9 +154,10 @@ export function run(args: string[]): ChildProcessByStdio<Writable, Readable, Rea
 export function extraRunArgs(): string[] {
   if (detectRuntime() === 'docker') {
     // Chromium needs: ptrace (crashpad), relaxed seccomp (user namespaces
-    // for sandbox), sufficient /dev/shm (default 64MB causes OOM), and --init
-    // (reaps zombie processes). The seccomp profile is Playwright's official
-    // one — Docker's default blocks clone/unshare/ptrace that Chromium needs.
+    // for sandbox), and sufficient /dev/shm (default 64MB causes OOM).
+    // Signal forwarding and zombie reaping are now handled by tini as PID 1.
+    // The seccomp profile is Playwright's official one — Docker's default
+    // blocks clone/unshare/ptrace that Chromium needs.
     const seccomp = path.join(__dirname, '..', 'container', 'chromium-seccomp.json');
     return [
       '--cap-drop=ALL',
@@ -164,7 +165,6 @@ export function extraRunArgs(): string[] {
       '--security-opt=no-new-privileges',
       '--security-opt', `seccomp=${seccomp}`,
       '--shm-size=2g',
-      '--init',
       '--cpus=2',
       '--memory=4g',
       '--pids-limit=256',
