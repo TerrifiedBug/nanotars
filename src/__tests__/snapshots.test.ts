@@ -7,8 +7,19 @@ vi.mock('../config.js', () => ({
   DATA_DIR: '/tmp/__will_be_replaced__',
 }));
 
-import { mapTasksToSnapshot, writeTasksSnapshot, writeGroupsSnapshot } from '../snapshots.js';
+import {
+  mapAgentGroupsToSnapshot,
+  mapTasksToSnapshot,
+  writeGroupsSnapshot,
+  writeTasksSnapshot,
+} from '../snapshots.js';
 import * as configMod from '../config.js';
+import {
+  _initTestDatabase,
+  createAgentGroup,
+  createMessagingGroup,
+  createWiring,
+} from '../db/index.js';
 import type { ScheduledTask } from '../types.js';
 
 let tmpDir: string;
@@ -151,5 +162,81 @@ describe('writeGroupsSnapshot', () => {
     const file = path.join(tmpDir, 'ipc', 'main', 'available_groups.json');
     const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
     expect(new Date(data.lastSync).getTime()).not.toBeNaN();
+  });
+});
+
+// --- mapAgentGroupsToSnapshot (Phase 4A: source from new entity-model tables) ---
+
+describe('mapAgentGroupsToSnapshot', () => {
+  beforeEach(() => {
+    _initTestDatabase();
+  });
+
+  it('returns empty array when no agent groups exist', () => {
+    expect(mapAgentGroupsToSnapshot()).toEqual([]);
+  });
+
+  it('produces one row per (agent, wiring) pair sourced from the entity model', () => {
+    const ag = createAgentGroup({ name: 'Family', folder: 'family' });
+    const mg = createMessagingGroup({
+      channel_type: 'whatsapp',
+      platform_id: 'fam@g.us',
+      name: 'Family Chat',
+    });
+    createWiring({
+      messaging_group_id: mg.id,
+      agent_group_id: ag.id,
+      engage_mode: 'pattern',
+      engage_pattern: '@TARS',
+    });
+
+    const out = mapAgentGroupsToSnapshot();
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      jid: 'fam@g.us',
+      name: 'Family Chat',
+      isRegistered: true,
+    });
+    expect(out[0].lastActivity).toBeDefined();
+  });
+
+  it('emits one row per wiring for multi-wiring agent groups', () => {
+    const ag = createAgentGroup({ name: 'Multi', folder: 'multi' });
+    const mg1 = createMessagingGroup({
+      channel_type: 'whatsapp',
+      platform_id: 'a@g.us',
+      name: 'Chat A',
+    });
+    const mg2 = createMessagingGroup({
+      channel_type: 'discord',
+      platform_id: 'dc:1',
+      name: 'Chat B',
+    });
+    createWiring({ messaging_group_id: mg1.id, agent_group_id: ag.id });
+    createWiring({ messaging_group_id: mg2.id, agent_group_id: ag.id });
+
+    const out = mapAgentGroupsToSnapshot();
+    expect(out).toHaveLength(2);
+    const jids = out.map((r) => r.jid).sort();
+    expect(jids).toEqual(['a@g.us', 'dc:1']);
+  });
+
+  it('falls back to agent_group.name when messaging_group.name is null', () => {
+    const ag = createAgentGroup({ name: 'Agent Display Name', folder: 'noname' });
+    const mg = createMessagingGroup({
+      channel_type: 'whatsapp',
+      platform_id: 'noname@g.us',
+      name: null,
+    });
+    createWiring({ messaging_group_id: mg.id, agent_group_id: ag.id });
+
+    const out = mapAgentGroupsToSnapshot();
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe('Agent Display Name');
+  });
+
+  it('skips agent groups with no wirings', () => {
+    createAgentGroup({ name: 'Orphan', folder: 'orphan' });
+    expect(mapAgentGroupsToSnapshot()).toEqual([]);
   });
 });

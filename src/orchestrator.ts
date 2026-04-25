@@ -35,6 +35,11 @@ import {
   getWiring,
   resolveAgentsForInbound,
 } from './db/agent-groups.js';
+import {
+  canAccessAgentGroup,
+  resolveSender,
+  type SenderInfo,
+} from './permissions.js';
 
 /** Dependency injection interface for the orchestrator. */
 export interface OrchestratorDeps {
@@ -406,6 +411,29 @@ export class MessageOrchestrator {
 
     const lastTriggerMessageId = missedMessages[missedMessages.length - 1]?.id;
 
+    // Phase 4A permissions hook (stubs return undefined / true so behavior is
+    // unchanged; Phase 4B replaces with real users / user_roles checks). The
+    // callsite is anchored here, just before any dispatch, so 4B can short-
+    // circuit message processing for unauthorized senders without churning
+    // the routing shape.
+    const channel = this.channels.find((ch) => ch.ownsJid(chatJid));
+    const lastMsg = missedMessages[missedMessages.length - 1];
+    const senderInfo: SenderInfo = {
+      channel: channel?.name ?? group.channel ?? 'unknown',
+      platform_id: chatJid,
+      sender_handle: lastMsg.sender,
+      sender_name: lastMsg.sender_name,
+    };
+    const userId = resolveSender(senderInfo);
+    const agentGroupRow = getAgentGroupByFolder(group.folder);
+    if (agentGroupRow && !canAccessAgentGroup(userId, agentGroupRow.id)) {
+      this.deps.logger.debug(
+        { jid: chatJid, folder: group.folder, userId },
+        'Access denied by permissions hook',
+      );
+      return true;
+    }
+
     // For non-main groups, check if trigger is required and present
     // engage_mode='always' skips the trigger check entirely.
     // engage_mode='pattern' and 'mention-sticky' (Phase 4 forward-compat) require a trigger.
@@ -695,6 +723,28 @@ export class MessageOrchestrator {
                   lastMsg.sender_name || chatJid,
                 );
               }
+              continue;
+            }
+
+            // Phase 4A permissions hook (stubs return undefined / true so
+            // behavior is unchanged; Phase 4B replaces with real users /
+            // user_roles checks). Anchored here, before trigger evaluation,
+            // so 4B can short-circuit dispatch for unauthorized senders.
+            const channel = this.channels.find((ch) => ch.ownsJid(chatJid));
+            const lastMsg = groupMessages[groupMessages.length - 1];
+            const senderInfo: SenderInfo = {
+              channel: channel?.name ?? group.channel ?? 'unknown',
+              platform_id: chatJid,
+              sender_handle: lastMsg.sender,
+              sender_name: lastMsg.sender_name,
+            };
+            const userId = resolveSender(senderInfo);
+            const agentGroupRow = getAgentGroupByFolder(group.folder);
+            if (agentGroupRow && !canAccessAgentGroup(userId, agentGroupRow.id)) {
+              this.deps.logger.debug(
+                { jid: chatJid, folder: group.folder, userId },
+                'Access denied by permissions hook',
+              );
               continue;
             }
 

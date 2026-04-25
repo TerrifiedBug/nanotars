@@ -351,7 +351,11 @@ Use available_groups.json to find the JID for a group. The folder name should be
     engage_mode: z.enum(['pattern', 'always', 'mention-sticky']).optional().default('pattern').describe('When to engage: "pattern" = only on regex match, "always" = every message, "mention-sticky" = pattern-mode (Phase 4 reserved)'),
     sender_scope: z.enum(['all', 'known']).optional().default('all').describe('Which senders to respond to: "all" = everyone, "known" = known users only (Phase 4 reserved)'),
     ignored_message_policy: z.enum(['drop', 'observe']).optional().default('drop').describe('What to do with non-trigger messages: "drop" or "observe" (both currently skip agent invocation; distinction reserved for Phase 4)'),
-    container_config: z.object({
+    // A5-review M2: zod schema field is camelCase to match the host-side
+    // IPC reader (src/ipc/tasks.ts: data.containerConfig). The MCP tool
+    // accepts the camelCase name from the agent, and the wire payload below
+    // is also camelCase so the host's reader can pick it up.
+    containerConfig: z.object({
       additionalMounts: z.array(z.object({
         hostPath: z.string(),
         containerPath: z.string().optional(),
@@ -377,7 +381,11 @@ Use available_groups.json to find the JID for a group. The folder name should be
       engage_mode: args.engage_mode ?? 'pattern',
       sender_scope: args.sender_scope ?? 'all',
       ignored_message_policy: args.ignored_message_policy ?? 'drop',
-      container_config: args.container_config,
+      // A5-review M2: camelCase field name matches the host-side reader at
+      // src/ipc/tasks.ts:271 (data.containerConfig) and the TypeScript
+      // RegisteredGroup.containerConfig field. Previously this was
+      // container_config (snake_case), which the host silently ignored.
+      containerConfig: args.containerConfig,
       timestamp: new Date().toISOString(),
     };
 

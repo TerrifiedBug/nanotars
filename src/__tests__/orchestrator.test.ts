@@ -1,6 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
+
+// Spy on the permissions module so we can assert the stubs are invoked
+// from the orchestrator's inbound-routing path (Phase 4A anchor points).
+vi.mock('../permissions.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../permissions.js')>();
+  return {
+    resolveSender: vi.fn(actual.resolveSender),
+    canAccessAgentGroup: vi.fn(actual.canAccessAgentGroup),
+  };
+});
+
 import { MessageOrchestrator, OrchestratorDeps } from '../orchestrator.js';
+import * as permissions from '../permissions.js';
 import type { Channel, NewMessage, RegisteredGroup } from '../types.js';
 import {
   _initTestDatabase,
@@ -136,6 +148,8 @@ function makeMessage(overrides: Partial<NewMessage> = {}): NewMessage {
 
 beforeEach(() => {
   _initTestDatabase();
+  vi.mocked(permissions.resolveSender).mockClear();
+  vi.mocked(permissions.canAccessAgentGroup).mockClear();
 });
 
 describe('MessageOrchestrator', () => {
@@ -739,6 +753,140 @@ describe('MessageOrchestrator', () => {
         expect.objectContaining({ jid: 'multi@g.us' }),
         expect.stringContaining('legacy registeredGroups shim'),
       );
+    });
+  });
+
+  describe('permissions hooks (Phase 4A anchor points)', () => {
+    it('processGroupMessages calls resolveSender + canAccessAgentGroup before dispatch', async () => {
+      seedAgent(mainSeed);
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({
+            timestamp: '2024-01-01T00:00:05.000Z',
+            sender: 'sender-1@s',
+            sender_name: 'Sender One',
+          }),
+        ]),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.setChannels([mockWhatsAppChannel()]);
+
+      await orch.processGroupMessages('main@g.us');
+
+      expect(permissions.resolveSender).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'whatsapp',
+          platform_id: 'main@g.us',
+          sender_handle: 'sender-1@s',
+          sender_name: 'Sender One',
+        }),
+      );
+      expect(permissions.canAccessAgentGroup).toHaveBeenCalledWith(
+        undefined, // resolveSender stub returns undefined
+        expect.any(String), // agent_group.id
+      );
+      expect(deps.runContainerAgent).toHaveBeenCalled();
+    });
+
+    it('processGroupMessages skips dispatch when canAccessAgentGroup returns false', async () => {
+      seedAgent(mainSeed);
+      vi.mocked(permissions.canAccessAgentGroup).mockReturnValueOnce(false);
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({ timestamp: '2024-01-01T00:00:05.000Z' }),
+        ]),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.setChannels([mockWhatsAppChannel()]);
+
+      const result = await orch.processGroupMessages('main@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).not.toHaveBeenCalled();
+      expect(deps.logger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({ jid: 'main@g.us', folder: 'main' }),
+        expect.stringContaining('Access denied'),
+      );
+    });
+
+    it('startMessageLoop calls resolveSender + canAccessAgentGroup before piping', async () => {
+      seedAgent(mainSeed);
+      const dbEvents = new EventEmitter();
+      const deps = makeDeps({
+        dbEvents,
+        pollInterval: 60000,
+        getNewMessages: vi.fn(() => ({
+          messages: [
+            makeMessage({
+              id: 'm1',
+              chat_jid: 'main@g.us',
+              sender: 'sender-2@s',
+              sender_name: 'Sender Two',
+              timestamp: '2024-01-01T00:00:02.000Z',
+            }),
+          ],
+          newTimestamp: '2024-01-01T00:00:02.000Z',
+        })),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.channels = [mockWhatsAppChannel()];
+
+      const loopPromise = orch.startMessageLoop();
+      await new Promise((r) => setTimeout(r, 50));
+      orch.stop();
+      await loopPromise;
+
+      expect(permissions.resolveSender).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'whatsapp',
+          platform_id: 'main@g.us',
+          sender_handle: 'sender-2@s',
+          sender_name: 'Sender Two',
+        }),
+      );
+      expect(permissions.canAccessAgentGroup).toHaveBeenCalled();
+    });
+
+    it('startMessageLoop skips dispatch when canAccessAgentGroup returns false', async () => {
+      seedAgent(mainSeed);
+      // Both processGroupMessages and startMessageLoop will check; force all false.
+      vi.mocked(permissions.canAccessAgentGroup).mockReturnValue(false);
+      const dbEvents = new EventEmitter();
+      const sendMessage = vi.fn(() => false);
+      const enqueueMessageCheck = vi.fn();
+      const deps = makeDeps({
+        dbEvents,
+        pollInterval: 60000,
+        getNewMessages: vi.fn(() => ({
+          messages: [
+            makeMessage({
+              id: 'm1',
+              chat_jid: 'main@g.us',
+              timestamp: '2024-01-01T00:00:02.000Z',
+            }),
+          ],
+          newTimestamp: '2024-01-01T00:00:02.000Z',
+        })),
+        queue: {
+          enqueueMessageCheck,
+          sendMessage,
+          closeStdin: vi.fn(),
+          registerProcess: vi.fn(),
+        } as any,
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.channels = [mockWhatsAppChannel()];
+
+      const loopPromise = orch.startMessageLoop();
+      await new Promise((r) => setTimeout(r, 50));
+      orch.stop();
+      await loopPromise;
+
+      // Restore default for subsequent tests
+      vi.mocked(permissions.canAccessAgentGroup).mockImplementation(() => true);
+
+      // No piping or enqueue when access is denied
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(enqueueMessageCheck).not.toHaveBeenCalled();
     });
   });
 });

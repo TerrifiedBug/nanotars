@@ -2,6 +2,11 @@ import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR } from './config.js';
+import {
+  getAllAgentGroups,
+  getMessagingGroupById,
+  getWiringForAgentGroup,
+} from './db/agent-groups.js';
 import { ScheduledTask } from './types.js';
 
 /** Map ScheduledTask DB rows to the snapshot format used by writeTasksSnapshot. */
@@ -52,6 +57,43 @@ export interface AvailableGroup {
   name: string;
   lastActivity: string;
   isRegistered: boolean;
+}
+
+/**
+ * Source `available_groups.json` rows from the new entity-model tables
+ * (agent_groups + messaging_group_agents + messaging_groups), one row per
+ * (agent_group, wiring) pair.
+ *
+ * Phase 4A note: previously the orchestrator built this list from chat
+ * history (`getAllChats`) with `isRegistered` flagged from the legacy
+ * `registered_groups` lookup. The accessor here sources from the new
+ * entity model directly — every row produced is, by definition, wired,
+ * so `isRegistered` is always true. Output JSON shape matches the legacy
+ * `{jid, name, lastActivity, isRegistered}` contract so the container's
+ * reader (`/workspace/ipc/available_groups.json`) doesn't break.
+ *
+ * Multi-wiring agents produce one row per wiring (per (agent, chat)
+ * pair). Agents with no wiring are skipped.
+ */
+export function mapAgentGroupsToSnapshot(): AvailableGroup[] {
+  const out: AvailableGroup[] = [];
+  for (const ag of getAllAgentGroups()) {
+    const wirings = getWiringForAgentGroup(ag.id);
+    for (const w of wirings) {
+      const mg = getMessagingGroupById(w.messaging_group_id);
+      if (!mg) continue;
+      out.push({
+        jid: mg.platform_id,
+        name: mg.name ?? ag.name,
+        // The new entity model has no chat-history coupling. Use the
+        // wiring's birth as the activity proxy; the container only uses
+        // this field for ordering display, not for routing.
+        lastActivity: w.created_at,
+        isRegistered: true,
+      });
+    }
+  }
+  return out;
 }
 
 /**
