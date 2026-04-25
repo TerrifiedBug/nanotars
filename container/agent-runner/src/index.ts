@@ -19,6 +19,7 @@ import path from 'path';
 import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 import { SECRET_ENV_VARS, createSanitizeBashHook, createSecretPathBlockHook } from './security-hooks.js';
+import { runScript } from './task-script.js';
 
 interface ContainerInput {
   prompt: string;
@@ -28,6 +29,8 @@ interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  taskScript?: string;
+  taskId?: string;
   secrets?: Record<string, string>;
   outputNonce?: string;
 }
@@ -704,6 +707,24 @@ async function main(): Promise<void> {
   if (containerInput.isScheduledTask) {
     prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;
   }
+
+  // Run pre-task script if provided. Skip agent invocation when wakeAgent=false.
+  if (containerInput.isScheduledTask && containerInput.taskScript) {
+    const scriptTaskId = containerInput.taskId || 'unknown';
+    log(`Running pre-task script for task ${scriptTaskId}`);
+    const scriptResult = await runScript(containerInput.taskScript, scriptTaskId);
+    if (!scriptResult || !scriptResult.wakeAgent) {
+      const reason = scriptResult ? 'wakeAgent=false' : 'script error/no output';
+      log(`Task ${scriptTaskId} skipped by pre-task script: ${reason}`);
+      writeOutput({ status: 'success', result: null });
+      process.exit(0);
+    }
+    log(`Pre-task script wakeAgent=true for task ${scriptTaskId}`);
+    if (scriptResult.data !== undefined && scriptResult.data !== null) {
+      prompt += `\n\nscript_output: ${JSON.stringify(scriptResult.data)}`;
+    }
+  }
+
   const pending = drainIpcInput();
   if (pending.length > 0) {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);

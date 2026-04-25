@@ -48,6 +48,7 @@ export function createSchema(database: Database.Database): void {
       schedule_value TEXT NOT NULL,
       context_mode TEXT DEFAULT 'isolated',
       model TEXT DEFAULT 'claude-sonnet-4-5',
+      script TEXT,
       next_run TEXT,
       last_run TEXT,
       last_result TEXT,
@@ -156,6 +157,10 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
   {
     name: '005_add_reply_context',
     up: (db) => safeAddColumn(db, `ALTER TABLE messages ADD COLUMN reply_context TEXT`),
+  },
+  {
+    name: '006_add_task_script',
+    up: (db) => safeAddColumn(db, `ALTER TABLE scheduled_tasks ADD COLUMN script TEXT`),
   },
 ];
 

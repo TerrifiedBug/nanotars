@@ -511,6 +511,57 @@ describe('startIpcWatcher: task type validation', () => {
   });
 });
 
+// --- processTaskIpc: schedule_task script round-trip ---
+
+describe('processTaskIpc: schedule_task script field', () => {
+  let processTaskIpc: typeof import('../index.js').processTaskIpc;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const mod = await import('../index.js');
+    processTaskIpc = mod.processTaskIpc;
+  });
+
+  it('schedule_task IPC accepts and persists a script field', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'Run the daily sweep',
+        schedule_type: 'cron',
+        schedule_value: '0 9 * * *',
+        targetJid: 'jid@test',
+        script: 'echo \'{"wakeAgent":true}\'',
+      },
+      'main', true, deps,
+    );
+
+    expect(createTask).toHaveBeenCalled();
+    const callArg = vi.mocked(createTask).mock.calls[0][0] as any;
+    expect(callArg.script).toBe('echo \'{"wakeAgent":true}\'');
+  });
+
+  it('schedule_task IPC stores null when script is omitted', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'Run the daily sweep',
+        schedule_type: 'cron',
+        schedule_value: '0 9 * * *',
+        targetJid: 'jid@test',
+      },
+      'main', true, deps,
+    );
+
+    expect(createTask).toHaveBeenCalled();
+    const callArg = vi.mocked(createTask).mock.calls[0][0] as any;
+    expect(callArg.script ?? null).toBe(null);
+  });
+});
+
 // --- processTaskIpc: schedule_type validation ---
 
 describe('processTaskIpc: schedule_type validation', () => {

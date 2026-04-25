@@ -50,6 +50,7 @@ export async function processTaskIpc(
     schedule_value?: string;
     context_mode?: string;
     model?: string;
+    script?: string;
     groupFolder?: string;
     chatJid?: string;
     targetJid?: string;
@@ -124,6 +125,7 @@ export async function processTaskIpc(
           schedule_value: data.schedule_value,
           context_mode: contextMode,
           model: data.model || null,
+          script: data.script || null,
           next_run: nextRun,
           status: 'active',
           created_at: new Date().toISOString(),

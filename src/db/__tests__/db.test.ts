@@ -388,9 +388,9 @@ describe('task CRUD', () => {
 describe('schema_version', () => {
   it('creates version table with all migrations applied', () => {
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(5);
+    expect(versions.length).toBe(6);
     expect(versions[0].version).toBe('001_add_context_mode');
-    expect(versions[4].version).toBe('005_add_reply_context');
+    expect(versions[5].version).toBe('006_add_task_script');
   });
 
   it('is idempotent on re-init', () => {
@@ -448,9 +448,9 @@ describe('schema_version', () => {
     _initTestDatabaseFrom(partialDb);
 
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(5);
+    expect(versions.length).toBe(6);
     expect(versions.map((v) => v.version)).toEqual([
-      '001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message', '005_add_reply_context',
+      '001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message', '005_add_reply_context', '006_add_task_script',
     ]);
   });
 });
@@ -575,6 +575,56 @@ describe('four-axis engage model schema', () => {
     expect(row!.engage_mode).toBe('pattern');
     expect(row!.sender_scope).toBe('all');
     expect(row!.ignored_message_policy).toBe('drop');
+  });
+});
+
+// --- script column ---
+
+describe('scheduled_tasks script column', () => {
+  it('scheduled_tasks has a script column', () => {
+    const db = new Database(':memory:');
+    createSchema(db);
+    const cols = db.pragma('table_info(scheduled_tasks)') as Array<{ name: string }>;
+    expect(cols.map((c) => c.name)).toContain('script');
+  });
+
+  it('createTask persists script value', () => {
+    createTask({
+      id: 'script-task-1',
+      group_folder: 'main',
+      chat_jid: 'group@g.us',
+      prompt: 'do something',
+      schedule_type: 'once',
+      schedule_value: '2030-06-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      script: 'echo \'{"wakeAgent":true}\'',
+      next_run: '2030-06-01T00:00:00.000Z',
+      status: 'active',
+      created_at: '2024-01-01T00:00:00.000Z',
+    });
+
+    const task = getTaskById('script-task-1');
+    expect(task).toBeDefined();
+    expect(task!.script).toBe('echo \'{"wakeAgent":true}\'');
+  });
+
+  it('createTask stores null when script is omitted', () => {
+    createTask({
+      id: 'script-task-2',
+      group_folder: 'main',
+      chat_jid: 'group@g.us',
+      prompt: 'no script task',
+      schedule_type: 'once',
+      schedule_value: '2030-06-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2030-06-01T00:00:00.000Z',
+      status: 'active',
+      created_at: '2024-01-01T00:00:00.000Z',
+    });
+
+    const task = getTaskById('script-task-2');
+    expect(task).toBeDefined();
+    expect(task!.script ?? null).toBe(null);
   });
 });
 

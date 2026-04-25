@@ -93,6 +93,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
     schedule_value: z.string().describe('cron: "*/5 * * * *" | interval: milliseconds like "300000" | once: local timestamp like "2026-02-01T15:30:00" (no Z suffix!)'),
     context_mode: z.enum(['group', 'isolated']).default('group').describe('group=runs with chat history and memory, isolated=fresh session (include context in prompt)'),
     model: z.string().optional().describe('Claude model to use for this task (e.g., "claude-sonnet-4-5" for cheaper tasks, "claude-opus-4-6" for complex tasks). Defaults to Sonnet.'),
+    script: z.string().optional().describe('Optional bash script to run before invoking the agent. Must output a JSON line as its last line: {"wakeAgent": true/false, "data": <any>}. If wakeAgent=false (or script errors), the task is skipped entirely. If wakeAgent=true, optional data is passed to the agent prompt as script_output. Use for cheap pre-checks that gate model spend.'),
     target_group_jid: z.string().optional().describe('(Main group only) JID of the group to schedule the task for. Defaults to the current group.'),
   },
   async (args) => {
@@ -145,6 +146,9 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
     };
     if (args.model) {
       data.model = args.model;
+    }
+    if (args.script) {
+      data.script = args.script;
     }
 
     const filename = writeIpcFile(TASKS_DIR, data);

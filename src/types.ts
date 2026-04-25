@@ -81,6 +81,7 @@ export interface ScheduledTask {
   schedule_value: string;
   context_mode: 'group' | 'isolated';
   model?: string | null;
+  script?: string | null;
   next_run: string | null;
   last_run: string | null;
   last_result: string | null;
