@@ -23,6 +23,7 @@ export interface OrchestratorDeps {
   // DB functions
   getRouterState: (key: string) => string | undefined;
   setRouterState: (key: string, value: string) => void;
+  recordUnregisteredSender: (channel: string, platformId: string, senderName: string) => void;
   getAllSessions: () => Record<string, string>;
   setSession: (groupFolder: string, sessionId: string) => void;
   getAllRegisteredGroups: () => Record<string, RegisteredGroup>;
@@ -470,7 +471,24 @@ export class MessageOrchestrator {
 
           for (const [chatJid, groupMessages] of messagesByGroup) {
             const group = this.registeredGroups[chatJid];
-            if (!group) continue;
+            if (!group) {
+              // Record inbound messages from JIDs with no registered group so
+              // the unregistered_senders table fills with real diagnostic data.
+              // Skip messages sent by the bot itself (is_from_me).
+              const externalMessages = groupMessages.filter((m) => !m.is_from_me);
+              if (externalMessages.length > 0) {
+                const channel = this.channels.find((ch) => ch.ownsJid(chatJid));
+                const channelName = channel?.name ?? 'unknown';
+                // Use the most-recent message's sender_name; fall back to chatJid.
+                const lastMsg = externalMessages[externalMessages.length - 1];
+                this.deps.recordUnregisteredSender(
+                  channelName,
+                  chatJid,
+                  lastMsg.sender_name || chatJid,
+                );
+              }
+              continue;
+            }
 
             const isMainGroup = group.folder === this.deps.mainGroupFolder;
             const needsTrigger = !isMainGroup && group.requiresTrigger !== false;

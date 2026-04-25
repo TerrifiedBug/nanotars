@@ -51,6 +51,7 @@ import {
   getTaskRunLogs,
 
   getRecentMessages,
+  recordUnregisteredSender,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
@@ -135,6 +136,8 @@ async function main(): Promise<void> {
     getNewMessages,
     getAllChats,
     getAllTasks,
+    recordUnregisteredSender: (channel, platformId, senderName) =>
+      recordUnregisteredSender(getDb(), channel, platformId, senderName),
     formatMessages,
     routeOutbound,
     stripInternalTags,

@@ -7,6 +7,7 @@ function makeDeps(overrides: Partial<OrchestratorDeps> = {}): OrchestratorDeps {
   return {
     getRouterState: vi.fn(() => undefined),
     setRouterState: vi.fn(),
+    recordUnregisteredSender: vi.fn(),
     getAllSessions: vi.fn(() => ({})),
     setSession: vi.fn(),
     getAllRegisteredGroups: vi.fn(() => ({})),
@@ -288,6 +289,77 @@ describe('MessageOrchestrator', () => {
 
       orch.recoverPendingMessages();
       expect(deps.queue.enqueueMessageCheck).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unregistered sender recording', () => {
+    it('calls recordUnregisteredSender for messages from unknown JIDs (not is_from_me)', async () => {
+      const dbEvents = new EventEmitter();
+      const recordUnregisteredSender = vi.fn();
+      const deps = makeDeps({
+        dbEvents,
+        pollInterval: 60000,
+        recordUnregisteredSender,
+        getNewMessages: vi.fn(() => ({
+          messages: [
+            makeMessage({
+              id: 'unregd-1',
+              chat_jid: 'unknown@s.whatsapp.net',
+              sender: 'stranger@s.whatsapp.net',
+              sender_name: 'Stranger',
+              is_from_me: false,
+            }),
+          ],
+          newTimestamp: '2024-01-01T00:00:02.000Z',
+        })),
+      });
+      // No registered group for 'unknown@s.whatsapp.net'
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = {};
+      orch.channels = [{ name: 'whatsapp', ownsJid: (jid) => jid.endsWith('.net'), isConnected: () => true } as any];
+
+      const loopPromise = orch.startMessageLoop();
+      await new Promise((r) => setTimeout(r, 50));
+      orch.stop();
+      await loopPromise;
+
+      expect(recordUnregisteredSender).toHaveBeenCalledWith(
+        'whatsapp',
+        'unknown@s.whatsapp.net',
+        'Stranger',
+      );
+    });
+
+    it('does NOT call recordUnregisteredSender for is_from_me messages', async () => {
+      const dbEvents = new EventEmitter();
+      const recordUnregisteredSender = vi.fn();
+      const deps = makeDeps({
+        dbEvents,
+        pollInterval: 60000,
+        recordUnregisteredSender,
+        getNewMessages: vi.fn(() => ({
+          messages: [
+            makeMessage({
+              id: 'self-1',
+              chat_jid: 'unknown@s.whatsapp.net',
+              sender: 'me@s.whatsapp.net',
+              sender_name: 'Me',
+              is_from_me: true,
+            }),
+          ],
+          newTimestamp: '2024-01-01T00:00:02.000Z',
+        })),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = {};
+      orch.channels = [{ name: 'whatsapp', ownsJid: (jid) => jid.endsWith('.net'), isConnected: () => true } as any];
+
+      const loopPromise = orch.startMessageLoop();
+      await new Promise((r) => setTimeout(r, 50));
+      orch.stop();
+      await loopPromise;
+
+      expect(recordUnregisteredSender).not.toHaveBeenCalled();
     });
   });
 
