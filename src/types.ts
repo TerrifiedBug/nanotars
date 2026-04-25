@@ -79,6 +79,44 @@ export interface MessagingGroupAgent {
   created_at: string;
 }
 
+// --- Phase 4B RBAC entities ---
+//
+// Identity + privilege live in the central DB. `users` is the canonical
+// identity (composite id "<channel>:<handle>"); `user_roles` records owner /
+// admin grants (global when agent_group_id is NULL, scoped otherwise);
+// `agent_group_members` is the unprivileged access gate; `user_dms` caches
+// the DM messaging-group resolution per (user, channel) pair so cold-DM
+// lookups don't re-resolve every time.
+
+export interface User {
+  id: string;
+  kind: string;
+  display_name: string | null;
+  created_at: string;
+}
+
+export interface UserRole {
+  user_id: string;
+  role: 'owner' | 'admin';
+  agent_group_id: string | null;
+  granted_by: string | null;
+  granted_at: string;
+}
+
+export interface AgentGroupMember {
+  user_id: string;
+  agent_group_id: string;
+  added_by: string | null;
+  added_at: string;
+}
+
+export interface UserDm {
+  user_id: string;
+  channel_type: string;
+  messaging_group_id: string;
+  resolved_at: string;
+}
+
 export interface ReplyContext {
   sender_name: string;
   text: string | null; // null = non-text message (photo, sticker, etc.)

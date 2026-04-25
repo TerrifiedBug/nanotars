@@ -49,6 +49,54 @@ const ENTITY_MODEL_DDL = `
   CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_ag ON messaging_group_agents(agent_group_id);
 `;
 
+/**
+ * Shared DDL for the Phase 4B RBAC tables. Mirrors the ENTITY_MODEL_DDL
+ * pattern: createSchema (fresh-install path) and migrations 010-013
+ * (existing-DB path) reference the same per-table sub-constants so column-level
+ * divergence is structurally impossible.
+ *
+ * Migration 014 is reserved for B8 (sender-allowlist subsumption into
+ * agent_group_members) and ships as a no-op for now.
+ */
+const USERS_DDL = `
+  CREATE TABLE IF NOT EXISTS users (
+    id           TEXT PRIMARY KEY,
+    kind         TEXT NOT NULL,
+    display_name TEXT,
+    created_at   TEXT NOT NULL
+  );
+`;
+const USER_ROLES_DDL = `
+  CREATE TABLE IF NOT EXISTS user_roles (
+    user_id        TEXT NOT NULL REFERENCES users(id),
+    role           TEXT NOT NULL,
+    agent_group_id TEXT REFERENCES agent_groups(id),
+    granted_by     TEXT REFERENCES users(id),
+    granted_at     TEXT NOT NULL,
+    PRIMARY KEY (user_id, role, agent_group_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_roles_scope ON user_roles(agent_group_id, role);
+`;
+const AGENT_GROUP_MEMBERS_DDL = `
+  CREATE TABLE IF NOT EXISTS agent_group_members (
+    user_id        TEXT NOT NULL REFERENCES users(id),
+    agent_group_id TEXT NOT NULL REFERENCES agent_groups(id),
+    added_by       TEXT REFERENCES users(id),
+    added_at       TEXT NOT NULL,
+    PRIMARY KEY (user_id, agent_group_id)
+  );
+`;
+const USER_DMS_DDL = `
+  CREATE TABLE IF NOT EXISTS user_dms (
+    user_id            TEXT NOT NULL REFERENCES users(id),
+    channel_type       TEXT NOT NULL,
+    messaging_group_id TEXT NOT NULL REFERENCES messaging_groups(id),
+    resolved_at        TEXT NOT NULL,
+    PRIMARY KEY (user_id, channel_type)
+  );
+`;
+const RBAC_DDL = USERS_DDL + USER_ROLES_DDL + AGENT_GROUP_MEMBERS_DDL + USER_DMS_DDL;
+
 let db: Database.Database;
 
 export function getDb(): Database.Database {
@@ -134,6 +182,7 @@ export function createSchema(database: Database.Database): void {
   `);
 
   database.exec(ENTITY_MODEL_DDL);
+  database.exec(RBAC_DDL);
 
   runMigrations(database);
 }
@@ -281,6 +330,43 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       // messaging_group_agents). Migration 008 already copied any rows; this
       // step removes the now-orphaned table on dev DBs that pre-date A7.
       db.exec(`DROP TABLE IF EXISTS registered_groups`);
+    },
+  },
+  {
+    name: '010_add_users',
+    up: (db) => {
+      // Phase 4B RBAC foundation. Uses the shared USERS_DDL constant so
+      // column-level drift between this migration and createSchema is
+      // structurally impossible. IF NOT EXISTS makes re-runs a no-op.
+      db.exec(USERS_DDL);
+    },
+  },
+  {
+    name: '011_add_user_roles',
+    up: (db) => {
+      db.exec(USER_ROLES_DDL);
+    },
+  },
+  {
+    name: '012_add_agent_group_members',
+    up: (db) => {
+      db.exec(AGENT_GROUP_MEMBERS_DDL);
+    },
+  },
+  {
+    name: '013_add_user_dms',
+    up: (db) => {
+      db.exec(USER_DMS_DDL);
+    },
+  },
+  {
+    name: '014_seed_sender_allowlist_to_members',
+    up: (_db) => {
+      // Reserved for Phase 4B Task B8: subsume the sender-allowlist into
+      // agent_group_members so membership is the single source of truth for
+      // "who is permitted to interact with this agent group". No-op for now;
+      // landing the migration entry early lets the rest of Phase 4B (B2-B7)
+      // build on a fixed migration count without renumbering when B8 lands.
     },
   },
 ];
