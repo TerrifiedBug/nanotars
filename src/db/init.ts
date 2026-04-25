@@ -95,12 +95,13 @@ export function createSchema(database: Database.Database): void {
 /**
  * Check whether a table exists in the connected database.
  *
- * `name` must be a SQL-identifier-shaped string ([A-Za-z_][A-Za-z0-9_]*).
- * Throws on unsafe input — protects against accidental injection through
- * the parameterized `sqlite_master` lookup, which uses the value as a
- * literal string.
+ * `name` must be a SQL-identifier-shaped string ([A-Za-z_][A-Za-z0-9_]*);
+ * unsafe input throws. The underlying lookup uses `?` parameter binding so
+ * SQLite already treats `name` as a string literal — the regex is a
+ * caller-error guard (catches typos and SQL fragments accidentally passed
+ * as identifiers), not the injection defense.
  *
- * Ported from upstream nanoclaw v2 src/db/schema.ts hasTable utility.
+ * Ported from upstream nanoclaw v2 src/db/connection.ts hasTable utility.
  */
 export function hasTable(db: Database.Database, name: string): boolean {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
