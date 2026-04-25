@@ -209,6 +209,11 @@ function isValidContainerPath(containerPath: string): boolean {
     return false;
   }
 
+  // Must not contain colons — prevents Docker -v option injection (e.g., "repo:rw")
+  if (containerPath.includes(':')) {
+    return false;
+  }
+
   return true;
 }
 

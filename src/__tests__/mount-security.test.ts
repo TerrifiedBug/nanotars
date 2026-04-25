@@ -363,6 +363,36 @@ describe('validateMount', () => {
     );
     expect(result.allowed).toBe(false);
   });
+
+  it('rejects container paths containing colons', async () => {
+    const subDir = path.join(tmpDir, 'projects');
+    fs.mkdirSync(subDir);
+    const filePath = writeAllowlist(validAllowlist());
+    vi.resetModules();
+    (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
+    const { validateMount } = await import('../mount-security.js');
+    const result = validateMount(
+      { hostPath: subDir, containerPath: 'foo:rw' },
+      true,
+    );
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Invalid container path/);
+  });
+
+  it('rejects container paths that look like Docker -v injections', async () => {
+    const subDir = path.join(tmpDir, 'projects');
+    fs.mkdirSync(subDir);
+    const filePath = writeAllowlist(validAllowlist());
+    vi.resetModules();
+    (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
+    const { validateMount } = await import('../mount-security.js');
+    const result = validateMount(
+      { hostPath: subDir, containerPath: 'workspace:/etc/passwd:ro' },
+      true,
+    );
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Invalid container path/);
+  });
 });
 
 // --- validateAdditionalMounts ---
