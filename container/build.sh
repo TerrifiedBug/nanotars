@@ -22,10 +22,16 @@ else
   exit 1
 fi
 
-# Collect plugin Dockerfile.partial files
+# Collect plugin Dockerfile.partial files (validate each path resolves inside PROJECT_DIR)
 PARTIALS=()
 for f in plugins/*/Dockerfile.partial plugins/*/*/Dockerfile.partial; do
-  [ -f "$f" ] && PARTIALS+=("$f")
+  [ -f "$f" ] || continue
+  # Resolve the real path (follows symlinks) and ensure it stays under PROJECT_DIR.
+  REAL="$(readlink -f "$f")"
+  case "$REAL" in
+    "$PROJECT_DIR"/*) PARTIALS+=("$f") ;;
+    *) echo "Error: Dockerfile.partial '$f' escapes project root (resolves to '$REAL')"; exit 1 ;;
+  esac
 done
 
 DOCKERFILE="container/Dockerfile"
