@@ -97,3 +97,10 @@ export const TIMEZONE =
 export const INSTALL_SLUG =
   process.env.NANOCLAW_INSTALL_SLUG ?? path.basename(process.cwd()).toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
+// OneCLI Agent Vault — outbound credential gateway. Optional.
+// Defaults: standard local-gateway URL; empty key = anonymous mode.
+// Phase 3 wires applyContainerConfig into container-runner; SDK on
+// its own does nothing.
+export const ONECLI_URL = process.env.ONECLI_URL ?? 'http://127.0.0.1:10254';
+export const ONECLI_API_KEY = process.env.ONECLI_API_KEY ?? '';
+
