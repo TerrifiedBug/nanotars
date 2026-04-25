@@ -24,7 +24,7 @@ import { buildVolumeMounts, getHomeDir, readSecrets, VolumeMount } from './conta
 import * as containerRuntime from './container-runtime.js';
 import { logger } from './logger.js';
 import { redactSecrets } from './secret-redact.js';
-import { RegisteredGroup } from './types.js';
+import type { AgentGroup, ContainerConfig } from './types.js';
 
 import { createOutputParser, makeMarkers, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
 
@@ -140,10 +140,11 @@ async function buildContainerArgs(
 }
 
 export async function runContainerAgent(
-  group: RegisteredGroup,
+  group: AgentGroup,
   input: ContainerInput,
   onProcess: (proc: ChildProcess, containerName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
+  channel?: string,
 ): Promise<ContainerOutput> {
   const startTime = Date.now();
 
@@ -157,7 +158,21 @@ export async function runContainerAgent(
     : '';
   const effectiveModel = input.model || storedModel || 'sdk-default';
 
-  const mounts = await buildVolumeMounts(group, input.isMain, input.model || storedModel || undefined);
+  // Parse the per-group container config (timeout, additionalMounts) — same
+  // shape as orchestrator-side parsing. Invalid JSON is logged and ignored.
+  let containerConfig: ContainerConfig | undefined;
+  if (group.container_config) {
+    try {
+      containerConfig = JSON.parse(group.container_config) as ContainerConfig;
+    } catch (err) {
+      logger.warn(
+        { folder: group.folder, err },
+        'Failed to parse agent_groups.container_config; using defaults',
+      );
+    }
+  }
+
+  const mounts = await buildVolumeMounts(group, input.isMain, input.model || storedModel || undefined, channel);
 
   // Fix permissions on writable mounts (Docker only — Apple Container handles this natively)
   await Promise.all(
@@ -226,7 +241,7 @@ export async function runContainerAgent(
 
     let timedOut = false;
     let settled = false;  // Guard: only one of timeout/close handles cleanup
-    const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
+    const configTimeout = containerConfig?.timeout || CONTAINER_TIMEOUT;
     // Grace period: hard timeout must be at least IDLE_TIMEOUT + 30s so the
     // graceful _close sentinel has time to trigger before the hard kill fires.
     const timeoutMs = Math.max(configTimeout, IDLE_TIMEOUT + 30_000);

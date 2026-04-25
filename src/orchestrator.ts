@@ -57,7 +57,7 @@ export interface OrchestratorDeps {
 
   // Container runner
   runContainerAgent: (
-    group: RegisteredGroup,
+    group: AgentGroup,
     input: {
       prompt: string;
       sessionId?: string;
@@ -68,6 +68,7 @@ export interface OrchestratorDeps {
     },
     onProcess: (proc: import('child_process').ChildProcess, containerName: string) => void,
     onOutput?: (output: ContainerOutput) => Promise<void>,
+    channel?: string,
   ) => Promise<ContainerOutput>;
   mapTasksToSnapshot: (tasks: ScheduledTask[]) => ReturnType<typeof import('./snapshots.js').mapTasksToSnapshot>;
   writeTasksSnapshot: typeof import('./snapshots.js').writeTasksSnapshot;
@@ -569,9 +570,21 @@ export class MessageOrchestrator {
         }
       : undefined;
 
+    // Look up the AgentGroup row for the container runner. The orchestrator
+    // works in synthesized RegisteredGroup shape for legacy reasons; the
+    // container runner has been moved to AgentGroup directly (Phase 4A/A4).
+    const agentGroup = getAgentGroupByFolder(group.folder);
+    if (!agentGroup) {
+      this.deps.logger.error(
+        { folder: group.folder },
+        'No agent_groups row for resolved group; aborting run',
+      );
+      return 'error';
+    }
+
     try {
       const output = await this.deps.runContainerAgent(
-        group,
+        agentGroup,
         {
           prompt,
           sessionId,
@@ -582,6 +595,7 @@ export class MessageOrchestrator {
         },
         (proc, containerName) => this.deps.queue.registerProcess(chatJid, proc, containerName, group.folder),
         wrappedOnOutput,
+        group.channel,
       );
 
       this.applyOutputState(output, group.folder);

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ContainerInput, ContainerOutput } from '../container-runner.js';
-import type { ScheduledTask, RegisteredGroup } from '../types.js';
+import type { ScheduledTask, AgentGroup } from '../types.js';
 
 // --- Module mocks (hoisted before imports of the module under test) ---
 
@@ -41,6 +41,7 @@ vi.mock('../container-runner.js', () => ({
 
 vi.mock('../db.js', () => ({
   claimTask: vi.fn(),
+  getAgentGroupByFolder: vi.fn(),
   getAllTasks: vi.fn(() => []),
   getDueTasks: vi.fn(() => []),
   getTaskById: vi.fn(),
@@ -58,6 +59,7 @@ vi.mock('../router.js', () => ({
 // --- Import module under test after mocks ---
 import { runTask } from '../task-scheduler.js';
 import * as containerRunnerMod from '../container-runner.js';
+import * as dbMod from '../db.js';
 
 // --- Test helpers ---
 
@@ -81,19 +83,17 @@ function makeTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   };
 }
 
-const mainGroup: RegisteredGroup = {
+const mainGroup: AgentGroup = {
+  id: 'ag-main',
   name: 'Main Chat',
   folder: 'main',
-  pattern: '@TARS',
-  added_at: '2025-01-01T00:00:00.000Z',
-  engage_mode: 'always',
-  sender_scope: 'all',
-  ignored_message_policy: 'drop',
+  agent_provider: null,
+  container_config: null,
+  created_at: '2025-01-01T00:00:00.000Z',
 };
 
 function makeDeps() {
   return {
-    registeredGroups: vi.fn(() => ({ 'main@g.us': mainGroup })),
     getSessions: vi.fn(() => ({})),
     getResumePositions: vi.fn(() => ({})),
     clearResumePosition: vi.fn(),
@@ -117,14 +117,15 @@ describe('task-scheduler passes script to container', () => {
 
   beforeEach(() => {
     capturedInputs = [];
+    vi.mocked(dbMod.getAgentGroupByFolder).mockReturnValue(mainGroup);
     const mockFn = vi.mocked(containerRunnerMod.runContainerAgent);
     mockFn.mockClear();
     mockFn.mockImplementation(
       async (
-        _group: RegisteredGroup,
+        _group: AgentGroup,
         input: ContainerInput,
         _onProcess: unknown,
-        _onOutput: (o: ContainerOutput) => Promise<void>,
+        _onOutput?: (o: ContainerOutput) => Promise<void>,
       ): Promise<ContainerOutput> => {
         capturedInputs.push(input);
         return { status: 'success', result: null };

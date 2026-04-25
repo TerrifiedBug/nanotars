@@ -285,7 +285,6 @@ async function main(): Promise<void> {
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({
-    registeredGroups: () => orchestrator.registeredGroups,
     getSessions: () => orchestrator.sessions,
     getResumePositions: () => orchestrator.resumePositions,
     clearResumePosition: (groupFolder: string) => { delete orchestrator.resumePositions[groupFolder]; },

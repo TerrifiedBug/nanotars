@@ -135,13 +135,15 @@ vi.mock('child_process', async () => {
 });
 
 import { runContainerAgent, ContainerOutput } from '../container-runner.js';
-import type { RegisteredGroup } from '../types.js';
+import type { AgentGroup } from '../types.js';
 
-const testGroup: RegisteredGroup = {
+const testGroup: AgentGroup = {
+  id: 'ag-test',
   name: 'Test Group',
   folder: 'test-group',
-  trigger: '@TARS',
-  added_at: new Date().toISOString(),
+  agent_provider: null,
+  container_config: null,
+  created_at: new Date().toISOString(),
 };
 
 const testInput = {

@@ -14,6 +14,7 @@ import { ContainerOutput, mapTasksToSnapshot, runContainerAgent, writeTasksSnaps
 import {
   claimTask,
   getAllTasks,
+  getAgentGroupByFolder,
   getDueTasks,
   getTaskById,
   isValidGroupFolder,
@@ -24,10 +25,9 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { logger } from './logger.js';
 import { isAuthError, stripInternalTags } from './router.js';
-import { RegisteredGroup, ScheduledTask } from './types.js';
+import { ScheduledTask } from './types.js';
 
 export interface SchedulerDependencies {
-  registeredGroups: () => Record<string, RegisteredGroup>;
   getSessions: () => Record<string, string>;
   getResumePositions: () => Record<string, string>;
   clearResumePosition: (groupFolder: string) => void;
@@ -88,10 +88,9 @@ export async function runTask(
     'Running scheduled task',
   );
 
-  const groups = deps.registeredGroups();
-  const group = Object.values(groups).find(
-    (g) => g.folder === task.group_folder,
-  );
+  // Look up the agent group directly by folder — avoids the legacy
+  // jid → RegisteredGroup map (which collapses multi-wiring chats anyway).
+  const group = getAgentGroupByFolder(task.group_folder);
 
   if (!group) {
     logger.warn(

@@ -11,8 +11,27 @@ import { composeGroupClaudeMd } from './claude-md-compose.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import { validateAdditionalMounts, validateMount } from './mount-security.js';
-import { RegisteredGroup } from './types.js';
+import type { AgentGroup, ContainerConfig } from './types.js';
 import type { PluginRegistry } from './plugin-loader.js';
+
+/**
+ * Parse the JSON-encoded container_config off an AgentGroup row.
+ * Mirrors orchestrator-side parsing — invalid JSON logs a warning and
+ * returns undefined rather than throwing, so a corrupted row can't take
+ * the spawn path down.
+ */
+function parseContainerConfig(group: AgentGroup): ContainerConfig | undefined {
+  if (!group.container_config) return undefined;
+  try {
+    return JSON.parse(group.container_config) as ContainerConfig;
+  } catch (err) {
+    logger.warn(
+      { folder: group.folder, err },
+      'Failed to parse agent_groups.container_config; ignoring',
+    );
+    return undefined;
+  }
+}
 
 /** Verify that a resolved path stays within the expected parent directory. */
 function assertPathWithin(resolved: string, parent: string, label: string): void {
@@ -81,13 +100,18 @@ export function getHomeDir(): string {
 }
 
 export async function buildVolumeMounts(
-  group: RegisteredGroup,
+  group: AgentGroup,
   isMain: boolean,
   modelOverride?: string,
+  channel?: string,
 ): Promise<VolumeMount[]> {
   const mounts: VolumeMount[] = [];
   const homeDir = getHomeDir();
   const projectRoot = process.cwd();
+
+  // Per-group container config (additionalMounts + custom timeout) is JSON-encoded
+  // on the agent_groups row; parse once and reuse below.
+  const containerConfig = parseContainerConfig(group);
 
   // Compose per-group CLAUDE.md from shared base + plugin skill fragments.
   // Also ensures CLAUDE.local.md exists (agent-owned writable memory).
@@ -122,7 +146,7 @@ export async function buildVolumeMounts(
 
   // Plugin skill directories — each plugin's container-skills/ mounted individually
   // Scoped by channel and group so plugins only inject into matching containers
-  const scopeChannel = group.channel;
+  const scopeChannel = channel;
   const scopeGroup = group.folder;
   const mcpJsonFile = path.join(projectRoot, '.mcp.json');
   if (pluginRegistry) {
@@ -307,7 +331,7 @@ export async function buildVolumeMounts(
   // Environment file directory (workaround for Apple Container -i env var bug)
   // Only expose specific auth variables needed by Claude Code, not the entire .env
   // Per-group directory prevents race conditions during concurrent container spawns
-  await buildEnvMount(mounts, group, modelOverride, projectRoot);
+  await buildEnvMount(mounts, group, modelOverride, projectRoot, channel);
 
   // Mount agent-runner source from host — recompiled on container startup.
   // Allows code changes without rebuilding the Docker image.
@@ -319,9 +343,9 @@ export async function buildVolumeMounts(
   });
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
-  if (group.containerConfig?.additionalMounts) {
+  if (containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
-      group.containerConfig.additionalMounts,
+      containerConfig.additionalMounts,
       group.name,
       isMain,
     );
@@ -334,9 +358,10 @@ export async function buildVolumeMounts(
 /** Build the per-group env file mount with filtered variables and model overrides. */
 async function buildEnvMount(
   mounts: VolumeMount[],
-  group: RegisteredGroup,
+  group: AgentGroup,
   modelOverride: string | undefined,
   projectRoot: string,
+  channel?: string,
 ): Promise<void> {
   const envDir = path.join(DATA_DIR, 'env', group.folder);
   await fs.promises.mkdir(envDir, { recursive: true });
@@ -365,7 +390,7 @@ async function buildEnvMount(
   if (envMap.size === 0) return;
 
   const allowedVars = pluginRegistry
-    ? pluginRegistry.getContainerEnvVars(group.channel, group.folder)
+    ? pluginRegistry.getContainerEnvVars(channel, group.folder)
     : ['ANTHROPIC_API_KEY', 'ASSISTANT_NAME', 'CLAUDE_MODEL'];
   const filteredLines = [...envMap.entries()]
     .filter(([key]) => allowedVars.includes(key))

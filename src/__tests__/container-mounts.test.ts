@@ -23,20 +23,32 @@ vi.mock('../env.js', () => ({
 
 import * as configMod from '../config.js';
 import { validateMount, validateAdditionalMounts } from '../mount-security.js';
-import type { RegisteredGroup } from '../types.js';
+import type { AgentGroup, ContainerConfig } from '../types.js';
 
 let tmpDir: string;
 let projectRoot: string;
 let cwdSpy: ReturnType<typeof vi.spyOn>;
 
-function makeGroup(overrides: Partial<RegisteredGroup> = {}): RegisteredGroup {
+interface MakeGroupOverrides extends Partial<AgentGroup> {
+  containerConfig?: ContainerConfig;
+}
+
+function makeGroup(overrides: MakeGroupOverrides = {}): AgentGroup {
+  const { containerConfig, container_config, ...rest } = overrides;
+  const serializedConfig =
+    container_config !== undefined
+      ? container_config
+      : containerConfig !== undefined
+        ? JSON.stringify(containerConfig)
+        : null;
   return {
+    id: 'ag-test',
     name: 'Main',
     folder: 'main',
-    trigger: '@TARS',
-    added_at: '2024-01-01',
-    channel: 'whatsapp',
-    ...overrides,
+    agent_provider: null,
+    container_config: serializedConfig,
+    created_at: '2024-01-01T00:00:00.000Z',
+    ...rest,
   };
 }
 
