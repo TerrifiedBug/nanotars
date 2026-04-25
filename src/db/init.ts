@@ -8,6 +8,47 @@ import { ASSISTANT_NAME, STORE_DIR } from '../config.js';
 import { logger } from '../logger.js';
 import { runStartupTasks } from './migrate.js';
 
+/**
+ * Shared DDL for the Phase 4A entity-model tables. Used by both createSchema
+ * (fresh-install path) and migration 008 (existing-DB path) so column-level
+ * divergence between the two is structurally impossible.
+ */
+const ENTITY_MODEL_DDL = `
+  CREATE TABLE IF NOT EXISTS agent_groups (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    folder          TEXT NOT NULL UNIQUE,
+    agent_provider  TEXT,
+    container_config TEXT,
+    created_at      TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS messaging_groups (
+    id                    TEXT PRIMARY KEY,
+    channel_type          TEXT NOT NULL,
+    platform_id           TEXT NOT NULL,
+    name                  TEXT,
+    is_group              INTEGER DEFAULT 0,
+    unknown_sender_policy TEXT NOT NULL DEFAULT 'public',
+    created_at            TEXT NOT NULL,
+    UNIQUE(channel_type, platform_id)
+  );
+  CREATE TABLE IF NOT EXISTS messaging_group_agents (
+    id                     TEXT PRIMARY KEY,
+    messaging_group_id     TEXT NOT NULL REFERENCES messaging_groups(id),
+    agent_group_id         TEXT NOT NULL REFERENCES agent_groups(id),
+    engage_mode            TEXT NOT NULL DEFAULT 'pattern',
+    engage_pattern         TEXT,
+    sender_scope           TEXT NOT NULL DEFAULT 'all',
+    ignored_message_policy TEXT NOT NULL DEFAULT 'drop',
+    session_mode           TEXT DEFAULT 'shared',
+    priority               INTEGER DEFAULT 0,
+    created_at             TEXT NOT NULL,
+    UNIQUE(messaging_group_id, agent_group_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_mg ON messaging_group_agents(messaging_group_id);
+  CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_ag ON messaging_group_agents(agent_group_id);
+`;
+
 let db: Database.Database;
 
 export function getDb(): Database.Database {
@@ -102,43 +143,9 @@ export function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_unregistered_last_seen ON unregistered_senders(last_seen);
 
-    CREATE TABLE IF NOT EXISTS agent_groups (
-      id              TEXT PRIMARY KEY,
-      name            TEXT NOT NULL,
-      folder          TEXT NOT NULL UNIQUE,
-      agent_provider  TEXT,
-      container_config TEXT,
-      created_at      TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS messaging_groups (
-      id                    TEXT PRIMARY KEY,
-      channel_type          TEXT NOT NULL,
-      platform_id           TEXT NOT NULL,
-      name                  TEXT,
-      is_group              INTEGER DEFAULT 0,
-      unknown_sender_policy TEXT NOT NULL DEFAULT 'public',
-      created_at            TEXT NOT NULL,
-      UNIQUE(channel_type, platform_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS messaging_group_agents (
-      id                     TEXT PRIMARY KEY,
-      messaging_group_id     TEXT NOT NULL REFERENCES messaging_groups(id),
-      agent_group_id         TEXT NOT NULL REFERENCES agent_groups(id),
-      engage_mode            TEXT NOT NULL DEFAULT 'pattern',
-      engage_pattern         TEXT,
-      sender_scope           TEXT NOT NULL DEFAULT 'all',
-      ignored_message_policy TEXT NOT NULL DEFAULT 'drop',
-      session_mode           TEXT DEFAULT 'shared',
-      priority               INTEGER DEFAULT 0,
-      created_at             TEXT NOT NULL,
-      UNIQUE(messaging_group_id, agent_group_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_mg ON messaging_group_agents(messaging_group_id);
-    CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_ag ON messaging_group_agents(agent_group_id);
   `);
+
+  database.exec(ENTITY_MODEL_DDL);
 
   runMigrations(database);
 }
@@ -226,42 +233,10 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
   {
     name: '008_split_registered_groups',
     up: (db) => {
-      // 1. Ensure the three new tables exist (idempotent; createSchema also creates them)
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS agent_groups (
-          id              TEXT PRIMARY KEY,
-          name            TEXT NOT NULL,
-          folder          TEXT NOT NULL UNIQUE,
-          agent_provider  TEXT,
-          container_config TEXT,
-          created_at      TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS messaging_groups (
-          id                    TEXT PRIMARY KEY,
-          channel_type          TEXT NOT NULL,
-          platform_id           TEXT NOT NULL,
-          name                  TEXT,
-          is_group              INTEGER DEFAULT 0,
-          unknown_sender_policy TEXT NOT NULL DEFAULT 'public',
-          created_at            TEXT NOT NULL,
-          UNIQUE(channel_type, platform_id)
-        );
-        CREATE TABLE IF NOT EXISTS messaging_group_agents (
-          id                     TEXT PRIMARY KEY,
-          messaging_group_id     TEXT NOT NULL REFERENCES messaging_groups(id),
-          agent_group_id         TEXT NOT NULL REFERENCES agent_groups(id),
-          engage_mode            TEXT NOT NULL DEFAULT 'pattern',
-          engage_pattern         TEXT,
-          sender_scope           TEXT NOT NULL DEFAULT 'all',
-          ignored_message_policy TEXT NOT NULL DEFAULT 'drop',
-          session_mode           TEXT DEFAULT 'shared',
-          priority               INTEGER DEFAULT 0,
-          created_at             TEXT NOT NULL,
-          UNIQUE(messaging_group_id, agent_group_id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_mg ON messaging_group_agents(messaging_group_id);
-        CREATE INDEX IF NOT EXISTS idx_messaging_group_agents_ag ON messaging_group_agents(agent_group_id);
-      `);
+      // 1. Ensure the three new tables exist (idempotent; createSchema also creates them).
+      // Uses the shared ENTITY_MODEL_DDL constant so column-level drift between
+      // this migration and createSchema is structurally impossible.
+      db.exec(ENTITY_MODEL_DDL);
 
       // 2. If registered_groups exists, copy its rows into the new tables.
       // Skip if already migrated (idempotent: re-running won't duplicate).
@@ -272,7 +247,10 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       if (rows.length === 0) return;
 
       const insertAg = db.prepare(`INSERT OR IGNORE INTO agent_groups (id, name, folder, agent_provider, container_config, created_at) VALUES (?, ?, ?, ?, ?, ?)`);
-      const insertMg = db.prepare(`INSERT OR IGNORE INTO messaging_groups (id, channel_type, platform_id, name, is_group, unknown_sender_policy, created_at) VALUES (?, ?, ?, ?, 0, 'public', ?)`);
+      // messaging_groups.name is the chat title (not the agent name); fill in lazily
+      // on next observation by the channel adapter. v1's registered_groups.name is
+      // the agent display name — semantically wrong here, so we write NULL instead.
+      const insertMg = db.prepare(`INSERT OR IGNORE INTO messaging_groups (id, channel_type, platform_id, name, is_group, unknown_sender_policy, created_at) VALUES (?, ?, ?, NULL, 0, 'public', ?)`);
       const findAg = db.prepare(`SELECT id FROM agent_groups WHERE folder = ?`);
       const findMg = db.prepare(`SELECT id FROM messaging_groups WHERE channel_type = ? AND platform_id = ?`);
       const insertMga = db.prepare(`INSERT OR IGNORE INTO messaging_group_agents (id, messaging_group_id, agent_group_id, engage_mode, engage_pattern, sender_scope, ignored_message_policy, session_mode, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'shared', 0, ?)`);
@@ -280,7 +258,7 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       for (const row of rows) {
         const channelType = row.channel ?? 'whatsapp'; // Phase 1 default — pre-channel-aware rows
         insertAg.run(crypto.randomUUID(), row.name, row.folder, null, row.container_config, row.added_at);
-        insertMg.run(crypto.randomUUID(), channelType, row.jid, row.name, row.added_at);
+        insertMg.run(crypto.randomUUID(), channelType, row.jid, row.added_at);
         const ag = findAg.get(row.folder) as { id: string };
         const mg = findMg.get(channelType, row.jid) as { id: string };
         insertMga.run(
