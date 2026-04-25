@@ -5,6 +5,7 @@ import {
   _initTestDatabase,
   _initTestDatabaseFrom,
   _getSchemaVersion,
+  createSchema,
   createTask,
   dbEvents,
   deleteTask,
@@ -513,6 +514,24 @@ describe('folder validation', () => {
     expect(isValidGroupFolder('.hidden')).toBe(false);
     expect(isValidGroupFolder('global')).toBe(false);
     expect(isValidGroupFolder('a'.repeat(65))).toBe(false);
+  });
+});
+
+// --- createSchema decoupled from initDb ---
+
+describe('createSchema decoupled from initDb', () => {
+  it('createSchema can run on a fresh connection without prior init', () => {
+    const db = new Database(':memory:');
+    expect(() => createSchema(db)).not.toThrow();
+    // Verify a known table exists
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+    expect(tables.map(t => t.name)).toContain('messages');
+  });
+
+  it('createSchema is idempotent (re-running is a no-op)', () => {
+    const db = new Database(':memory:');
+    createSchema(db);
+    expect(() => createSchema(db)).not.toThrow();
   });
 });
 

@@ -17,7 +17,7 @@ export function getDb(): Database.Database {
 export const dbEvents = new EventEmitter();
 dbEvents.setMaxListeners(50);
 
-function createSchema(database: Database.Database): void {
+export function createSchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS chats (
       jid TEXT PRIMARY KEY,
@@ -180,13 +180,6 @@ export function initDatabase(): void {
 
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
-  createSchema(db);
-
-  // Post-schema startup: JSON migration + log pruning
-  runStartupTasks();
-
-  // Create a backup on startup
-  backupDatabase();
 }
 
 /** @internal - for tests only. Creates a fresh in-memory database. */

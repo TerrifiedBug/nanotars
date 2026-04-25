@@ -20,16 +20,20 @@ import {
   writeTasksSnapshot,
 } from './container-runner.js';
 import {
+  backupDatabase,
+  createSchema,
   dbEvents,
   getAllChats,
   getAllRegisteredGroups,
   getAllSessions,
   getAllTasks,
+  getDb,
   getLastGroupSync,
   getMessagesSince,
   getNewMessages,
   getRouterState,
   initDatabase,
+  runStartupTasks,
   setLastGroupSync,
   setRegisteredGroup,
   setRouterState,
@@ -115,6 +119,9 @@ async function main(): Promise<void> {
   acquirePidLock();
   ensureContainerRuntime();
   initDatabase();
+  createSchema(getDb());
+  runStartupTasks();
+  backupDatabase();
   logger.info('Database initialized');
 
   const orchestrator = new MessageOrchestrator({
