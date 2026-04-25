@@ -41,7 +41,6 @@ import {
 } from './db/agent-groups.js';
 import { canAccessAgentGroup } from './permissions/access.js';
 import { resolveSender, type SenderInfo } from './permissions/sender-resolver.js';
-import { isMember } from './permissions/agent-group-members.js';
 
 /** Dependency injection interface for the orchestrator. */
 export interface OrchestratorDeps {
@@ -475,18 +474,8 @@ export class MessageOrchestrator {
       const access = canAccessAgentGroup(userId, agentGroupRow.id);
       if (!access.allowed) {
         this.deps.logger.debug(
-          { jid: chatJid, folder: group.folder, userId, reason: access.reason },
+          { jid: chatJid, folder: group.folder, agentGroupId: agentGroupRow.id, userId, reason: access.reason },
           'Dropped by sender_scope=known gate',
-        );
-        return true;
-      }
-      // Defence-in-depth: canAccessAgentGroup admits owner/admin via isMember
-      // check internally, so this cannot diverge today, but keeps the gate
-      // intent explicit if the access decision ever loosens.
-      if (!isMember(userId, agentGroupRow.id)) {
-        this.deps.logger.debug(
-          { jid: chatJid, folder: group.folder, userId },
-          'Dropped by sender_scope=known gate (membership)',
         );
         return true;
       }
@@ -802,15 +791,8 @@ export class MessageOrchestrator {
               const access = canAccessAgentGroup(userId, agentGroupRow.id);
               if (!access.allowed) {
                 this.deps.logger.debug(
-                  { jid: chatJid, folder: group.folder, userId, reason: access.reason },
+                  { jid: chatJid, folder: group.folder, agentGroupId: agentGroupRow.id, userId, reason: access.reason },
                   'Dropped by sender_scope=known gate',
-                );
-                continue;
-              }
-              if (!isMember(userId, agentGroupRow.id)) {
-                this.deps.logger.debug(
-                  { jid: chatJid, folder: group.folder, userId },
-                  'Dropped by sender_scope=known gate (membership)',
                 );
                 continue;
               }

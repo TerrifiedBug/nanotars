@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 
 import { MessageOrchestrator, OrchestratorDeps } from '../orchestrator.js';
@@ -13,6 +12,7 @@ import {
 import { ensureUser } from '../permissions/users.js';
 import { grantRole } from '../permissions/user-roles.js';
 import { addMember } from '../permissions/agent-group-members.js';
+import { resolveSender } from '../permissions/sender-resolver.js';
 
 /**
  * Test helper: seed a (channel, jid, folder) tuple into the new entity-model
@@ -505,39 +505,6 @@ describe('MessageOrchestrator', () => {
       expect(deps.runContainerAgent).not.toHaveBeenCalled();
     });
 
-    it('sender_scope=known drops messages from non-members (Phase 4B real gate)', async () => {
-      // Phase 4B: sender_scope='known' is now enforced. Non-members of the
-      // agent group are dropped at the orchestrator gate even when engage_mode
-      // would otherwise admit them.
-      seedAgent({
-        jid: 'known@g.us',
-        name: 'Known Scope Group',
-        folder: 'known-scope',
-        pattern: '^!',
-        engage_mode: 'always',
-        sender_scope: 'known',
-      });
-      const deps = makeDeps({
-        getMessagesSince: vi.fn(() => [
-          makeMessage({
-            chat_jid: 'known@g.us',
-            content: 'hello, no trigger needed',
-            sender: 'unknown-sender@s',
-          }),
-        ]),
-        mainGroupFolder: 'other-main',
-      });
-      const orch = new MessageOrchestrator(deps);
-      orch.setChannels([mockWhatsAppChannel()]);
-
-      const result = await orch.processGroupMessages('known@g.us');
-      expect(result).toBe(true); // observed, but not dispatched
-      expect(deps.runContainerAgent).not.toHaveBeenCalled();
-      expect(deps.logger.debug).toHaveBeenCalledWith(
-        expect.objectContaining({ jid: 'known@g.us', folder: 'known-scope' }),
-        expect.stringContaining('sender_scope=known'),
-      );
-    });
   });
 
   describe('recoverPendingMessages', () => {
@@ -886,6 +853,39 @@ describe('MessageOrchestrator', () => {
         expect(deps.runContainerAgent).toHaveBeenCalled();
       });
 
+      it('sender_scope=known: scoped admin is dispatched (implicit member)', async () => {
+        const ag = createAgentGroup({ name: 'Strict4', folder: 'strict-4' });
+        const mg = createMessagingGroup({
+          channel_type: 'whatsapp',
+          platform_id: 'strict4@g.us',
+          name: 'Strict4',
+        });
+        createWiring({
+          messaging_group_id: mg.id,
+          agent_group_id: ag.id,
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        ensureUser({ id: 'whatsapp:scoped-admin@s', kind: 'whatsapp' });
+        grantRole({ user_id: 'whatsapp:scoped-admin@s', role: 'admin', agent_group_id: ag.id }); // scoped admin
+
+        const deps = makeDeps({
+          getMessagesSince: vi.fn(() => [
+            makeMessage({
+              chat_jid: 'strict4@g.us',
+              sender: 'scoped-admin@s',
+              timestamp: '2024-01-01T00:00:05.000Z',
+            }),
+          ]),
+          mainGroupFolder: 'other-main',
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.setChannels([mockWhatsAppChannel()]);
+
+        await orch.processGroupMessages('strict4@g.us');
+        expect(deps.runContainerAgent).toHaveBeenCalled();
+      });
+
       it('resolveSender lazily creates the users row for unknown senders', async () => {
         seedAgent(mainSeed);
         const deps = makeDeps({
@@ -992,12 +992,167 @@ describe('MessageOrchestrator', () => {
         expect(sendMessage).not.toHaveBeenCalled();
         expect(enqueueMessageCheck).not.toHaveBeenCalled();
       });
+
+      it('sender_scope=known: explicit member is enqueued', async () => {
+        const ag = createAgentGroup({ name: 'StrictLoop2', folder: 'strict-loop-2' });
+        const mg = createMessagingGroup({
+          channel_type: 'whatsapp',
+          platform_id: 'strict-loop2@g.us',
+          name: 'StrictLoop2',
+        });
+        createWiring({
+          messaging_group_id: mg.id,
+          agent_group_id: ag.id,
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        ensureUser({ id: 'whatsapp:loop-member@s', kind: 'whatsapp' });
+        addMember({ user_id: 'whatsapp:loop-member@s', agent_group_id: ag.id });
+
+        const dbEvents = new EventEmitter();
+        const enqueueMessageCheck = vi.fn();
+        const deps = makeDeps({
+          dbEvents,
+          pollInterval: 60000,
+          mainGroupFolder: 'other-main',
+          getNewMessages: vi.fn(() => ({
+            messages: [
+              makeMessage({
+                id: 'm-loop-member',
+                chat_jid: 'strict-loop2@g.us',
+                sender: 'loop-member@s',
+                timestamp: '2024-01-01T00:00:02.000Z',
+              }),
+            ],
+            newTimestamp: '2024-01-01T00:00:02.000Z',
+          })),
+          queue: {
+            enqueueMessageCheck,
+            sendMessage: vi.fn(() => false),
+            closeStdin: vi.fn(),
+            registerProcess: vi.fn(),
+          } as any,
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.channels = [mockWhatsAppChannel()];
+
+        const loopPromise = orch.startMessageLoop();
+        await new Promise((r) => setTimeout(r, 50));
+        orch.stop();
+        await loopPromise;
+
+        expect(enqueueMessageCheck).toHaveBeenCalledWith('strict-loop2@g.us');
+      });
+
+      it('sender_scope=known: global admin is enqueued (implicit member)', async () => {
+        const ag = createAgentGroup({ name: 'StrictLoop3', folder: 'strict-loop-3' });
+        const mg = createMessagingGroup({
+          channel_type: 'whatsapp',
+          platform_id: 'strict-loop3@g.us',
+          name: 'StrictLoop3',
+        });
+        createWiring({
+          messaging_group_id: mg.id,
+          agent_group_id: ag.id,
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        ensureUser({ id: 'whatsapp:loop-global-admin@s', kind: 'whatsapp' });
+        grantRole({ user_id: 'whatsapp:loop-global-admin@s', role: 'admin' }); // global admin
+
+        const dbEvents = new EventEmitter();
+        const enqueueMessageCheck = vi.fn();
+        const deps = makeDeps({
+          dbEvents,
+          pollInterval: 60000,
+          mainGroupFolder: 'other-main',
+          getNewMessages: vi.fn(() => ({
+            messages: [
+              makeMessage({
+                id: 'm-loop-global-admin',
+                chat_jid: 'strict-loop3@g.us',
+                sender: 'loop-global-admin@s',
+                timestamp: '2024-01-01T00:00:02.000Z',
+              }),
+            ],
+            newTimestamp: '2024-01-01T00:00:02.000Z',
+          })),
+          queue: {
+            enqueueMessageCheck,
+            sendMessage: vi.fn(() => false),
+            closeStdin: vi.fn(),
+            registerProcess: vi.fn(),
+          } as any,
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.channels = [mockWhatsAppChannel()];
+
+        const loopPromise = orch.startMessageLoop();
+        await new Promise((r) => setTimeout(r, 50));
+        orch.stop();
+        await loopPromise;
+
+        expect(enqueueMessageCheck).toHaveBeenCalledWith('strict-loop3@g.us');
+      });
+
+      it('sender_scope=known: scoped admin is enqueued (implicit member)', async () => {
+        const ag = createAgentGroup({ name: 'StrictLoop4', folder: 'strict-loop-4' });
+        const mg = createMessagingGroup({
+          channel_type: 'whatsapp',
+          platform_id: 'strict-loop4@g.us',
+          name: 'StrictLoop4',
+        });
+        createWiring({
+          messaging_group_id: mg.id,
+          agent_group_id: ag.id,
+          engage_mode: 'always',
+          sender_scope: 'known',
+        });
+        ensureUser({ id: 'whatsapp:loop-scoped-admin@s', kind: 'whatsapp' });
+        grantRole({ user_id: 'whatsapp:loop-scoped-admin@s', role: 'admin', agent_group_id: ag.id }); // scoped admin
+
+        const dbEvents = new EventEmitter();
+        const enqueueMessageCheck = vi.fn();
+        const deps = makeDeps({
+          dbEvents,
+          pollInterval: 60000,
+          mainGroupFolder: 'other-main',
+          getNewMessages: vi.fn(() => ({
+            messages: [
+              makeMessage({
+                id: 'm-loop-scoped-admin',
+                chat_jid: 'strict-loop4@g.us',
+                sender: 'loop-scoped-admin@s',
+                timestamp: '2024-01-01T00:00:02.000Z',
+              }),
+            ],
+            newTimestamp: '2024-01-01T00:00:02.000Z',
+          })),
+          queue: {
+            enqueueMessageCheck,
+            sendMessage: vi.fn(() => false),
+            closeStdin: vi.fn(),
+            registerProcess: vi.fn(),
+          } as any,
+        });
+        const orch = new MessageOrchestrator(deps);
+        orch.channels = [mockWhatsAppChannel()];
+
+        const loopPromise = orch.startMessageLoop();
+        await new Promise((r) => setTimeout(r, 50));
+        orch.stop();
+        await loopPromise;
+
+        expect(enqueueMessageCheck).toHaveBeenCalledWith('strict-loop4@g.us');
+      });
     });
 
-    it('DEFAULT_USER_ID constant matches resolveSender keying convention', () => {
-      // Anchored here so we notice if the convention changes (e.g., adding
-      // a normalisation step in sender-resolver.ts).
-      expect(DEFAULT_USER_ID).toBe('whatsapp:user@s');
+    it('resolveSender keying matches DEFAULT_USER_ID convention', () => {
+      expect(resolveSender({
+        channel: 'whatsapp',
+        platform_id: 'group@s.whatsapp.net',
+        sender_handle: 'user@s',
+      })).toBe(DEFAULT_USER_ID);
     });
   });
 });
