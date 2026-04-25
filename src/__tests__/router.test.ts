@@ -126,6 +126,44 @@ describe('routeOutbound', () => {
   });
 });
 
+// --- routeOutbound transformOutboundText ---
+
+describe('routeOutbound transformOutboundText', () => {
+  beforeEach(() => {
+    vi.mocked(redactSecrets).mockImplementation((s: string) => s);
+  });
+
+  it('calls transformOutboundText and passes transformed text to sendMessage', async () => {
+    const transform = vi.fn((s: string) => s.toUpperCase());
+    const ch = makeChannel({ transformOutboundText: transform });
+    await routeOutbound([ch], 'jid@test', 'hello');
+    expect(transform).toHaveBeenCalledWith('hello', 'jid@test');
+    expect(ch.sendMessage).toHaveBeenCalledWith('jid@test', 'HELLO', undefined, undefined);
+  });
+
+  it('skips the hook when channel does not implement transformOutboundText', async () => {
+    const ch = makeChannel(); // no transformOutboundText
+    await routeOutbound([ch], 'jid@test', 'hello');
+    expect(ch.sendMessage).toHaveBeenCalledWith('jid@test', 'hello', undefined, undefined);
+  });
+
+  it('suppresses sendMessage when transformOutboundText returns empty string', async () => {
+    const transform = vi.fn(() => '');
+    const ch = makeChannel({ transformOutboundText: transform });
+    const result = await routeOutbound([ch], 'jid@test', 'hello');
+    expect(transform).toHaveBeenCalledWith('hello', 'jid@test');
+    expect(ch.sendMessage).not.toHaveBeenCalled();
+    expect(result).toBe(true);
+  });
+
+  it('awaits an async transformOutboundText', async () => {
+    const transform = vi.fn(async (s: string) => `async:${s}`);
+    const ch = makeChannel({ transformOutboundText: transform });
+    await routeOutbound([ch], 'jid@test', 'world');
+    expect(ch.sendMessage).toHaveBeenCalledWith('jid@test', 'async:world', undefined, undefined);
+  });
+});
+
 // --- routeOutboundFile ---
 
 describe('routeOutboundFile', () => {

@@ -74,7 +74,15 @@ export async function routeOutbound(
     }
   }
 
-  const safeText = redactSecrets(outText);
+  let safeText = redactSecrets(outText);
+  if (channel.transformOutboundText) {
+    safeText = await channel.transformOutboundText(safeText, jid);
+  }
+  if (safeText.length === 0) {
+    // Hook returned empty — suppress delivery (channel-level rejection).
+    logger.debug({ channel: channel.name, jid }, 'transformOutboundText returned empty; suppressing send');
+    return true;
+  }
   await channel.sendMessage(jid, safeText, sender, replyTo);
   return true;
 }

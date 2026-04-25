@@ -97,6 +97,16 @@ export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string, sender?: string, replyTo?: string): Promise<void>;
+  /**
+   * Optional hook: transform outbound text immediately before delivery.
+   *
+   * Called after secret redaction and the `<internal>`-tag strip, but before
+   * `sendMessage`. Useful for per-channel sanitization (e.g., escaping
+   * Telegram-Markdown reserved characters, WhatsApp emoji prefixes).
+   * If the channel does not implement this hook, the text is passed through
+   * unchanged. Returning an empty string is allowed and suppresses delivery.
+   */
+  transformOutboundText?(text: string, jid: string): string | Promise<string>;
   sendFile?(jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string): Promise<void>;
   react?(jid: string, messageId: string, emoji: string, participant?: string, fromMe?: boolean): Promise<void>;
   isConnected(): boolean;
