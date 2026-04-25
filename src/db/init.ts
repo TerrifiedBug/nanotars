@@ -97,6 +97,38 @@ const USER_DMS_DDL = `
 `;
 const RBAC_DDL = USERS_DDL + USER_ROLES_DDL + AGENT_GROUP_MEMBERS_DDL + USER_DMS_DDL;
 
+/**
+ * Shared DDL for the Phase 4C approval-primitive table. Used by both
+ * createSchema (fresh-install path) and migration 015 (existing-DB path) so
+ * column-level divergence between the two is structurally impossible —
+ * mirrors the ENTITY_MODEL_DDL / RBAC_DDL pattern from Phases 4A / 4B.
+ *
+ * session_id intentionally lacks a foreign-key reference: v1-archive's
+ * `sessions` table is a per-group-container map (group_folder PK), not v2's
+ * per-session sessions. Column shape matches v2 for forward-port compat;
+ * today every row stays NULL or carries an opaque agent-group identifier.
+ */
+const APPROVALS_DDL = `
+  CREATE TABLE IF NOT EXISTS pending_approvals (
+    approval_id          TEXT PRIMARY KEY,
+    session_id           TEXT,
+    request_id           TEXT NOT NULL,
+    action               TEXT NOT NULL,
+    payload              TEXT NOT NULL,
+    created_at           TEXT NOT NULL,
+    agent_group_id       TEXT REFERENCES agent_groups(id),
+    channel_type         TEXT,
+    platform_id          TEXT,
+    platform_message_id  TEXT,
+    expires_at           TEXT,
+    status               TEXT NOT NULL DEFAULT 'pending',
+    title                TEXT NOT NULL DEFAULT '',
+    options_json         TEXT NOT NULL DEFAULT '[]'
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_approvals_action_status
+    ON pending_approvals(action, status);
+`;
+
 let db: Database.Database;
 
 export function getDb(): Database.Database {
@@ -183,6 +215,7 @@ export function createSchema(database: Database.Database): void {
 
   database.exec(ENTITY_MODEL_DDL);
   database.exec(RBAC_DDL);
+  database.exec(APPROVALS_DDL);
 
   runMigrations(database);
 }
@@ -446,6 +479,15 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
           }
         }
       }
+    },
+  },
+  {
+    name: '015_add_pending_approvals',
+    up: (db) => {
+      // Phase 4C foundation. Uses the shared APPROVALS_DDL constant so
+      // column-level drift between this migration and createSchema is
+      // structurally impossible. IF NOT EXISTS makes re-runs a no-op.
+      db.exec(APPROVALS_DDL);
     },
   },
 ];
