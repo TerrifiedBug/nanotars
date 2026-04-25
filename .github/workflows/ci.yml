@@ -46,8 +46,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run all bash tests
-        run: |
-          for f in container/__tests__/*.test.sh; do
-            [ -f "$f" ] && bash "$f"
-          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-fund
+      - name: Run bash tests
+        run: npm run test:bash

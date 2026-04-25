@@ -12,7 +12,9 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:bash": "for f in container/__tests__/*.test.sh; do [ -f \"$f\" ] && bash \"$f\"; done",
+    "test:all": "npm run typecheck && npm run test && npm run test:bash"
   },
   "dependencies": {
     "better-sqlite3": "11.10.0",
