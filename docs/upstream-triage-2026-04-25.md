@@ -18,13 +18,13 @@
 | Verdict | Count | What it means |
 |---|---|---|
 | PORT | 16 | v2 has a clearly better implementation of functionality v1 also has — bring v2's version across. Fits v1's architecture. |
-| KEEP | 43 | v1's implementation wins, OR v1 has improvements v2 lacks. Includes plugin-loader / channel-plugins / dashboard / agent-teams / file-on-disk media — nanotars's own customizations stay. |
+| KEEP | 44 | v1's implementation wins, OR v1 has improvements v2 lacks. Includes plugin-loader / channel-plugins / dashboard / agent-teams / file-on-disk media — nanotars's own customizations stay. |
 | ADOPT | 58 | v2 has functionality v1 doesn't — worth adding. Fits v1's architecture (some require central-DB schema changes for multi-user). |
 | PORT-ARCH | 14 | v2 has functionality genuinely better than v1's, but pickup requires committing to per-session containers + two-DB IPC + heartbeat sweep. In scope, but sequenced as a coherent architectural-foundation block. |
 | SKIP-ALT | 6 | Alternative architecture, not strictly better. Not adopted on technical merit (`ChannelAdapter` unit, `chat-sdk-bridge`, barrel-import distribution, Bun runtime split, `webhook-server` standalone, registerChannelAdapter barrel). |
-| CONTRIBUTE | 11 | v1 has functionality v2 doesn't — useful as a PR upstream. Plus 9 secondary CONTRIBUTE candidates from compound-verdict rows. |
-| N/A | 5 | Compared item not present on either side, or v2-only bug with no v1 analog. |
-| **Total reviewed** | **153** | |
+| CONTRIBUTE | 12 | v1 has functionality v2 doesn't — useful as a PR upstream. Plus 9 secondary CONTRIBUTE candidates from compound-verdict rows. |
+| N/A | 4 | Compared item not present on either side, or v2-only bug with no v1 analog. |
+| **Total reviewed** | **154** | (one row added — magic-bytes MIME detection, originally tagged N/A, split into v1-KEEP + upstream-CONTRIBUTE rows after CHANGES.md cross-reference revealed it is present in v1's WhatsApp plugin) |
 
 The 45 original SKIP-ARCH items redistributed as: 14 → **PORT-ARCH** (Phase 6 cluster: two-DB schemas + per-session container + heartbeat sweep + supportsThreads/subscribe/admin-transport + cross-container agent messaging), 22 → **ADOPT** (Phase 4 multi-user RBAC + Phase 5 capability bolt-ons; openDM fits v1's `Channel` interface as a primitive), 3 → **PORT** (Phase 2 A migration-framework cluster — paired adjudication of versioned-file framework + schema-version table + module-migration name-key trick), 6 → **SKIP-ALT** (alternative architectures, not strictly better).
 
@@ -77,6 +77,30 @@ The 45 original SKIP-ARCH items redistributed as: 14 → **PORT-ARCH** (Phase 6 
 - **`webhook-server.ts` shared HTTP server** (Area 5) — only useful with chat-sdk-bridge adoption.
 - **Bun runtime split for the agent-runner** (Area 6) — alternative runtime, not strictly better. Bun beats Node on cold-start, loses on some workloads. No clear technical win.
 
+**Confirmed: nanotars improvements that stay (mapped to [CHANGES.md](CHANGES.md)):**
+
+| CHANGES.md § | Subject | Triage verdict |
+|---|---|---|
+| §1 | Plugin Architecture (`plugin-loader.ts`, `plugin-types.ts`, `plugins/` directory, plugin.json manifests with channel/group scoping, per-plugin `mcp.json` merge → per-group `merged-mcp.json`, `Dockerfile.partial` injection, `containerEnvVars` allowlist, per-group `.env` overrides) | KEEP — `registerChannelAdapter` barrel and barrel-import distribution are SKIP-ALT |
+| §2 | Channel Abstraction (`Channel` interface with `sendMessage`/`sendMedia`/`sendFile`/`react`/`replyTo`, JID-prefix routing, channel plugins) | KEEP — selectively ADOPT v2 method-additions (`splitForLimit`, `transformOutboundText`, `extractReplyContext`, `openDM`, `NetworkError` retry) |
+| §3 | Docker/Linux runtime abstraction (`container-runtime.ts`, `chromium-seccomp.json`, all 9 hardening flags) | KEEP — and CONTRIBUTE the hardening block upstream |
+| §4 | Security Hardening (`secret-redact.ts`, `security-hooks.ts`, IPC `O_NOFOLLOW` + 1 MiB cap + quarantine, mount allowlist strict-match, anti-prompt-injection rules, output-marker nonce, sender allowlist, .env masking via `/dev/null` overlay, `assertPathWithin` defense-in-depth) | KEEP — small PORTs from v2 are additive (colon-injection check, `READ_TOOLS_RE` expansion, secret-redaction body length-sort + Set-dedup) |
+| §5 | Media Pipeline (file-on-disk model with `mediaPath`/`mediaHostPath`, `send_file` IPC + MCP, ffmpeg thumbnail extraction, magic-bytes MIME detection in WhatsApp plugin) | KEEP — CONTRIBUTE thumbnails + magic-bytes upstream |
+| §6 | Task Scheduler (per-task model, error notifications, atomic `claimTask`, three schedule types `cron`/`interval`/`once`, `resumeAt` persistence, `task_run_logs` audit) | KEEP — CONTRIBUTE auth-vs-generic error split + `interval`/`once` types upstream |
+| §7 | Bug fixes (PRs to upstream + ports of upstream fixes) | No conflicts |
+| §8 | Skill marketplace (27 marketplace + 13 core skills via Claude Code `/plugin install`) | KEEP — v2's barrel-import distribution is SKIP-ALT |
+| §9 | Documentation | KEEP |
+| §10 | Code quality refactoring (`db/`, `ipc/`, `container-mounts.ts`, `snapshots.ts` decomposition, dead-code removal, mtime-based `.env` cache, stdout-streaming-to-file) | KEEP |
+| §11 | Minor improvements (reply context, singleton PID guard, typing/read-receipts, per-group webhook routing, react IPC + MCP, emoji status reactions, **emergency stop / resume**) | KEEP — Phase 5 lifecycle pause/resume *extends* emergency_stop, doesn't replace it |
+| §12 | Admin Dashboard (full htmx UI, ~900 LOC) | KEEP — CONTRIBUTE adapter to consume v2 pusher data model |
+| §13 | Agent Identity System (`groups/<folder>/IDENTITY.md` per-group override + `groups/global/IDENTITY.md` fallback, prepended to system prompt by agent-runner) | KEEP — `claude-md-compose.ts` PORT (Phase 2 B) is at a *different layer* (SDK CLAUDE.md, not system-prompt prefix) and preserves IDENTITY.md prepending unchanged. v2's `groups/identity/` mount solves a use case (cross-group persona-snippet library) you don't have — deferred from Phase 1 |
+| §14 | Plugin versioning & update system (semver in `plugin.json`, `nanoclaw-update` skill, marketplace version comparison) | KEEP |
+| §15 | Agent Teams (`groups/<folder>/agents/<name>/{agent.json,IDENTITY.md,CLAUDE.md}` + `discoverAgents` Claude SDK Task subagents) | KEEP — v2's `agent-to-agent` is a different concept (cross-container peer messaging, PORT-ARCH Phase 7) |
+| §16 | Skill marketplace at `TerrifiedBug/nanoclaw-skills` (Claude Code marketplace, version-gated updates) | KEEP |
+| §17 | Plugin scoping standardization (`channels`/`groups` defaults in `plugin.json`) | KEEP |
+
+**Sender-allowlist subsumption (Phase 4 B note):** v1's `src/sender-allowlist.ts` (per-chat trigger/drop modes, fail-open) is the existing equivalent of v2's `sender_scope='all' | 'known'` gate. Phase 4 B should *merge* the two — v1's two-mode design (trigger vs drop) is richer than v2's binary all/known. v1's concept wins; the entity-model wiring (per-`messaging_group_agents` row config) is what gets adopted.
+
 **Estimated total catch-up effort:** **~37–52 weeks at 8 hours/week** (range driven by Phase 6 commitment).
 
 | Phase | Scope | Effort | Notes |
@@ -115,8 +139,9 @@ Independent items, mostly trivial-effort PORT/ADOPT. Order by user-visibility (s
 - Per-channel `extractReplyContext` hook (Area 4, ADOPT)
 - `NetworkError` setup retry wrapper (Area 4, ADOPT)
 - `openDM(userHandle)` channel primitive added to v1's `Channel` interface (Area 4, ADOPT — was SKIP-ARCH, now ADOPT under corrected lens)
-- `groups/identity/` shared persona-files mount (Area 5, ADOPT)
 - `unregistered_senders` table + upsert-coalesce accessor (Area 1, ADOPT — paired with multi-user Phase 4 but the table is independently useful)
+
+(Removed from Phase 1: `groups/identity/` mount — your existing per-group + global IDENTITY.md fallback covers the use case; v2's mount is for cross-group persona-snippet sharing which isn't a current need.)
 
 **Hygiene:**
 - `decoupling connection from schema` refactor (Area 1, PORT trivial)
@@ -337,7 +362,7 @@ Per-area totals (revised): PORT=5, KEEP=5, ADOPT=2, **PORT-ARCH=8**, CONTRIBUTE=
 | `user_dms` cache + `ensureUserDm` two-class resolution | ADOPT (was SKIP-ARCH) | medium | high | Phase 4B | Cold-DM resolution + JID cache |
 | `canAccessAgentGroup` access function | ADOPT (was SKIP-ARCH) | trivial | high | Phase 4B | Functional layer over role tables |
 | Sender-resolver hook + access-gate hook | ADOPT (was SKIP-ARCH) | small | medium | Phase 4A | Router refactor adds hook surface |
-| Sender-scope gate (`sender_scope='all'\|'known'`) | ADOPT (was SKIP-ARCH) | trivial | medium | Phase 4B | Per-wiring gate |
+| Sender-scope gate (`sender_scope='all'\|'known'`) | ADOPT (was SKIP-ARCH) | trivial | medium | Phase 4B | Per-wiring gate. **Subsumes v1's `src/sender-allowlist.ts`** (CHANGES.md §4) — v1's two-mode design (trigger / drop) is richer than v2's binary `all`/`known`. Phase 4 B should preserve the two-mode semantics inside the new per-`messaging_group_agents` config |
 | Approval primitive (`requestApproval`, handler registry) | ADOPT (was deferred) | medium | low | Phase 4C | Reusable infrastructure |
 | `pickApprover` + `pickApprovalDelivery` (approver hierarchy) | ADOPT (was SKIP-ARCH) | small | high | Phase 4C | Hierarchical approver resolution |
 | Same-channel-kind tie-break in `pickApprovalDelivery` | ADOPT (was SKIP-ARCH) | trivial | high | Phase 4C | Comes with pickApprovalDelivery |
@@ -392,7 +417,7 @@ Wait — checking carefully: AgentProvider abstraction is conceptually reimpleme
 | Source-as-RO-bind-mount (no source baked) | ADOPT | small | high | Phase 2 D | Drop COPY+tsc, mirror v2 |
 | Two-DB session split + heartbeat-driven stuck detection | PORT-ARCH | large | high | Phase 6 | Genuinely better; gated on per-session container |
 | Per-session container model | PORT-ARCH | large | high | Phase 6 | The keystone of Phase 6 |
-| Lifecycle module pause/resume | ADOPT (rebuild) | medium | high | Phase 5 | Reimplement on group-queue with `paused` flag |
+| Lifecycle module pause/resume | ADOPT (rebuild) | medium | high | Phase 5 | **Extends v1's existing `emergency_stop`/`resume_processing` in `src/group-queue.ts`** (CHANGES.md §11). v1 already supports kill-and-resume; v2's pattern is queue-suspending (cleaner — adds `paused` flag, no kill). The rebuild adds the queue-suspend mode alongside the existing kill-mode |
 | Self-modification (`install_packages`, `add_mcp_server`) | ADOPT (rebuild) | large | high | Phase 5 | Concept port: agent → admin approval → rebuild → restart |
 | Per-agent-group image build (`generateAgentGroupDockerfile`) | ADOPT (rebuild) | medium | high | Phase 5 | Required by self-mod |
 | Container-side `AgentProvider` abstraction (Codex/OpenCode/Ollama) | ADOPT (rebuild) | large | high | Phase 5 | Concept-level seam in agent-runner; default Claude |
@@ -444,7 +469,8 @@ Per-area totals (revised): PORT=0, KEEP=12, **ADOPT=11** (was 6), **PORT-ARCH=2*
 | Per-channel `transformOutboundText` hook | ADOPT | trivial | medium | Phase 1 | Hook on v1's Channel interface |
 | Per-channel `extractReplyContext` hook | ADOPT | trivial | medium | Phase 1 | Hook on v1's Channel interface |
 | Telegram typed-media routing (`sendPhoto` / `sendVideo` / `sendAudio` by extension) | ADOPT | small | high | Phase 2 C | Closes v1 Telegram template's `sendFile` gap |
-| Magic-bytes MIME detection | N/A | — | high | — | Not present in either codebase |
+| Magic-bytes MIME detection (v1 WhatsApp plugin) | KEEP | — | high | — | Detects PNG/JPEG/GIF/WebP/PDF from buffer headers; corrects WhatsApp's wrong MIME declarations. Lives in `plugins/channels/whatsapp/index.js` (gitignored — see *Cross-cutting concerns: gitignored-plugin gap*). Originally tagged N/A; reclassified after CHANGES.md §5 cross-reference |
+| Magic-bytes MIME detection (upstream contribution) | CONTRIBUTE | medium | medium | — | v2 lacks this entirely; same PR shape as ffmpeg-thumbnail contribution |
 | ffmpeg thumbnail extraction (videos + GIFs) | KEEP | — | high | — | v1-only; agent vision win |
 | ffmpeg thumbnail extraction (upstream contribution) | CONTRIBUTE | medium | medium | — | Post-`messageToInbound` hook |
 | Inbound media: file-on-disk + path reference | KEEP | — | high | — | v1's model scales to large media |
@@ -463,7 +489,7 @@ Per-area totals (revised): PORT=0, KEEP=12, **ADOPT=11** (was 6), **PORT-ARCH=2*
 | `NetworkError` setup retry | ADOPT | trivial | high | Phase 1 | 50-line retry wrapper |
 | `replyTo` reply-quote on outbound `sendMessage` | KEEP | — | high | — | v1 already has it |
 
-Per-area totals (revised): PORT=0, KEEP=6, **ADOPT=8** (was 7), **PORT-ARCH=3** (was SKIP-ARCH=7), **SKIP-ALT=3**, CONTRIBUTE=3, N/A=3. Total=26.
+Per-area totals (revised): PORT=0, KEEP=7 (+1 from magic-bytes reclassification), **ADOPT=8** (was 7), **PORT-ARCH=3** (was SKIP-ARCH=7), **SKIP-ALT=3**, CONTRIBUTE=4 (+1 from magic-bytes upstream-contribution row), N/A=2 (–1 from magic-bytes reclassification). Total=27 (was 26 — magic-bytes split into two rows).
 
 → See `upstream-triage-2026-04-25-area-4-channels-media.md` for full agent report (unchanged).
 
@@ -476,7 +502,7 @@ Per-area totals (revised): PORT=0, KEEP=6, **ADOPT=8** (was 7), **PORT-ARCH=3** 
 **Implementation comparison highlights:**
 - **Plugin-loader vs barrel-imports is decisively plugin-loader's win for nanotars** (Danny's 20+ extensions, single fork, public repo with users). Per the corrected lens, KEEP plugin-loader; barrel-import distribution is SKIP-ALT.
 - **Agent teams (`groups/<folder>/agents/`) is v1-only and worth keeping.** v2's agent-to-agent is *different*, not equivalent.
-- **`claude-md-compose.ts` + `CLAUDE.local.md`:** PORT — biggest content-quality win.
+- **`claude-md-compose.ts` + `CLAUDE.local.md`:** PORT — biggest content-quality win. **Coexists with v1's `IDENTITY.md` system at a different layer** (IDENTITY.md is prepended to the *system prompt* by the agent-runner before `query()`; compose regenerates the SDK-loaded `CLAUDE.md`). The PORT preserves IDENTITY.md prepending unchanged.
 - **Dashboard:** KEEP v1's full UI; CONTRIBUTE adapter to consume v2's pusher data model.
 - **`dockerfilePartials` path-traversal guard:** PORT trivial.
 - **Per-agent-group images (`buildAgentGroupImage`):** ADOPT (rebuild) — concept fits v1's per-group model; required by self-mod (Phase 5).
@@ -502,8 +528,8 @@ Per-area totals (revised): PORT=0, KEEP=6, **ADOPT=8** (was 7), **PORT-ARCH=3** 
 | v2 `agent_destinations` + `channel_type='agent'` cross-container agent messaging | PORT-ARCH (was SKIP-ARCH) | medium | medium | Phase 7 | Requires per-session for clean isolation |
 | `create_agent` MCP tool | ADOPT (was SKIP-ARCH) | small | medium | Phase 5 | Admin agent-provisioning, fits v1's per-group |
 | `claude-md-compose.ts` | PORT | medium | high | Phase 2 B | Two-phase port |
-| `groups/<folder>/CLAUDE.local.md` | PORT | small | high | Phase 2 B | Phase 1 of compose |
-| `groups/identity/` shared persona files mount | ADOPT | trivial | high | Phase 1 | |
+| `groups/<folder>/CLAUDE.local.md` | PORT | small | high | Phase 2 B | Phase 1 of compose. Different *layer* than v1's IDENTITY.md (CLAUDE.md context vs system-prompt prefix); both coexist |
+| `groups/identity/` shared persona files mount | ADOPT (deferred) | trivial | high | — | v1's per-group + global IDENTITY.md fallback already covers solo + per-DM identity. v2's mount is for cross-group persona-snippet *library*; revisit only if Danny ever wants persona files imported across multiple groups |
 | Webhook plugin (v1) | KEEP | — | high | — | v2 has no equivalent at this layer |
 | `webhook-server.ts` (shared HTTP server for Chat SDK) | SKIP-ALT (was SKIP-ARCH) | — | high | — | Only useful with chat-sdk-bridge |
 | Dashboard plugin (`plugins/dashboard/`, htmx UI ~900 LOC) | KEEP | — | high | — | Fully featured admin UI |
@@ -601,6 +627,14 @@ The dependency edges flagged by area agents, verified to exist in the referenced
 - **agent_destinations cross-container** (Area 5 PORT-ARCH) → require per-session containers → Phase 7
 - **Container hardening** (Area 3 + Area 6 compound) → CONTRIBUTE to upstream as single PR
 - **Pre-task `script` hook** (Area 3 ADOPT) → requires Area 1 schema migration (`script TEXT NULL` column) → Phase 2 D
+
+### Gitignored-plugin gap
+
+The Area 4 agent reviewed the `Channel` interface contract (from `src/types.ts` and `docs/CHANNEL_PLUGINS.md`) but could not see the actual plugin implementations under `plugins/channels/`, which is gitignored on the v1-archive branch (channel plugins are installed per-deployment via the [nanoclaw-skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills)). One known consequence:
+
+- **Magic-bytes MIME detection** was originally tagged N/A ("not present in either codebase") because Area 4 saw only the `Channel` interface, not the WhatsApp plugin's actual file at `plugins/channels/whatsapp/index.js`. Cross-referenced against [CHANGES.md §5](CHANGES.md), the feature exists in v1 — reclassified as KEEP + CONTRIBUTE.
+
+Other plugin-side features that Area 4's review may have missed (and are documented in CHANGES.md): per-channel reply-context extraction, sender-name override display, exponential backoff on reconnect, protocol-message filtering, message-handler resilience, video thumbnail extraction. The triage's KEEP verdicts on these capabilities at the *interface* level cover them, but anyone reviewing the matrices for "what does v1 already have" should check CHANGES.md alongside.
 
 ### Verdict adjudication: numbered migration framework
 
