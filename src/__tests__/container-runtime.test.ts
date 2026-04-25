@@ -40,6 +40,17 @@ vi.mock('../config.js', () => ({
   IDLE_TIMEOUT: 1800000,
   SCHEDULED_TASK_IDLE_TIMEOUT: 30000,
   ASSISTANT_NAME: 'TARS',
+  ONECLI_URL: 'http://127.0.0.1:10254',
+  ONECLI_API_KEY: '',
+}));
+
+// Mock @onecli-sh/sdk so we don't make real HTTP calls during spawn.
+vi.mock('@onecli-sh/sdk', () => ({
+  OneCLI: class {
+    ensureAgent = vi.fn().mockResolvedValue(undefined);
+    applyContainerConfig = vi.fn().mockResolvedValue(false);
+    configureManualApproval = vi.fn();
+  },
 }));
 
 vi.mock('child_process', async () => {

@@ -7,6 +7,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+import { OneCLI } from '@onecli-sh/sdk';
+
 import {
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
@@ -15,6 +17,8 @@ import {
   GROUPS_DIR,
   IDLE_TIMEOUT,
   INSTALL_SLUG,
+  ONECLI_API_KEY,
+  ONECLI_URL,
 } from './config.js';
 import { buildVolumeMounts, getHomeDir, readSecrets, VolumeMount } from './container-mounts.js';
 import * as containerRuntime from './container-runtime.js';
@@ -23,6 +27,10 @@ import { redactSecrets } from './secret-redact.js';
 import { RegisteredGroup } from './types.js';
 
 import { createOutputParser, makeMarkers, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
+
+// OneCLI gateway client — module-scoped so it's initialized once per host
+// process and reused across container spawns.
+const onecli = new OneCLI({ url: ONECLI_URL, apiKey: ONECLI_API_KEY });
 
 // Re-export for consumers that still import from container-runner
 export { setPluginRegistry, VolumeMount } from './container-mounts.js';
@@ -68,12 +76,37 @@ function resolveFromParser(
   });
 }
 
-function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
+async function buildContainerArgs(
+  mounts: VolumeMount[],
+  containerName: string,
+  agentIdentifier: string,
+): Promise<string[]> {
   const args: string[] = [
     'run', '-i', '--rm', '--name', containerName,
     '--label', `nanoclaw.install=${INSTALL_SLUG}`,
     ...containerRuntime.extraRunArgs(),
   ];
+
+  // OneCLI gateway — injects HTTPS_PROXY + CA cert mount so outbound API
+  // calls from the container are routed through the agent vault for
+  // credential injection. Falls through silently when OneCLI is not
+  // reachable; v1's existing readSecrets stdin pipe (below, in
+  // runContainerAgent) is the no-OneCLI fallback for Anthropic creds, so
+  // non-OneCLI installs keep working unchanged.
+  try {
+    await onecli.ensureAgent({ name: agentIdentifier, identifier: agentIdentifier });
+    const applied = await onecli.applyContainerConfig(args, {
+      addHostMapping: false,
+      agent: agentIdentifier,
+    });
+    if (applied) {
+      logger.info({ containerName }, 'OneCLI gateway applied');
+    } else {
+      logger.warn({ containerName }, 'OneCLI gateway not applied — falling back to .env credentials');
+    }
+  } catch (err) {
+    logger.warn({ containerName, err }, 'OneCLI gateway error — falling back to .env credentials');
+  }
 
   for (const mount of mounts) {
     if (mount.readonly) {
@@ -131,7 +164,9 @@ export async function runContainerAgent(
 
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  // agentIdentifier is the group folder — stable across container restarts
+  // and unique per agent group, matching v1's per-group keying.
+  const containerArgs = await buildContainerArgs(mounts, containerName, group.folder);
 
   logger.debug(
     {
@@ -463,3 +498,6 @@ export async function runContainerAgent(
     });
   });
 }
+
+/** @internal Test-only shim for unit tests — DO NOT use in production code. */
+export const buildContainerArgsForTesting = buildContainerArgs;

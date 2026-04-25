@@ -16,6 +16,18 @@ vi.mock('../config.js', () => ({
   GROUPS_DIR: '/tmp/nanoclaw-test-groups',
   IDLE_TIMEOUT: 1800000, // 30min
   INSTALL_SLUG: 'nanoclaw-test',
+  ONECLI_URL: 'http://127.0.0.1:10254',
+  ONECLI_API_KEY: '',
+}));
+
+// Default mock for @onecli-sh/sdk — individual tests can override via vi.doMock
+// before re-importing the module.
+vi.mock('@onecli-sh/sdk', () => ({
+  OneCLI: class {
+    ensureAgent = vi.fn().mockResolvedValue(undefined);
+    applyContainerConfig = vi.fn().mockResolvedValue(false);
+    configureManualApproval = vi.fn();
+  },
 }));
 
 // Mock crypto to return a fixed nonce
@@ -239,5 +251,113 @@ describe('container-runner timeout behavior', () => {
     const result = await resultPromise;
     expect(result.status).toBe('success');
     expect(result.newSessionId).toBe('session-456');
+  });
+});
+
+describe('buildContainerArgs OneCLI integration', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.doUnmock('@onecli-sh/sdk');
+  });
+
+  it('calls ensureAgent + applyContainerConfig when identifier is provided', async () => {
+    const ensureAgent = vi.fn().mockResolvedValue(undefined);
+    const applyContainerConfig = vi.fn().mockImplementation(async (args: string[]) => {
+      args.push('-e', 'HTTPS_PROXY=http://onecli.test', '-v', '/tmp/ca.pem:/etc/ssl/certs/onecli.pem:ro');
+      return true;
+    });
+    vi.doMock('@onecli-sh/sdk', () => ({
+      OneCLI: class {
+        ensureAgent = ensureAgent;
+        applyContainerConfig = applyContainerConfig;
+      },
+    }));
+    // Re-mock config because vi.resetModules clears module-scoped mocks too.
+    vi.doMock('../config.js', () => ({
+      CONTAINER_IMAGE: 'nanoclaw-agent:latest',
+      CONTAINER_MAX_OUTPUT_SIZE: 10485760,
+      CONTAINER_TIMEOUT: 1800000,
+      DATA_DIR: '/tmp/nanoclaw-test-data',
+      GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+      IDLE_TIMEOUT: 1800000,
+      INSTALL_SLUG: 'nanoclaw-test',
+      ONECLI_URL: 'http://127.0.0.1:10254',
+      ONECLI_API_KEY: '',
+    }));
+    vi.doMock('../logger.js', () => ({
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    }));
+
+    const { buildContainerArgsForTesting } = await import('../container-runner.js');
+    const args = await buildContainerArgsForTesting([], 'nc-test', 'main');
+
+    expect(ensureAgent).toHaveBeenCalledWith({ name: 'main', identifier: 'main' });
+    expect(applyContainerConfig).toHaveBeenCalledWith(args, expect.objectContaining({ agent: 'main' }));
+    expect(args.some(a => typeof a === 'string' && a.includes('HTTPS_PROXY=http://onecli.test'))).toBe(true);
+  });
+
+  it('continues without OneCLI when applyContainerConfig returns false', async () => {
+    const ensureAgent = vi.fn().mockResolvedValue(undefined);
+    const applyContainerConfig = vi.fn().mockResolvedValue(false);
+    vi.doMock('@onecli-sh/sdk', () => ({
+      OneCLI: class {
+        ensureAgent = ensureAgent;
+        applyContainerConfig = applyContainerConfig;
+      },
+    }));
+    vi.doMock('../config.js', () => ({
+      CONTAINER_IMAGE: 'nanoclaw-agent:latest',
+      CONTAINER_MAX_OUTPUT_SIZE: 10485760,
+      CONTAINER_TIMEOUT: 1800000,
+      DATA_DIR: '/tmp/nanoclaw-test-data',
+      GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+      IDLE_TIMEOUT: 1800000,
+      INSTALL_SLUG: 'nanoclaw-test',
+      ONECLI_URL: 'http://127.0.0.1:10254',
+      ONECLI_API_KEY: '',
+    }));
+    vi.doMock('../logger.js', () => ({
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    }));
+
+    const { buildContainerArgsForTesting } = await import('../container-runner.js');
+    const args = await buildContainerArgsForTesting([], 'nc-test', 'main');
+
+    expect(args).toContain('--rm');
+    expect(args.find(a => typeof a === 'string' && a.startsWith('HTTPS_PROXY'))).toBeUndefined();
+  });
+
+  it('continues without OneCLI when ensureAgent throws', async () => {
+    const ensureAgent = vi.fn().mockRejectedValue(new Error('gateway down'));
+    const applyContainerConfig = vi.fn().mockResolvedValue(false);
+    vi.doMock('@onecli-sh/sdk', () => ({
+      OneCLI: class {
+        ensureAgent = ensureAgent;
+        applyContainerConfig = applyContainerConfig;
+      },
+    }));
+    vi.doMock('../config.js', () => ({
+      CONTAINER_IMAGE: 'nanoclaw-agent:latest',
+      CONTAINER_MAX_OUTPUT_SIZE: 10485760,
+      CONTAINER_TIMEOUT: 1800000,
+      DATA_DIR: '/tmp/nanoclaw-test-data',
+      GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+      IDLE_TIMEOUT: 1800000,
+      INSTALL_SLUG: 'nanoclaw-test',
+      ONECLI_URL: 'http://127.0.0.1:10254',
+      ONECLI_API_KEY: '',
+    }));
+    vi.doMock('../logger.js', () => ({
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    }));
+
+    const { buildContainerArgsForTesting } = await import('../container-runner.js');
+    const args = await buildContainerArgsForTesting([], 'nc-test', 'main');
+
+    // Test passes if no throw escapes buildContainerArgs.
+    expect(args).toContain('--rm');
   });
 });
