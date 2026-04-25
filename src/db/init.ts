@@ -120,18 +120,6 @@ export function createSchema(database: Database.Database): void {
       group_folder TEXT PRIMARY KEY,
       session_id TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS registered_groups (
-      jid TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      folder TEXT NOT NULL UNIQUE,
-      pattern TEXT NOT NULL,
-      added_at TEXT NOT NULL,
-      container_config TEXT,
-      engage_mode TEXT NOT NULL DEFAULT 'pattern',
-      sender_scope TEXT NOT NULL DEFAULT 'all',
-      ignored_message_policy TEXT NOT NULL DEFAULT 'drop',
-      channel TEXT
-    );
     CREATE TABLE IF NOT EXISTS unregistered_senders (
       channel TEXT NOT NULL,
       platform_id TEXT NOT NULL,
@@ -190,11 +178,19 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
   },
   {
     name: '003_add_channel',
-    up: (db) => safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN channel TEXT`),
+    up: (db) => {
+      // A7 removed `registered_groups` from createSchema. On fresh installs
+      // this migration is a no-op; on legacy DBs the column add still runs.
+      if (!hasTable(db, 'registered_groups')) return;
+      safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN channel TEXT`);
+    },
   },
   {
     name: '004_add_is_bot_message',
     up: (db) => {
+      // Idempotent: safeAddColumn no-ops if column already exists (e.g. fresh
+      // installs where createSchema already added it). The UPDATE then
+      // back-fills any pre-migration messages (no-op on a brand-new DB).
       safeAddColumn(db, `ALTER TABLE messages ADD COLUMN is_bot_message INTEGER DEFAULT 0`);
       db.prepare(`UPDATE messages SET is_bot_message = 1 WHERE content LIKE ?`).run(`${ASSISTANT_NAME}:%`);
     },
@@ -214,6 +210,9 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       // with the 4-axis engage model directly in createSchema DDL. Backfill
       // for any dev DB that pre-dates that commit. safeAddColumn is
       // idempotent — re-running is a no-op when the column already exists.
+      // A7 removed `registered_groups` from createSchema; skip on fresh
+      // installs where the table never existed.
+      if (!hasTable(db, 'registered_groups')) return;
       safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN engage_mode TEXT NOT NULL DEFAULT 'pattern'`);
       safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN pattern TEXT`);
       safeAddColumn(db, `ALTER TABLE registered_groups ADD COLUMN sender_scope TEXT NOT NULL DEFAULT 'all'`);
@@ -274,6 +273,16 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       }
     },
   },
+  {
+    name: '009_drop_registered_groups',
+    up: (db) => {
+      // The legacy registered_groups table has been fully replaced by the
+      // entity-model tables (agent_groups, messaging_groups,
+      // messaging_group_agents). Migration 008 already copied any rows; this
+      // step removes the now-orphaned table on dev DBs that pre-date A7.
+      db.exec(`DROP TABLE IF EXISTS registered_groups`);
+    },
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {
@@ -287,16 +296,19 @@ export function runMigrations(database: Database.Database): void {
   // Detect pre-existing databases that used the old ALTER-TABLE-based system.
   // Check the last migration's column as proof all prior migrations ran.
   // If a future migration adds columns to a different table, add its sentinel here.
+  //
+  // A7 note: previously this also required `registered_groups.channel` but
+  // that table no longer exists on fresh installs. The remaining
+  // (messages.is_bot_message, scheduled_tasks.context_mode/model) sentinels
+  // are sufficient to identify a pre-migration-system DB.
   const applied = database.prepare('SELECT version FROM schema_version').all() as Array<{ version: string }>;
   if (applied.length === 0) {
     const msgCols = database.pragma('table_info(messages)') as Array<{ name: string }>;
     const taskCols = database.pragma('table_info(scheduled_tasks)') as Array<{ name: string }>;
-    const groupCols = database.pragma('table_info(registered_groups)') as Array<{ name: string }>;
     const hasAllMigrated =
       msgCols.some((c) => c.name === 'is_bot_message') &&
       taskCols.some((c) => c.name === 'context_mode') &&
-      taskCols.some((c) => c.name === 'model') &&
-      groupCols.some((c) => c.name === 'channel');
+      taskCols.some((c) => c.name === 'model');
     if (hasAllMigrated) {
       // Mark only pre-migration-system migrations (001–004) as already applied.
       // Newer migrations (005+) must still run through the normal path.

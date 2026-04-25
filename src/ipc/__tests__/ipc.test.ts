@@ -27,7 +27,6 @@ import type { IpcDeps } from '../index.js';
 import * as configMod from '../../config.js';
 import { createTask, getTaskById, updateTask } from '../../db.js';
 import { logger } from '../../logger.js';
-import type { RegisteredGroup } from '../../types.js';
 
 let tmpDir: string;
 
@@ -37,7 +36,7 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     sendFile: vi.fn(async () => true),
     react: vi.fn(),
     registeredGroups: vi.fn(() => ({
-      'jid@test': { name: 'Main', folder: 'main', trigger: '@TARS', added_at: '2024-01-01' } as RegisteredGroup,
+      'jid@test': { folder: 'main' },
     })),
     registerGroup: vi.fn(),
     syncGroupMetadata: vi.fn(),
@@ -125,7 +124,7 @@ describe('startIpcWatcher', () => {
 
     const deps = makeDeps({
       registeredGroups: vi.fn(() => ({
-        'jid@test': { name: 'Main', folder: 'main', trigger: '@TARS', added_at: '2024-01-01' } as RegisteredGroup,
+        'jid@test': { folder: 'main' },
       })),
     });
     const ipcDir = path.join(tmpDir, 'ipc', 'other-group', 'messages');

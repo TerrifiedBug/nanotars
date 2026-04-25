@@ -44,22 +44,28 @@ describe('migration 007_add_engage_mode_axes', () => {
 
     runMigrations(db);
 
-    const cols = (db.pragma('table_info(registered_groups)') as Array<{ name: string }>).map((c) => c.name);
-    expect(cols).toContain('engage_mode');
-    expect(cols).toContain('pattern');
-    expect(cols).toContain('sender_scope');
-    expect(cols).toContain('ignored_message_policy');
-
+    // A7 follow-up: runMigrations now applies 008+009 in the same sweep, so
+    // the legacy registered_groups table is gone by the time runMigrations
+    // returns. We verify 007's effects indirectly: the schema_version row,
+    // and the migrated data in the entity-model tables (008 read from the
+    // 007-shaped registered_groups before the drop in 009).
     const versions = (db.prepare('SELECT version FROM schema_version').all() as Array<{ version: string }>).map(
       (r) => r.version,
     );
     expect(versions).toContain('007_add_engage_mode_axes');
+    expect(versions).toContain('008_split_registered_groups');
+    expect(versions).toContain('009_drop_registered_groups');
 
-    const row = db
-      .prepare('SELECT engage_mode, pattern FROM registered_groups WHERE jid = ?')
-      .get('test@s.whatsapp.net') as { engage_mode: string; pattern: string };
-    expect(row.engage_mode).toBe('always');
-    expect(row.pattern).toBe('hi');
+    const wiring = db
+      .prepare(`SELECT w.engage_mode, w.engage_pattern
+                FROM messaging_groups mg
+                JOIN messaging_group_agents w ON w.messaging_group_id = mg.id
+                WHERE mg.platform_id = ?`)
+      .get('test@s.whatsapp.net') as { engage_mode: string; engage_pattern: string };
+    // requires_trigger=0 + trigger_pattern='hi' → engage_mode='always',
+    // pattern='hi'. 008 carries those values into the wiring row.
+    expect(wiring.engage_mode).toBe('always');
+    expect(wiring.engage_pattern).toBe('hi');
   });
 
   it('is idempotent — re-running runMigrations does not fail or duplicate', () => {

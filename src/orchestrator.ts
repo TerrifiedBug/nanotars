@@ -10,11 +10,14 @@ import type {
   AgentGroup,
   Channel,
   ContainerConfig,
+  EngageMode,
+  IgnoredMessagePolicy,
   MessagingGroup,
   MessagingGroupAgent,
   NewMessage,
-  RegisteredGroup,
+  SenderScope,
 } from './types.js';
+import type { RegisterGroupArgs } from './ipc/types.js';
 import type { ContainerOutput } from './container-runner.js';
 import type { AvailableGroup } from './snapshots.js';
 import type { GroupQueue } from './group-queue.js';
@@ -30,6 +33,7 @@ import {
   createMessagingGroup,
   createWiring,
   getAgentGroupByFolder,
+  getAllAgentGroups,
   getAllSynthesizedGroupRows,
   getMessagingGroup,
   getWiring,
@@ -106,6 +110,24 @@ export interface OrchestratorDeps {
 
 const MAX_CONSECUTIVE_ERRORS = 3;
 
+/**
+ * Internal routing record: resolved (chat × agent × wiring) projection that
+ * the message loop consumes. Phase 4A's A7 cleanup replaced the legacy
+ * `RegisteredGroup` interface with this orchestrator-private shape so no
+ * external module re-implements the legacy fields.
+ */
+interface ResolvedAgentRouting {
+  name: string;
+  folder: string;
+  pattern: string;
+  added_at: string;
+  channel: string;
+  containerConfig?: ContainerConfig;
+  engage_mode: EngageMode;
+  sender_scope: SenderScope;
+  ignored_message_policy: IgnoredMessagePolicy;
+}
+
 export class MessageOrchestrator {
   private lastTimestamp = '';
   sessions: Record<string, string> = {};
@@ -124,21 +146,17 @@ export class MessageOrchestrator {
   }
 
   /**
-   * Legacy-compat shim: synthesize Record<jid, RegisteredGroup> from the
-   * new entity-model tables. Plugins, IPC handlers, and the scheduler still
-   * consume this shape; it's recomputed on every access (no cache).
+   * Build a `Record<jid, ResolvedAgentRouting>` projection from the entity
+   * model. Used internally by the message loop; the multi-wiring "first
+   * wins" collapse mirrors `resolveAgentsForInbound`'s ORDER BY so the
+   * iteration order and the lookup order agree.
    *
-   * Multi-agent-per-chat (multiple wirings on the same messaging_group)
-   * collapses to the first wiring with a warning. v1 doesn't enable
-   * multi-agent today; this is forward-compat for Phase 4D.
+   * Recomputed on every call (no cache). Multi-wiring on the same chat
+   * collapses to the highest-priority wiring with a warning.
    */
-  get registeredGroups(): Record<string, RegisteredGroup> {
-    return this.synthesizeRegisteredGroups();
-  }
-
-  private synthesizeRegisteredGroups(): Record<string, RegisteredGroup> {
+  private synthesizeRouting(): Record<string, ResolvedAgentRouting> {
     const rows = getAllSynthesizedGroupRows();
-    const result: Record<string, RegisteredGroup> = {};
+    const result: Record<string, ResolvedAgentRouting> = {};
     for (const row of rows) {
       if (result[row.platform_id]) {
         // Already keyed (from a higher-priority wiring per ORDER BY); skip with warn.
@@ -148,7 +166,7 @@ export class MessageOrchestrator {
             folder: row.agent_group_folder,
             existingFolder: result[row.platform_id].folder,
           },
-          'Multiple wirings on same chat; legacy registeredGroups shim picking first by priority',
+          'Multiple wirings on same chat; routing picking first by priority',
         );
         continue;
       }
@@ -167,29 +185,28 @@ export class MessageOrchestrator {
         name: row.agent_group_name,
         folder: row.agent_group_folder,
         pattern: row.wiring_engage_pattern ?? '',
-        // The legacy RegisteredGroup.added_at semantically maps to "when this
-        // chat was registered for this agent" — i.e. the wiring's birth, not
-        // the agent group's creation (which may have happened earlier when the
-        // group was first created for a different chat).
+        // The wiring's birth ("when this chat was registered for this agent"),
+        // not the agent group's creation (which may have happened earlier
+        // when the group was first created for a different chat).
         added_at: row.wiring_created_at,
         channel: row.channel_type,
         containerConfig,
-        engage_mode: row.wiring_engage_mode as RegisteredGroup['engage_mode'],
-        sender_scope: row.wiring_sender_scope as RegisteredGroup['sender_scope'],
+        engage_mode: row.wiring_engage_mode as EngageMode,
+        sender_scope: row.wiring_sender_scope as SenderScope,
         ignored_message_policy:
-          row.wiring_ignored_message_policy as RegisteredGroup['ignored_message_policy'],
+          row.wiring_ignored_message_policy as IgnoredMessagePolicy,
       };
     }
     return result;
   }
 
   /**
-   * Resolve an inbound chat JID to its registered group, scoped to the
-   * channel that owns the JID. Returns undefined when no wiring exists.
-   * If multiple wirings exist (Phase 4D multi-agent), the first is returned
-   * with a warning — legacy single-agent semantics.
+   * Resolve an inbound chat JID to its routing record, scoped to the channel
+   * that owns the JID. Returns undefined when no wiring exists. If multiple
+   * wirings exist (Phase 4D multi-agent), the first is returned with a
+   * warning — single-agent semantics.
    */
-  private resolveGroupForChat(chatJid: string): RegisteredGroup | undefined {
+  private resolveGroupForChat(chatJid: string): ResolvedAgentRouting | undefined {
     const channel = this.channels.find((ch) => ch.ownsJid(chatJid));
     if (!channel) return undefined;
     const resolved = resolveAgentsForInbound(channel.name, chatJid);
@@ -235,7 +252,7 @@ export class MessageOrchestrator {
       this.lastAgentTimestamp = {};
     }
     this.sessions = this.deps.getAllSessions();
-    const groupCount = Object.keys(this.synthesizeRegisteredGroups()).length;
+    const groupCount = Object.keys(this.synthesizeRouting()).length;
     this.deps.logger.info({ groupCount }, 'State loaded');
   }
 
@@ -250,7 +267,7 @@ export class MessageOrchestrator {
   /**
    * Compound write: ensure messaging_group + agent_group + wiring rows exist
    * for an (channel, platformId, folder) tuple. Replaces v1's single-table
-   * `setRegisteredGroup` call. Idempotent on (channel, platformId), (folder),
+   * `registered_groups` insert. Idempotent on (channel, platformId), (folder),
    * and on (mg_id, ag_id) — repeated calls reuse all three rows.
    *
    * Note: when a wiring already exists, this method returns the existing
@@ -298,7 +315,7 @@ export class MessageOrchestrator {
     return { agentGroup: ag, messagingGroup: mg, wiring };
   }
 
-  registerGroup(jid: string, group: RegisteredGroup): void {
+  registerGroup(jid: string, group: RegisterGroupArgs): void {
     // Resolve channel for the JID. Prefer group.channel (set by callers that
     // know which adapter owns the JID, e.g. IPC); fall back to the connected
     // channel that owns the JID. There is no literal default — silently
@@ -339,7 +356,7 @@ export class MessageOrchestrator {
 
   getAvailableGroups(): AvailableGroup[] {
     const chats = this.deps.getAllChats();
-    const registeredJids = new Set(Object.keys(this.synthesizeRegisteredGroups()));
+    const registeredJids = new Set(Object.keys(this.synthesizeRouting()));
 
     return chats
       .filter((c) => c.jid !== '__group_sync__' && this.channels.some(ch => ch.ownsJid(c.jid)))
@@ -351,8 +368,27 @@ export class MessageOrchestrator {
       }));
   }
 
-  getRegisteredGroups(): Record<string, RegisteredGroup> {
-    return this.synthesizeRegisteredGroups();
+  /**
+   * Public plugin/IPC accessor: list every configured agent group. Plugins
+   * that need per-chat routing should call `resolveAgentsForInbound` from
+   * the entity-model accessors directly.
+   */
+  getAgentGroups(): AgentGroup[] {
+    return getAllAgentGroups();
+  }
+
+  /**
+   * Per-JID folder map used for IPC authorization. Computed from the entity
+   * model — the keys are the registered chat platform_ids, the values carry
+   * only the agent's folder (other fields aren't needed for auth checks).
+   */
+  getJidFolderMap(): Record<string, { folder: string }> {
+    const routing = this.synthesizeRouting();
+    const map: Record<string, { folder: string }> = {};
+    for (const [jid, r] of Object.entries(routing)) {
+      map[jid] = { folder: r.folder };
+    }
+    return map;
   }
 
   getSessions(): Record<string, string> {
@@ -572,7 +608,7 @@ export class MessageOrchestrator {
   }
 
   private async runAgent(
-    group: RegisteredGroup,
+    group: ResolvedAgentRouting,
     prompt: string,
     chatJid: string,
     onOutput?: (output: ContainerOutput) => Promise<void>,
@@ -588,7 +624,7 @@ export class MessageOrchestrator {
       group.folder,
       isMain,
       availableGroups,
-      new Set(Object.keys(this.synthesizeRegisteredGroups())),
+      new Set(Object.keys(this.synthesizeRouting())),
     );
 
     const wrappedOnOutput = onOutput
@@ -599,8 +635,8 @@ export class MessageOrchestrator {
       : undefined;
 
     // Look up the AgentGroup row for the container runner. The orchestrator
-    // works in synthesized RegisteredGroup shape for legacy reasons; the
-    // container runner has been moved to AgentGroup directly (Phase 4A/A4).
+    // works in a private ResolvedAgentRouting shape; the container runner
+    // takes AgentGroup directly (Phase 4A/A4).
     const agentGroup = getAgentGroupByFolder(group.folder);
     if (!agentGroup) {
       this.deps.logger.error(
@@ -666,7 +702,7 @@ export class MessageOrchestrator {
 
     while (!this.stopRequested) {
       try {
-        const allRegistered = this.synthesizeRegisteredGroups();
+        const allRegistered = this.synthesizeRouting();
         const jids = Object.keys(allRegistered);
         const { messages: rawMessages, newTimestamp } = this.deps.getNewMessages(
           jids,
@@ -820,7 +856,7 @@ export class MessageOrchestrator {
   }
 
   recoverPendingMessages(): void {
-    for (const [chatJid, group] of Object.entries(this.synthesizeRegisteredGroups())) {
+    for (const [chatJid, group] of Object.entries(this.synthesizeRouting())) {
       const sinceTimestamp = this.lastAgentTimestamp[chatJid] || '';
       const pending = this.deps.getMessagesSince(chatJid, sinceTimestamp, this.deps.assistantName);
       if (pending.length > 0) {

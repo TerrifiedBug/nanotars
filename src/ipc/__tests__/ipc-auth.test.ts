@@ -15,7 +15,29 @@ import {
   resolveAgentsForInbound,
 } from '../../db/agent-groups.js';
 import { processTaskIpc, IpcDeps } from '../index.js';
-import { RegisteredGroup } from '../../types.js';
+import type {
+  ContainerConfig,
+  EngageMode,
+  IgnoredMessagePolicy,
+  SenderScope,
+} from '../../types.js';
+
+/**
+ * Local test fixture shape — mirrors the v1 RegisteredGroup interface that
+ * was retired in A7. Tests still seed/lookup-by JID, so this is a convenient
+ * test-only carrier; production code uses the entity-model rows directly.
+ */
+interface TestGroupFixture {
+  name: string;
+  folder: string;
+  pattern: string;
+  added_at: string;
+  channel?: string;
+  containerConfig?: ContainerConfig;
+  engage_mode: EngageMode;
+  sender_scope: SenderScope;
+  ignored_message_policy: IgnoredMessagePolicy;
+}
 
 /**
  * Seed a chat -> agent wiring through the new entity-model accessors so
@@ -26,7 +48,7 @@ import { RegisteredGroup } from '../../types.js';
 function seedWiring(args: {
   jid: string;
   channel: string;
-  group: RegisteredGroup;
+  group: TestGroupFixture;
 }): void {
   let mg = getMessagingGroup(args.channel, args.jid);
   if (!mg) {
@@ -64,7 +86,7 @@ function lookupGroupByJid(channel: string, jid: string): { folder: string } | un
 }
 
 // Set up registered groups used across tests
-const MAIN_GROUP: RegisteredGroup = {
+const MAIN_GROUP: TestGroupFixture = {
   name: 'Main',
   folder: 'main',
   pattern: '@TARS',
@@ -74,7 +96,7 @@ const MAIN_GROUP: RegisteredGroup = {
   ignored_message_policy: 'drop',
 };
 
-const OTHER_GROUP: RegisteredGroup = {
+const OTHER_GROUP: TestGroupFixture = {
   name: 'Other',
   folder: 'other-group',
   pattern: '@TARS',
@@ -84,7 +106,7 @@ const OTHER_GROUP: RegisteredGroup = {
   ignored_message_policy: 'drop',
 };
 
-const THIRD_GROUP: RegisteredGroup = {
+const THIRD_GROUP: TestGroupFixture = {
   name: 'Third',
   folder: 'third-group',
   pattern: '@TARS',
@@ -94,7 +116,7 @@ const THIRD_GROUP: RegisteredGroup = {
   ignored_message_policy: 'drop',
 };
 
-let groups: Record<string, RegisteredGroup>;
+let groups: Record<string, TestGroupFixture>;
 let deps: IpcDeps;
 
 beforeEach(() => {
@@ -118,12 +140,16 @@ beforeEach(() => {
     react: async () => {},
     registeredGroups: () => groups,
     registerGroup: (jid, group) => {
-      groups[jid] = group;
+      // Capture the fixture in the test-side map so subsequent IPC handlers
+      // see the registration. group already matches TestGroupFixture's
+      // structural shape (RegisterGroupArgs is a strict superset minus
+      // channel which we accept as optional here).
+      groups[jid] = group as TestGroupFixture;
       // Mirror orchestrator.registerGroup's compound write through the new
-      // entity-model accessors. Tests pass `channel` on the RegisteredGroup
-      // shim (or default to whatsapp here) so resolveAgentsForInbound can
-      // look up the result by (channel, jid).
-      seedWiring({ jid, channel: group.channel ?? 'whatsapp', group });
+      // entity-model accessors. Tests pass `channel` on the
+      // RegisterGroupArgs payload (or default to whatsapp here) so
+      // resolveAgentsForInbound can look up the result by (channel, jid).
+      seedWiring({ jid, channel: group.channel ?? 'whatsapp', group: group as TestGroupFixture });
     },
     syncGroupMetadata: async () => {},
     getAvailableGroups: () => [],
@@ -390,7 +416,7 @@ describe('IPC message authorization', () => {
     sourceGroup: string,
     isMain: boolean,
     targetChatJid: string,
-    registeredGroups: Record<string, RegisteredGroup>,
+    registeredGroups: Record<string, TestGroupFixture>,
   ): boolean {
     const targetGroup = registeredGroups[targetChatJid];
     return isMain || (!!targetGroup && targetGroup.folder === sourceGroup);
@@ -698,7 +724,7 @@ describe('react authorization', () => {
     sourceGroup: string,
     isMain: boolean,
     targetChatJid: string,
-    registeredGroups: Record<string, RegisteredGroup>,
+    registeredGroups: Record<string, TestGroupFixture>,
   ): boolean {
     const targetGroup = registeredGroups[targetChatJid];
     return isMain || (!!targetGroup && targetGroup.folder === sourceGroup);

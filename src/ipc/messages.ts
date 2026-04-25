@@ -4,13 +4,7 @@ import path from 'path';
 import { GROUPS_DIR } from '../config.js';
 import { logger } from '../logger.js';
 import { isAuthorizedForJid } from './auth.js';
-import { IpcDeps, IpcMessage } from './types.js';
-
-/**
- * Messages-IPC consumes only the `folder` field of the per-JID record (for
- * authorization). The full RegisteredGroup shape isn't needed here.
- */
-type JidFolderMap = Record<string, { folder: string } | undefined>;
+import { IpcDeps, IpcMessage, JidFolderMap } from './types.js';
 
 /** Max file size for send_file (64 MB) */
 const SEND_FILE_MAX_SIZE = 64 * 1024 * 1024;

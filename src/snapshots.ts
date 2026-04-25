@@ -66,7 +66,7 @@ export interface AvailableGroup {
  *
  * Phase 4A note: previously the orchestrator built this list from chat
  * history (`getAllChats`) with `isRegistered` flagged from the legacy
- * `registered_groups` lookup. The accessor here sources from the new
+ * registered_groups lookup. The accessor here sources from the new
  * entity model directly — every row produced is, by definition, wired,
  * so `isRegistered` is always true. Output JSON shape matches the legacy
  * `{jid, name, lastActivity, isRegistered}` contract so the container's

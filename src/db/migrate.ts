@@ -17,9 +17,10 @@ import { pruneTaskRunLogs } from './tasks.js';
 /**
  * Legacy JSON shape — preserved here verbatim because we only ever read it
  * to migrate. Once `registered_groups.json.migrated` exists on a host this
- * branch never executes again. Mirrors the v1 `RegisteredGroup` interface
- * minus the entity-model fields A1 introduced. Keep the field list in sync
- * with what the JSON file actually contained on disk.
+ * branch never executes again. Mirrors the v1 on-disk shape (the legacy
+ * `RegisteredGroup` interface, removed in A7) minus the entity-model
+ * fields. Keep the field list in sync with what the JSON file actually
+ * contained on disk.
  */
 interface LegacyRegisteredGroupJson {
   name: string;
@@ -80,10 +81,10 @@ function migrateJsonState(): void {
 
   // Migrate registered_groups.json into the entity-model tables
   // (agent_groups + messaging_groups + messaging_group_agents).
-  // The legacy registered_groups table is no longer the source of truth, so
-  // routing through setRegisteredGroup would lose these rows on the next
-  // process restart. Idempotent on (channel, jid), (folder), and on the
-  // wiring tuple — re-running the migration is a no-op.
+  // The legacy registered_groups table was retired in A7; this importer
+  // writes straight into the entity-model accessors. Idempotent on
+  // (channel, jid), (folder), and on the wiring tuple — re-running the
+  // migration is a no-op.
   const groups = migrateFile('registered_groups.json') as Record<
     string,
     LegacyRegisteredGroupJson

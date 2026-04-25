@@ -190,9 +190,9 @@ async function main(): Promise<void> {
       if (!text) return Promise.resolve();
       return routeOutbound(orchestrator.channels, jid, text, undefined, undefined, plugins).then(() => {});
     },
-    getRegisteredGroups: () => orchestrator.registeredGroups,
+    getAgentGroups: () => orchestrator.getAgentGroups(),
     getMainChannelJid: () => {
-      const mainEntry = Object.entries(orchestrator.registeredGroups).find(
+      const mainEntry = Object.entries(orchestrator.getJidFolderMap()).find(
         ([, g]) => g.folder === MAIN_GROUP_FOLDER,
       );
       return mainEntry ? mainEntry[0] : null;
@@ -248,7 +248,7 @@ async function main(): Promise<void> {
         storeMessage(transformed);
       },
       onChatMetadata: (chatJid, timestamp, name) => storeChatMetadata(chatJid, timestamp, name),
-      registeredGroups: () => orchestrator.registeredGroups,
+      agentGroups: () => orchestrator.getAgentGroups(),
       paths: {
         storeDir: STORE_DIR,
         groupsDir: GROUPS_DIR,
@@ -274,9 +274,9 @@ async function main(): Promise<void> {
   }
 
   // Warn about registered groups with no connected channel
-  for (const [jid, group] of Object.entries(orchestrator.registeredGroups)) {
+  for (const [jid, group] of Object.entries(orchestrator.getJidFolderMap())) {
     if (!channels.some(ch => ch.ownsJid(jid))) {
-      logger.warn({ jid, group: group.name }, 'Registered group has no connected channel');
+      logger.warn({ jid, folder: group.folder }, 'Registered group has no connected channel');
     }
   }
 
@@ -311,7 +311,7 @@ async function main(): Promise<void> {
         logger.warn({ jid }, 'No connected channel with react support for JID');
       }
     },
-    registeredGroups: () => orchestrator.registeredGroups,
+    registeredGroups: () => orchestrator.getJidFolderMap(),
     registerGroup: (jid, group) => orchestrator.registerGroup(jid, group),
     syncGroupMetadata: async (_force) => {
       for (const ch of orchestrator.channels) {

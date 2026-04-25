@@ -14,13 +14,11 @@ import {
   getDb,
   getMessagesSince,
   getNewMessages,
-  getRegisteredGroup,
   getTaskById,
   getTasksForGroup,
   hasTable,
   insertExternalMessage,
   isValidGroupFolder,
-  setRegisteredGroup,
   storeChatMetadata,
   storeMessage,
   updateTask,
@@ -388,11 +386,12 @@ describe('task CRUD', () => {
 describe('schema_version', () => {
   it('creates version table with all migrations applied', () => {
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(8);
+    expect(versions.length).toBe(9);
     expect(versions[0].version).toBe('001_add_context_mode');
     expect(versions[5].version).toBe('006_add_task_script');
     expect(versions[6].version).toBe('007_add_engage_mode_axes');
     expect(versions[7].version).toBe('008_split_registered_groups');
+    expect(versions[8].version).toBe('009_drop_registered_groups');
   });
 
   it('is idempotent on re-init', () => {
@@ -450,9 +449,9 @@ describe('schema_version', () => {
     _initTestDatabaseFrom(partialDb);
 
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(8);
+    expect(versions.length).toBe(9);
     expect(versions.map((v) => v.version)).toEqual([
-      '001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message', '005_add_reply_context', '006_add_task_script', '007_add_engage_mode_axes', '008_split_registered_groups',
+      '001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message', '005_add_reply_context', '006_add_task_script', '007_add_engage_mode_axes', '008_split_registered_groups', '009_drop_registered_groups',
     ]);
   });
 });
@@ -490,25 +489,6 @@ describe('dbEvents', () => {
 // --- folder validation ---
 
 describe('folder validation', () => {
-  it('rejects folders longer than 64 characters', () => {
-    const longFolder = 'a'.repeat(65);
-    setRegisteredGroup('test@g.us', {
-      name: 'Test', folder: longFolder, pattern: '@Bot',
-      added_at: new Date().toISOString(),
-      engage_mode: 'pattern', sender_scope: 'all', ignored_message_policy: 'drop',
-    });
-    expect(getRegisteredGroup('test@g.us')).toBeUndefined();
-  });
-
-  it('rejects reserved folder name "global"', () => {
-    setRegisteredGroup('test@g.us', {
-      name: 'Test', folder: 'global', pattern: '@Bot',
-      added_at: new Date().toISOString(),
-      engage_mode: 'pattern', sender_scope: 'all', ignored_message_policy: 'drop',
-    });
-    expect(getRegisteredGroup('test@g.us')).toBeUndefined();
-  });
-
   it('accepts valid folder names', () => {
     expect(isValidGroupFolder('main')).toBe(true);
     expect(isValidGroupFolder('my-group')).toBe(true);
@@ -524,61 +504,12 @@ describe('folder validation', () => {
   });
 });
 
-// --- four-axis engage model schema ---
-
-describe('four-axis engage model schema', () => {
-  function getColumns(tableName: string): string[] {
-    const rows = getDb()
-      .prepare(`PRAGMA table_info(${tableName})`)
-      .all() as Array<{ name: string }>;
-    return rows.map((r) => r.name);
-  }
-
-  it('createSchema includes engage_mode, pattern, sender_scope, ignored_message_policy columns', () => {
-    const cols = getColumns('registered_groups');
-    expect(cols).toContain('engage_mode');
-    expect(cols).toContain('pattern');
-    expect(cols).toContain('sender_scope');
-    expect(cols).toContain('ignored_message_policy');
-  });
-
-  it('createSchema does NOT include trigger_pattern or requires_trigger columns (start-fresh decision)', () => {
-    const cols = getColumns('registered_groups');
-    expect(cols).not.toContain('trigger_pattern');
-    expect(cols).not.toContain('requires_trigger');
-  });
-
-  it('round-trip insert + read preserves all four engage axes', () => {
-    setRegisteredGroup('axis@g.us', {
-      name: 'Axis Group',
-      folder: 'axis-group',
-      pattern: '@Bot',
-      added_at: '2024-06-01T00:00:00.000Z',
-      engage_mode: 'mention-sticky',
-      sender_scope: 'known',
-      ignored_message_policy: 'observe',
-    });
-    const row = getRegisteredGroup('axis@g.us');
-    expect(row).toBeDefined();
-    expect(row!.pattern).toBe('@Bot');
-    expect(row!.engage_mode).toBe('mention-sticky');
-    expect(row!.sender_scope).toBe('known');
-    expect(row!.ignored_message_policy).toBe('observe');
-  });
-
-  it('default values applied when engage axes are not overridden', () => {
-    // Insert via raw SQL without specifying engage axes to test DB defaults
-    getDb().prepare(
-      `INSERT INTO registered_groups (jid, name, folder, pattern, added_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run('default@g.us', 'Default Group', 'default-group', '@Bot', '2024-06-01T00:00:00.000Z');
-    const row = getRegisteredGroup('default@g.us');
-    expect(row).toBeDefined();
-    expect(row!.engage_mode).toBe('pattern');
-    expect(row!.sender_scope).toBe('all');
-    expect(row!.ignored_message_policy).toBe('drop');
-  });
-});
+// A7 follow-up: the legacy registered_groups table is dropped in migration
+// 009, so the prior round-trip / four-axis tests that exercised it via
+// setRegisteredGroup/getRegisteredGroup are gone. The four-axis behavior is
+// still covered by the entity-model tests (orchestrator.test.ts +
+// snapshots.test.ts + agent-groups schema tests) which exercise the same
+// fields on the messaging_group_agents wiring rows.
 
 // --- script column ---
 

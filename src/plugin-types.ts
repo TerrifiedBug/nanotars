@@ -1,5 +1,5 @@
 import type { Logger } from 'pino';
-import type { Channel, NewMessage, OnInboundMessage, OnChatMetadata, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
+import type { AgentGroup, Channel, NewMessage, OnInboundMessage, OnChatMetadata, ScheduledTask, TaskRunLog } from './types.js';
 import type { ChatInfo } from './db.js';
 
 /** Plugin manifest (plugin.json) */
@@ -39,7 +39,14 @@ export type InboundMessage = NewMessage;
 export interface ChannelPluginConfig {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  /**
+   * Phase 4A entity-model successor to the legacy `registeredGroups`
+   * Record<jid, RegisteredGroup>. Plugins now receive an array of
+   * AgentGroup rows; iterate or filter as needed. Channels that previously
+   * keyed by JID should query the entity-model accessors directly (e.g.
+   * `resolveAgentsForInbound(channel, jid)`) for chat-level routing data.
+   */
+  agentGroups: () => AgentGroup[];
   /** Project paths and config values channels may need */
   paths: {
     storeDir: string;
@@ -61,7 +68,13 @@ export interface ChannelPluginConfig {
 export interface PluginContext {
   insertMessage(chatJid: string, id: string, sender: string, senderName: string, text: string): void;
   sendMessage(jid: string, text: string): Promise<void>;
-  getRegisteredGroups(): Record<string, RegisteredGroup>;
+  /**
+   * Phase 4A entity-model successor to the legacy `getRegisteredGroups()`.
+   * Returns one AgentGroup row per configured agent. Plugins that need to
+   * look up a chat's wiring should use the entity-model accessors directly
+   * (`resolveAgentsForInbound(channel, jid)`).
+   */
+  getAgentGroups(): AgentGroup[];
   getMainChannelJid(): string | null;
   logger: Logger;
 

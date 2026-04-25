@@ -71,8 +71,10 @@ describe('migration 008_split_registered_groups', () => {
     const versions = (db.prepare('SELECT version FROM schema_version').all() as Array<{version: string}>).map(r => r.version);
     expect(versions).toContain('008_split_registered_groups');
 
-    // registered_groups still present (drop is in A7)
-    expect(tables).toContain('registered_groups');
+    // A7 follow-up: 009_drop_registered_groups runs in the same migration
+    // sweep (runMigrations applies every pending migration in order), so
+    // by the time runMigrations returns the legacy table is gone.
+    expect(tables).not.toContain('registered_groups');
   });
 
   it('is idempotent on a DB created via createSchema (fresh install — no legacy rows)', async () => {

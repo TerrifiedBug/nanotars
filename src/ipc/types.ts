@@ -1,12 +1,38 @@
 import { AvailableGroup } from '../container-runner.js';
-import { RegisteredGroup } from '../types.js';
+import {
+  ContainerConfig,
+  EngageMode,
+  IgnoredMessagePolicy,
+  SenderScope,
+} from '../types.js';
 
-// `RegisteredGroup` is retained here only as the dependency-injection shape
-// for the deps callbacks below. Internally those callbacks are now backed by
-// the entity-model accessors (agent_groups + messaging_groups + wiring) via
-// the orchestrator's synthesizer; A7 will retire this shape entirely. New IPC
-// payload types should not embed `RegisteredGroup` — see the tasks-IPC
-// register_group payload type for the payload-specific shape.
+/**
+ * Minimal shape supplied to the IPC layer for routing/auth checks. Phase 4A's
+ * A7 cleanup retired the legacy `RegisteredGroup` interface; the IPC surface
+ * never needed more than per-JID folder lookup, so the dep here is the
+ * narrowest possible map (`jid → { folder }`) — no engage axes, no container
+ * config, no agent provider. Internally backed by the orchestrator's
+ * synthesizer (which queries the entity-model tables).
+ */
+export type JidFolderMap = Record<string, { folder: string } | undefined>;
+
+/**
+ * Payload accepted by `IpcDeps.registerGroup`. Mirrors the v1 IPC
+ * `register_group` shape (camelCase `containerConfig` and the four engage
+ * axes). The host-side handler routes this through
+ * `orchestrator.addAgentForChat` which writes the entity-model rows.
+ */
+export interface RegisterGroupArgs {
+  name: string;
+  folder: string;
+  pattern: string;
+  added_at: string;
+  channel?: string;
+  containerConfig?: ContainerConfig;
+  engage_mode: EngageMode;
+  sender_scope: SenderScope;
+  ignored_message_policy: IgnoredMessagePolicy;
+}
 
 /** Discriminated union for IPC message commands. */
 export type IpcMessage =
@@ -47,8 +73,10 @@ export interface IpcDeps {
   sendMessage: (jid: string, text: string, sender?: string, replyTo?: string) => Promise<void>;
   sendFile: (jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string) => Promise<boolean>;
   react: (jid: string, messageId: string, emoji: string) => Promise<void>;
-  registeredGroups: () => Record<string, RegisteredGroup>;
-  registerGroup: (jid: string, group: RegisteredGroup) => void;
+  /** Per-JID folder map used for IPC authorization decisions. */
+  registeredGroups: () => JidFolderMap;
+  /** Compound write: ensure messaging_group + agent_group + wiring rows exist. */
+  registerGroup: (jid: string, group: RegisterGroupArgs) => void;
   syncGroupMetadata: (force: boolean) => Promise<void>;
   getAvailableGroups: () => AvailableGroup[];
   writeGroupsSnapshot: (

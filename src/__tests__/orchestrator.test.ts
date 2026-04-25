@@ -13,7 +13,7 @@ vi.mock('../permissions.js', async (importOriginal) => {
 
 import { MessageOrchestrator, OrchestratorDeps } from '../orchestrator.js';
 import * as permissions from '../permissions.js';
-import type { Channel, NewMessage, RegisteredGroup } from '../types.js';
+import type { Channel, NewMessage } from '../types.js';
 import {
   _initTestDatabase,
   createAgentGroup,
@@ -168,10 +168,14 @@ describe('MessageOrchestrator', () => {
       const orch = new MessageOrchestrator(deps);
       orch.loadState();
 
-      // registeredGroups is now a synthesized getter sourced from new tables.
-      expect(orch.registeredGroups['main@g.us']).toBeDefined();
-      expect(orch.registeredGroups['main@g.us'].folder).toBe('main');
-      expect(orch.registeredGroups['main@g.us'].engage_mode).toBe('always');
+      // A7: the legacy `registeredGroups` getter is gone. Public state is
+      // exposed via getAgentGroups() (entity-model AgentGroup[]) and
+      // getJidFolderMap() (per-JID folder lookups for IPC auth).
+      const map = orch.getJidFolderMap();
+      expect(map['main@g.us']).toBeDefined();
+      expect(map['main@g.us'].folder).toBe('main');
+      const ags = orch.getAgentGroups();
+      expect(ags.find((a) => a.folder === 'main')).toBeDefined();
       expect(orch.sessions).toEqual({ main: 'sess-1' });
     });
 
@@ -679,9 +683,10 @@ describe('MessageOrchestrator', () => {
       expect(result.messagingGroup.platform_id).toBe('new@g.us');
       expect(result.wiring.engage_pattern).toBe('\\bhi\\b');
 
-      // The synthesized registeredGroups should now include this entry.
-      expect(orch.registeredGroups['new@g.us']).toBeDefined();
-      expect(orch.registeredGroups['new@g.us'].folder).toBe('new-folder');
+      // The new entity-model lookup should resolve this entry.
+      const map = orch.getJidFolderMap();
+      expect(map['new@g.us']).toBeDefined();
+      expect(map['new@g.us'].folder).toBe('new-folder');
     });
 
     it('reuses existing messaging_group and agent_group across repeated calls', () => {
@@ -705,12 +710,13 @@ describe('MessageOrchestrator', () => {
       // constraint is enforced and addAgentForChat returns the existing wiring
       // when one already matches the pair.
       expect(second.wiring.id).toBe(first.wiring.id);
-      expect(orch.registeredGroups['shared@g.us']).toBeDefined();
+      const map = orch.getJidFolderMap();
+      expect(map['shared@g.us']).toBeDefined();
     });
   });
 
-  describe('synthesized registeredGroups (legacy-compat shim)', () => {
-    it('returns the legacy shape from new entity-model tables', () => {
+  describe('public agent-group accessors (A7 successor to registeredGroups)', () => {
+    it('getAgentGroups returns the entity-model AgentGroup rows', () => {
       seedAgent({
         ...mainSeed,
         container_config: '{"timeout":1000}',
@@ -718,19 +724,14 @@ describe('MessageOrchestrator', () => {
       const deps = makeDeps();
       const orch = new MessageOrchestrator(deps);
 
-      const groups = orch.getRegisteredGroups();
-      expect(groups['main@g.us']).toBeDefined();
-      const g: RegisteredGroup = groups['main@g.us'];
-      expect(g.folder).toBe('main');
-      expect(g.name).toBe('Main Chat');
-      expect(g.engage_mode).toBe('always');
-      expect(g.sender_scope).toBe('all');
-      expect(g.ignored_message_policy).toBe('drop');
-      expect(g.channel).toBe('whatsapp');
-      expect(g.containerConfig).toEqual({ timeout: 1000 });
+      const ags = orch.getAgentGroups();
+      const main = ags.find((a) => a.folder === 'main');
+      expect(main).toBeDefined();
+      expect(main!.name).toBe('Main Chat');
+      expect(main!.container_config).toBe('{"timeout":1000}');
     });
 
-    it('logs warning and picks first wiring when multiple agents wire the same chat', () => {
+    it('getJidFolderMap collapses multi-wiring to first by priority and warns', () => {
       // Manually create a multi-agent wiring on a single messaging group.
       const ag1 = createAgentGroup({ name: 'A', folder: 'agent-a' });
       const ag2 = createAgentGroup({ name: 'B', folder: 'agent-b' });
@@ -744,14 +745,14 @@ describe('MessageOrchestrator', () => {
 
       const deps = makeDeps();
       const orch = new MessageOrchestrator(deps);
-      const groups = orch.getRegisteredGroups();
+      const map = orch.getJidFolderMap();
 
-      // Lossy collapse: only one wiring is exposed via the legacy shape.
-      expect(groups['multi@g.us']).toBeDefined();
-      expect(['agent-a', 'agent-b']).toContain(groups['multi@g.us'].folder);
+      // Lossy collapse: only one folder is exposed for the JID.
+      expect(map['multi@g.us']).toBeDefined();
+      expect(['agent-a', 'agent-b']).toContain(map['multi@g.us'].folder);
       expect(deps.logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ jid: 'multi@g.us' }),
-        expect.stringContaining('legacy registeredGroups shim'),
+        expect.stringContaining('routing picking first by priority'),
       );
     });
   });

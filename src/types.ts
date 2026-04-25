@@ -36,27 +36,16 @@ export type EngageMode = 'pattern' | 'always' | 'mention-sticky';
 export type SenderScope = 'all' | 'known';
 export type IgnoredMessagePolicy = 'drop' | 'observe';
 
-export interface RegisteredGroup {
-  name: string;
-  folder: string;
-  pattern: string;
-  added_at: string;
-  channel?: string; // Which channel plugin registered this group (e.g. 'whatsapp', 'discord')
-  containerConfig?: ContainerConfig;
-  engage_mode: EngageMode;
-  sender_scope: SenderScope;
-  ignored_message_policy: IgnoredMessagePolicy;
-}
-
 // --- Phase 4A entity model ---
 //
-// Successor to RegisteredGroup. The legacy registered_groups table splits into:
+// The legacy registered_groups table splits into:
 //   agent_groups          — the bot-side identity (folder, container config)
 //   messaging_groups      — the chat-side identity (channel + platform_id)
 //   messaging_group_agents — wiring between the two (engage rules)
 //
-// Existing RegisteredGroup accessors are preserved for the plugin-types
-// contract until A7's cleanup; new code should prefer these types.
+// A7 (this file) removed the legacy `RegisteredGroup` interface entirely.
+// New code consumes `AgentGroup` / `MessagingGroup` / `MessagingGroupAgent`
+// directly via the entity-model accessors in src/db/agent-groups.ts.
 
 export interface AgentGroup {
   id: string;
