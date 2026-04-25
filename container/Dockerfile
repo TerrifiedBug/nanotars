@@ -3,6 +3,14 @@
 
 FROM node:22-slim
 
+# ---- Build-time arguments for pinned CLI versions ----------------------------
+# Pin versions to reduce supply-chain blast radius. A malicious release of any
+# of these wouldn't be picked up at next container rebuild without deliberate
+# ARG bump. Adopted from upstream nanoclaw v2.
+ARG CLAUDE_CODE_VERSION=2.1.116
+ARG AGENT_BROWSER_VERSION=latest
+ARG TSX_VERSION=4.17.0
+
 # Install system dependencies for Chromium
 RUN apt-get update && apt-get install -y \
     chromium \
@@ -41,7 +49,7 @@ RUN mv /usr/lib/chromium/chrome_crashpad_handler /usr/lib/chromium/chrome_crashp
     && chmod +x /usr/lib/chromium/chrome_crashpad_handler
 
 # Install agent-browser and claude-code globally
-RUN npm install -g agent-browser @anthropic-ai/claude-code
+RUN npm install -g agent-browser@${AGENT_BROWSER_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # Create app directory
 WORKDIR /app
@@ -59,7 +67,7 @@ COPY container/agent-runner/ ./
 RUN npm run build
 
 # Install tsx for fast TypeScript execution at startup (replaces tsc recompilation)
-RUN npm install -g tsx
+RUN npm install -g tsx@${TSX_VERSION}
 
 # Remove dev dependencies from production image
 RUN npm prune --omit=dev
