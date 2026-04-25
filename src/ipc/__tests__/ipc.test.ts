@@ -20,6 +20,7 @@ vi.mock('../../db.js', () => ({
   deleteTask: vi.fn(),
   getTaskById: vi.fn(),
   updateTask: vi.fn(),
+  isValidGroupFolder: vi.fn((folder: string) => /^[a-z0-9][a-z0-9_-]*$/.test(folder) && folder.length <= 64),
 }));
 
 import type { IpcDeps } from '../index.js';
@@ -574,5 +575,176 @@ describe('processTaskIpc: schedule_type validation', () => {
     );
 
     expect(createTask).toHaveBeenCalled();
+  });
+});
+
+// --- processTaskIpc: register_group IPC round trip ---
+
+describe('processTaskIpc: register_group IPC round trip', () => {
+  let processTaskIpc: typeof import('../index.js').processTaskIpc;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const mod = await import('../index.js');
+    processTaskIpc = mod.processTaskIpc;
+  });
+
+  it('processes a register_group payload with the new pattern field', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'test@example',
+        name: 'Test Group',
+        folder: 'test-group',
+        pattern: '^!',
+        engage_mode: 'pattern',
+        sender_scope: 'all',
+        ignored_message_policy: 'drop',
+      },
+      'main', true, deps,
+    );
+
+    expect(deps.registerGroup).toHaveBeenCalledWith(
+      'test@example',
+      expect.objectContaining({
+        name: 'Test Group',
+        folder: 'test-group',
+        pattern: '^!',
+        engage_mode: 'pattern',
+        sender_scope: 'all',
+        ignored_message_policy: 'drop',
+      }),
+    );
+  });
+
+  it('rejects an invalid engage_mode value', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'test@example',
+        name: 'Test Group',
+        folder: 'test-group',
+        pattern: '^!',
+        engage_mode: 'banana' as any,
+      },
+      'main', true, deps,
+    );
+
+    expect(deps.registerGroup).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ engage_mode: 'banana' }),
+      expect.stringContaining('Invalid engage_mode'),
+    );
+  });
+
+  it('rejects an invalid sender_scope value', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'test@example',
+        name: 'Test Group',
+        folder: 'test-group',
+        pattern: '^!',
+        sender_scope: 'nobody' as any,
+      },
+      'main', true, deps,
+    );
+
+    expect(deps.registerGroup).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ sender_scope: 'nobody' }),
+      expect.stringContaining('Invalid sender_scope'),
+    );
+  });
+
+  it('rejects an invalid ignored_message_policy value', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'test@example',
+        name: 'Test Group',
+        folder: 'test-group',
+        pattern: '^!',
+        ignored_message_policy: 'ignore' as any,
+      },
+      'main', true, deps,
+    );
+
+    expect(deps.registerGroup).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ ignored_message_policy: 'ignore' }),
+      expect.stringContaining('Invalid ignored_message_policy'),
+    );
+  });
+
+  it('uses defaults when engage_mode/sender_scope/policy are omitted', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'test@example',
+        name: 'Test Group',
+        folder: 'test-group',
+        pattern: '^!',
+        // engage_mode, sender_scope, ignored_message_policy omitted
+      },
+      'main', true, deps,
+    );
+
+    expect(deps.registerGroup).toHaveBeenCalledWith(
+      'test@example',
+      expect.objectContaining({
+        engage_mode: 'pattern',
+        sender_scope: 'all',
+        ignored_message_policy: 'drop',
+      }),
+    );
+  });
+
+  it('blocks register_group from a non-main group', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'test@example',
+        name: 'Test Group',
+        folder: 'test-group',
+        pattern: '^!',
+      },
+      'other-group', false, deps,
+    );
+
+    expect(deps.registerGroup).not.toHaveBeenCalled();
+  });
+
+  it('rejects register_group with missing pattern field', async () => {
+    const deps = makeDeps();
+
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'test@example',
+        name: 'Test Group',
+        folder: 'test-group',
+        // pattern omitted — this is the bug that A2 introduced on the container side
+      },
+      'main', true, deps,
+    );
+
+    expect(deps.registerGroup).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.anything() }),
+      expect.stringContaining('missing required fields'),
+    );
   });
 });

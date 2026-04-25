@@ -343,7 +343,18 @@ Use available_groups.json to find the JID for a group. The folder name should be
       .regex(/^[a-z0-9][a-z0-9_-]*$/, 'Folder must be lowercase alphanumeric with hyphens/underscores')
       .max(64, 'Folder name must be 64 characters or fewer')
       .describe('Folder name for group files (lowercase, hyphens, e.g., "family-chat")'),
-    trigger: z.string().describe('Trigger word (e.g., "@TARS")'),
+    pattern: z.string().describe('Regex pattern that triggers the bot, e.g. "^!" or "@TARS"'),
+    engage_mode: z.enum(['pattern', 'always', 'mention-sticky']).optional().default('pattern').describe('When to engage: "pattern" = only on regex match, "always" = every message, "mention-sticky" = pattern-mode (Phase 4 reserved)'),
+    sender_scope: z.enum(['all', 'known']).optional().default('all').describe('Which senders to respond to: "all" = everyone, "known" = known users only (Phase 4 reserved)'),
+    ignored_message_policy: z.enum(['drop', 'observe']).optional().default('drop').describe('What to do with non-trigger messages: "drop" or "observe" (both currently skip agent invocation; distinction reserved for Phase 4)'),
+    container_config: z.object({
+      additionalMounts: z.array(z.object({
+        hostPath: z.string(),
+        containerPath: z.string().optional(),
+        readonly: z.boolean().optional(),
+      })).optional(),
+      timeout: z.number().optional(),
+    }).optional().describe('Optional container configuration for this group'),
   },
   async (args) => {
     if (!isMain) {
@@ -358,7 +369,11 @@ Use available_groups.json to find the JID for a group. The folder name should be
       jid: args.jid,
       name: args.name,
       folder: args.folder,
-      trigger: args.trigger,
+      pattern: args.pattern,
+      engage_mode: args.engage_mode ?? 'pattern',
+      sender_scope: args.sender_scope ?? 'all',
+      ignored_message_policy: args.ignored_message_policy ?? 'drop',
+      container_config: args.container_config,
       timestamp: new Date().toISOString(),
     };
 

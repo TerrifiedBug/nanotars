@@ -229,6 +229,31 @@ export async function processTaskIpc(
           );
           break;
         }
+        // IPC-boundary validation: reject unknown enum values
+        const validEngageModes = new Set<string>(['pattern', 'always', 'mention-sticky']);
+        const validSenderScopes = new Set<string>(['all', 'known']);
+        const validIgnoredMessagePolicies = new Set<string>(['drop', 'observe']);
+        if (data.engage_mode !== undefined && !validEngageModes.has(data.engage_mode)) {
+          logger.warn(
+            { engage_mode: data.engage_mode },
+            'Invalid engage_mode value in register_group IPC — quarantined',
+          );
+          break;
+        }
+        if (data.sender_scope !== undefined && !validSenderScopes.has(data.sender_scope)) {
+          logger.warn(
+            { sender_scope: data.sender_scope },
+            'Invalid sender_scope value in register_group IPC — quarantined',
+          );
+          break;
+        }
+        if (data.ignored_message_policy !== undefined && !validIgnoredMessagePolicies.has(data.ignored_message_policy)) {
+          logger.warn(
+            { ignored_message_policy: data.ignored_message_policy },
+            'Invalid ignored_message_policy value in register_group IPC — quarantined',
+          );
+          break;
+        }
         deps.registerGroup(data.jid, {
           name: data.name,
           folder: data.folder,

@@ -508,9 +508,11 @@ export class MessageOrchestrator {
                 m.reply_context?.sender_name === this.deps.assistantName,
               );
               if (!hasTrigger && !hasReplyToBot) {
-                // ignored_message_policy='observe': messages are already stored in DB;
-                // we skip agent invocation. 'drop' (default) does the same — the
-                // distinction matters for callers that want chat-history capture.
+                // 'drop' and 'observe' produce identical runtime effects in v1: the channel
+                // adapter stores every message before this orchestrator gate runs, so neither
+                // policy can affect storage today. The distinction is reserved for Phase 4
+                // where channel adapters consult policy before storing. For now both policies
+                // skip agent invocation on non-trigger messages.
                 continue;
               }
             }

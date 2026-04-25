@@ -423,6 +423,35 @@ describe('MessageOrchestrator', () => {
       expect(result).toBe(true);
       expect(deps.runContainerAgent).not.toHaveBeenCalled();
     });
+
+    it('sender_scope=known is a no-op until Phase 4 — engages with engage_mode=always regardless', async () => {
+      // sender_scope='known' is reserved for Phase 4 (where channel adapters would
+      // filter to known senders). Until then it must be ignored so no messages are
+      // silently dropped just because the user_dms cache doesn't exist yet.
+      const knownScopeGroup: RegisteredGroup = {
+        name: 'Known Scope Group',
+        folder: 'known-scope',
+        pattern: '^!',
+        added_at: '2024-01-01T00:00:00.000Z',
+        engage_mode: 'always',
+        sender_scope: 'known',
+        ignored_message_policy: 'drop',
+      };
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          // Message from a sender NOT in any user_dms cache
+          makeMessage({ chat_jid: 'known@g.us', content: 'hello, no trigger needed', sender: 'unknown-sender@s' }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.registeredGroups = { 'known@g.us': knownScopeGroup };
+
+      // sender_scope='known' must be ignored today — engage_mode=always should fire
+      const result = await orch.processGroupMessages('known@g.us');
+      expect(result).toBe(true);
+      expect(deps.runContainerAgent).toHaveBeenCalled();
+    });
   });
 
   describe('recoverPendingMessages', () => {
