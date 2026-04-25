@@ -39,3 +39,6 @@ groups/*
 .nanoclaw/
 
 agents-sdk-docs
+
+# Migration / planning notes — local-only working docs
+docs/migration/
