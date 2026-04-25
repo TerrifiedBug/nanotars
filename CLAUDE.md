@@ -97,3 +97,26 @@ container builder stop && container builder rm && container builder start
 ```
 
 Always verify after rebuild: `container run -i --rm --entrypoint wc nanoclaw-agent:latest -l /app/src/index.ts`
+
+## Schema changes — migration policy
+
+**Every schema change adds both a `createSchema` DDL line AND a numbered `MIGRATIONS` array entry in `src/db/init.ts`. No exceptions, even when "no users yet."**
+
+Why: v1-archive is a long-lived branch with at least one in-use dev DB (the operator's own). A bare DDL change without a migration entry leaves `schema_version` out of sync and breaks the dev DB on next startup. The defensive migration is ~5 lines per change; the cleanup cost when the "no users" assumption ages out is not.
+
+Pattern:
+
+```ts
+// In createSchema's CREATE TABLE block:
+ALTER TABLE foo ADD COLUMN bar TEXT NOT NULL DEFAULT 'baz';
+
+// In the MIGRATIONS array (next sequential number):
+{
+  name: 'NNN_add_foo_bar',
+  up: (db) => safeAddColumn(db, `ALTER TABLE foo ADD COLUMN bar TEXT NOT NULL DEFAULT 'baz'`),
+},
+```
+
+`safeAddColumn` is idempotent — running the same migration twice on a DB that already has the column is a no-op. Use it for any `ADD COLUMN`. For column drops or renames, write the migration manually with `IF EXISTS` guards.
+
+If a Phase 2 schema change shipped without a migration entry (the engage_mode 4-axis change in commit `1e086d2`), retroactively backfill the migration so existing dev DBs converge cleanly.
