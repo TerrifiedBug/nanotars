@@ -12,6 +12,46 @@ import type {
 } from './plugin-types.js';
 import type { Channel } from './types.js';
 
+export interface SetupRetryOptions {
+  /** Delay (ms) between attempts. Length determines retry count. Default: [2000, 5000, 10000]. */
+  delays?: number[];
+}
+
+/**
+ * Wrap a setup-time operation (e.g., a channel's connect()) with NetworkError-only retry.
+ *
+ * Retries up to `delays.length` times with backoff [2s, 5s, 10s] by default.
+ * Only NetworkError-named errors trigger retry — config errors and other
+ * exceptions bubble out immediately. Used to ride out transient flap at
+ * channel-registration time without taking the host down.
+ *
+ * Adopted from upstream nanoclaw v2 src/channels/channel-registry.ts:10-94.
+ */
+export async function withSetupRetry<T>(
+  pluginName: string,
+  fn: () => Promise<T>,
+  options: SetupRetryOptions = {},
+): Promise<T> {
+  const delays = options.delays ?? [2000, 5000, 10000];
+  let lastError: unknown;
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const isNet = err instanceof Error && err.name === 'NetworkError';
+      if (!isNet) throw err;
+      const delay = delays[attempt];
+      logger.warn(
+        { plugin: pluginName, attempt: attempt + 1, of: delays.length, delayMs: delay, error: (err as Error).message },
+        'Plugin setup failed with NetworkError; retrying',
+      );
+      if (delay > 0) await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+  throw lastError;
+}
+
 const CORE_ENV_VARS = [
   'ANTHROPIC_API_KEY',
   'ASSISTANT_NAME',
@@ -205,7 +245,9 @@ export class PluginRegistry {
     if (!plugin.hooks.onChannel) {
       throw new Error(`Plugin ${plugin.manifest.name} does not export onChannel`);
     }
-    const channel = await plugin.hooks.onChannel(ctx, config);
+    const channel = await withSetupRetry(plugin.manifest.name, () =>
+      plugin.hooks.onChannel!(ctx, config),
+    );
     this._channels.push(channel);
     logger.info({ plugin: plugin.manifest.name, channel: channel.name }, 'Plugin channel registered');
     return channel;

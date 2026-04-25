@@ -6,7 +6,44 @@ vi.mock('../logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { parseManifest, collectContainerEnvVars, collectSkillPaths, collectContainerHookPaths, mergeMcpConfigs, PluginRegistry } from '../plugin-loader.js';
+import { parseManifest, collectContainerEnvVars, collectSkillPaths, collectContainerHookPaths, mergeMcpConfigs, PluginRegistry, withSetupRetry } from '../plugin-loader.js';
+
+class NetworkError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NetworkError'; }
+}
+
+describe('withSetupRetry', () => {
+  it('returns immediately on first success', async () => {
+    const fn = vi.fn().mockResolvedValue('ok');
+    const out = await withSetupRetry('test-plugin', fn, { delays: [0, 0, 0] });
+    expect(out).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries on NetworkError up to delays.length times', async () => {
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new NetworkError('flap 1'))
+      .mockRejectedValueOnce(new NetworkError('flap 2'))
+      .mockResolvedValue('ok');
+    const out = await withSetupRetry('test-plugin', fn, { delays: [0, 0, 0] });
+    expect(out).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
+
+  it('rethrows non-NetworkError without retry', async () => {
+    const fn = vi.fn().mockRejectedValue(new Error('config bad'));
+    await expect(withSetupRetry('test-plugin', fn, { delays: [0, 0, 0] }))
+      .rejects.toThrow(/config bad/);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('exhausts retries and rethrows the last NetworkError', async () => {
+    const fn = vi.fn().mockRejectedValue(new NetworkError('still down'));
+    await expect(withSetupRetry('test-plugin', fn, { delays: [0, 0, 0] }))
+      .rejects.toThrow(/still down/);
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
+});
 
 describe('parseManifest', () => {
   it('parses a valid manifest-only plugin', () => {
