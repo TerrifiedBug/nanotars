@@ -14,6 +14,9 @@ import {
   getMessagingGroup,
   resolveAgentsForInbound,
 } from '../../db/agent-groups.js';
+import { ensureUser } from '../../permissions/users.js';
+import { grantRole } from '../../permissions/user-roles.js';
+import { isAuthorizedAdminOp } from '../auth.js';
 import { processTaskIpc, IpcDeps } from '../index.js';
 import type {
   ContainerConfig,
@@ -807,5 +810,127 @@ describe('register_group success', () => {
     expect(matches[0].agentGroup.folder).toBe('discord-group');
     // And NOT discoverable under whatsapp.
     expect(resolveAgentsForInbound('whatsapp', 'new-discord@example')).toHaveLength(0);
+  });
+});
+
+// --- isAuthorizedAdminOp: command-gate wiring ---
+//
+// Phase 4B B7: isAuthorizedAdminOp is the IPC-layer bridge between the
+// legacy isMain heuristic and the role-based checkCommandPermission gate.
+// Full threading of userId through IPC payloads is planned for Phase 4D;
+// until then the function degrades gracefully to the legacy fallback.
+
+describe('isAuthorizedAdminOp — role-based path (userId + agentGroupId present)', () => {
+  it('owner is allowed to run admin command', () => {
+    const ag = createAgentGroup({ name: 'IpcAlpha', folder: 'ipc-alpha' });
+    ensureUser({ id: 'telegram:owner', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:owner', role: 'owner' });
+
+    const result = isAuthorizedAdminOp({
+      command: '/grant alice owner',
+      sourceGroup: 'ipc-alpha',
+      isMain: false,
+      userId: 'telegram:owner',
+      agentGroupId: ag.id,
+      action: 'grant',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('global admin is allowed to run admin command', () => {
+    const ag = createAgentGroup({ name: 'IpcBeta', folder: 'ipc-beta' });
+    ensureUser({ id: 'telegram:gadmin', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:gadmin', role: 'admin' }); // no agent_group_id → global
+
+    const result = isAuthorizedAdminOp({
+      command: '/revoke bob',
+      sourceGroup: 'ipc-beta',
+      isMain: false,
+      userId: 'telegram:gadmin',
+      agentGroupId: ag.id,
+      action: 'revoke',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('scoped admin for this agent_group is allowed', () => {
+    const ag = createAgentGroup({ name: 'IpcGamma', folder: 'ipc-gamma' });
+    ensureUser({ id: 'telegram:sadmin', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:sadmin', role: 'admin', agent_group_id: ag.id });
+
+    const result = isAuthorizedAdminOp({
+      command: '/list-roles',
+      sourceGroup: 'ipc-gamma',
+      isMain: false,
+      userId: 'telegram:sadmin',
+      agentGroupId: ag.id,
+      action: 'list-roles',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('plain user with no role is denied for admin command', () => {
+    const ag = createAgentGroup({ name: 'IpcDelta', folder: 'ipc-delta' });
+    ensureUser({ id: 'telegram:nobody', kind: 'telegram' });
+
+    const result = isAuthorizedAdminOp({
+      command: '/restart',
+      sourceGroup: 'ipc-delta',
+      isMain: false,
+      userId: 'telegram:nobody',
+      agentGroupId: ag.id,
+      action: 'restart',
+    });
+    expect(result).toBe(false);
+  });
+
+  it('unauthenticated (userId undefined) falls back to legacy isMain check — allowed when isMain=true', () => {
+    const ag = createAgentGroup({ name: 'IpcEpsilon', folder: 'ipc-epsilon' });
+
+    const result = isAuthorizedAdminOp({
+      command: '/register-group',
+      sourceGroup: 'main',
+      isMain: true,
+      userId: undefined,
+      agentGroupId: ag.id,
+      action: 'register-group',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('unauthenticated (userId undefined) falls back to legacy isMain check — denied when isMain=false', () => {
+    const ag = createAgentGroup({ name: 'IpcZeta', folder: 'ipc-zeta' });
+
+    const result = isAuthorizedAdminOp({
+      command: '/register-group',
+      sourceGroup: 'other-group',
+      isMain: false,
+      userId: undefined,
+      agentGroupId: ag.id,
+      action: 'register-group',
+    });
+    expect(result).toBe(false);
+  });
+});
+
+describe('isAuthorizedAdminOp — legacy fallback path (no userId/agentGroupId)', () => {
+  it('main group is allowed without userId', () => {
+    const result = isAuthorizedAdminOp({
+      command: '/emergency-stop',
+      sourceGroup: 'main',
+      isMain: true,
+      action: 'emergency-stop',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('non-main group is denied without userId', () => {
+    const result = isAuthorizedAdminOp({
+      command: '/emergency-stop',
+      sourceGroup: 'other-group',
+      isMain: false,
+      action: 'emergency-stop',
+    });
+    expect(result).toBe(false);
   });
 });
