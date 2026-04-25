@@ -4,12 +4,64 @@ import {
   _initTestDatabase,
   createTask,
   getAllTasks,
-  getRegisteredGroup,
   getTaskById,
-  setRegisteredGroup,
 } from '../../db.js';
+import {
+  createAgentGroup,
+  createMessagingGroup,
+  createWiring,
+  getAgentGroupByFolder,
+  getMessagingGroup,
+  resolveAgentsForInbound,
+} from '../../db/agent-groups.js';
 import { processTaskIpc, IpcDeps } from '../index.js';
 import { RegisteredGroup } from '../../types.js';
+
+/**
+ * Seed a chat -> agent wiring through the new entity-model accessors so
+ * tests exercise the same write path the orchestrator uses (via
+ * addAgentForChat / registerGroup), instead of going around it through
+ * the legacy registered_groups table.
+ */
+function seedWiring(args: {
+  jid: string;
+  channel: string;
+  group: RegisteredGroup;
+}): void {
+  let mg = getMessagingGroup(args.channel, args.jid);
+  if (!mg) {
+    mg = createMessagingGroup({
+      channel_type: args.channel,
+      platform_id: args.jid,
+      name: args.group.name,
+    });
+  }
+  let ag = getAgentGroupByFolder(args.group.folder);
+  if (!ag) {
+    ag = createAgentGroup({
+      name: args.group.name,
+      folder: args.group.folder,
+      container_config: args.group.containerConfig
+        ? JSON.stringify(args.group.containerConfig)
+        : null,
+    });
+  }
+  createWiring({
+    messaging_group_id: mg.id,
+    agent_group_id: ag.id,
+    engage_mode: args.group.engage_mode,
+    engage_pattern: args.group.pattern || null,
+    sender_scope: args.group.sender_scope,
+    ignored_message_policy: args.group.ignored_message_policy,
+  });
+}
+
+/** Resolve a registered chat by JID via the new entity-model accessors. */
+function lookupGroupByJid(channel: string, jid: string): { folder: string } | undefined {
+  const matches = resolveAgentsForInbound(channel, jid);
+  if (matches.length === 0) return undefined;
+  return { folder: matches[0].agentGroup.folder };
+}
 
 // Set up registered groups used across tests
 const MAIN_GROUP: RegisteredGroup = {
@@ -54,10 +106,11 @@ beforeEach(() => {
     'third@g.us': THIRD_GROUP,
   };
 
-  // Populate DB as well
-  setRegisteredGroup('main@g.us', MAIN_GROUP);
-  setRegisteredGroup('other@g.us', OTHER_GROUP);
-  setRegisteredGroup('third@g.us', THIRD_GROUP);
+  // Seed via the new entity-model accessors (agent_groups + messaging_groups
+  // + wiring) — the same write path orchestrator.addAgentForChat uses.
+  seedWiring({ jid: 'main@g.us', channel: 'whatsapp', group: MAIN_GROUP });
+  seedWiring({ jid: 'other@g.us', channel: 'whatsapp', group: OTHER_GROUP });
+  seedWiring({ jid: 'third@g.us', channel: 'whatsapp', group: THIRD_GROUP });
 
   deps = {
     sendMessage: async () => {},
@@ -66,8 +119,11 @@ beforeEach(() => {
     registeredGroups: () => groups,
     registerGroup: (jid, group) => {
       groups[jid] = group;
-      setRegisteredGroup(jid, group);
-      // Mock the fs.mkdirSync that registerGroup does
+      // Mirror orchestrator.registerGroup's compound write through the new
+      // entity-model accessors. Tests pass `channel` on the RegisteredGroup
+      // shim (or default to whatsapp here) so resolveAgentsForInbound can
+      // look up the result by (channel, jid).
+      seedWiring({ jid, channel: group.channel ?? 'whatsapp', group });
     },
     syncGroupMetadata: async () => {},
     getAvailableGroups: () => [],
@@ -582,7 +638,7 @@ describe('register_group path traversal', () => {
     );
 
     expect(groups['evil@g.us']).toBeUndefined();
-    expect(getRegisteredGroup('evil@g.us')).toBeUndefined();
+    expect(lookupGroupByJid('whatsapp', 'evil@g.us')).toBeUndefined();
   });
 
   it('rejects folder with slashes', async () => {
@@ -676,12 +732,12 @@ describe('register_group success', () => {
       deps,
     );
 
-    // Verify group was registered in DB
-    const group = getRegisteredGroup('new@g.us');
-    expect(group).toBeDefined();
-    expect(group!.name).toBe('New Group');
-    expect(group!.folder).toBe('new-group');
-    expect(group!.pattern).toBe('@TARS');
+    // Verify wiring was created via the new entity-model accessors
+    const matches = resolveAgentsForInbound('whatsapp', 'new@g.us');
+    expect(matches).toHaveLength(1);
+    expect(matches[0].agentGroup.name).toBe('New Group');
+    expect(matches[0].agentGroup.folder).toBe('new-group');
+    expect(matches[0].wiring.engage_pattern).toBe('@TARS');
   });
 
   it('register_group rejects request with missing fields', async () => {
@@ -697,6 +753,33 @@ describe('register_group success', () => {
       deps,
     );
 
-    expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+    expect(lookupGroupByJid('whatsapp', 'partial@g.us')).toBeUndefined();
+  });
+
+  it('register_group forwards explicit channel field to deps.registerGroup', async () => {
+    // This addresses A3-review M3: orchestrator.registerGroup throws when no
+    // channel adapter claims the JID and no channel was specified. IPC clients
+    // pass `channel` so the resolution doesn't depend on adapter ownsJid.
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'new-discord@example',
+        name: 'Discord Group',
+        folder: 'discord-group',
+        pattern: '!',
+        channel: 'discord',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    // The deps.registerGroup mock seeds via seedWiring with the supplied
+    // channel; the wiring should be discoverable under that channel.
+    const matches = resolveAgentsForInbound('discord', 'new-discord@example');
+    expect(matches).toHaveLength(1);
+    expect(matches[0].agentGroup.folder).toBe('discord-group');
+    // And NOT discoverable under whatsapp.
+    expect(resolveAgentsForInbound('whatsapp', 'new-discord@example')).toHaveLength(0);
   });
 });

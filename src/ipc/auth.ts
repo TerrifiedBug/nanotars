@@ -1,11 +1,18 @@
 import { getTaskById } from '../db.js';
 import { logger } from '../logger.js';
-import { RegisteredGroup } from '../types.js';
+
+/**
+ * Auth helpers consume only the `folder` field of the per-JID record; the
+ * full `RegisteredGroup` shape isn't needed and avoids importing the
+ * legacy type. The deps callback that supplies this map is itself now
+ * backed by the entity-model synthesizer in the orchestrator.
+ */
+type JidFolderMap = Record<string, { folder: string } | undefined>;
 
 /** Check if a source group is authorized to act on a target JID. */
 export function isAuthorizedForJid(
   chatJid: string,
-  registeredGroups: Record<string, RegisteredGroup>,
+  registeredGroups: JidFolderMap,
   sourceGroup: string,
   isMain: boolean,
   action: string,

@@ -3,7 +3,7 @@ import { CronExpressionParser } from 'cron-parser';
 import { TIMEZONE } from '../config.js';
 import { createTask, deleteTask, getTaskById, isValidGroupFolder, updateTask } from '../db.js';
 import { logger } from '../logger.js';
-import { RegisteredGroup, EngageMode, SenderScope, IgnoredMessagePolicy } from '../types.js';
+import { ContainerConfig, EngageMode, SenderScope, IgnoredMessagePolicy } from '../types.js';
 import { authorizedTaskAction } from './auth.js';
 import { IpcDeps } from './types.js';
 
@@ -59,10 +59,15 @@ export async function processTaskIpc(
     name?: string;
     folder?: string;
     pattern?: string;
+    // Optional channel hint — see A3-review M3. orchestrator.registerGroup
+    // throws if the channel can't be resolved (no adapter ownsJid match and
+    // no channel field), so IPC clients on multi-channel installs should
+    // pass this explicitly to avoid relying on adapter ownsJid heuristics.
+    channel?: string;
     engage_mode?: EngageMode;
     sender_scope?: SenderScope;
     ignored_message_policy?: IgnoredMessagePolicy;
-    containerConfig?: RegisteredGroup['containerConfig'];
+    containerConfig?: ContainerConfig;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -262,6 +267,7 @@ export async function processTaskIpc(
           folder: data.folder,
           pattern: data.pattern,
           added_at: new Date().toISOString(),
+          channel: data.channel,
           containerConfig: data.containerConfig,
           engage_mode: data.engage_mode ?? 'pattern',
           sender_scope: data.sender_scope ?? 'all',

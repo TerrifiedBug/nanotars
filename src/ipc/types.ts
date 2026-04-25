@@ -1,6 +1,13 @@
 import { AvailableGroup } from '../container-runner.js';
 import { RegisteredGroup } from '../types.js';
 
+// `RegisteredGroup` is retained here only as the dependency-injection shape
+// for the deps callbacks below. Internally those callbacks are now backed by
+// the entity-model accessors (agent_groups + messaging_groups + wiring) via
+// the orchestrator's synthesizer; A7 will retire this shape entirely. New IPC
+// payload types should not embed `RegisteredGroup` — see the tasks-IPC
+// register_group payload type for the payload-specific shape.
+
 /** Discriminated union for IPC message commands. */
 export type IpcMessage =
   | { type: 'message'; chatJid: string; text: string; sender?: string; replyTo?: string }
