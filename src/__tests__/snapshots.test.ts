@@ -5,6 +5,10 @@ import path from 'path';
 
 vi.mock('../config.js', () => ({
   DATA_DIR: '/tmp/__will_be_replaced__',
+  // SENDER_ALLOWLIST_PATH must be present so migration 014 can read it at
+  // module-import time; the value is a non-existent path so the migration
+  // silently no-ops (ENOENT).
+  SENDER_ALLOWLIST_PATH: '/tmp/__nonexistent_sender_allowlist__',
 }));
 
 import {

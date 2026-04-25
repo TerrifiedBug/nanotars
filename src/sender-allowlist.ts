@@ -1,3 +1,16 @@
+/**
+ * @deprecated Phase 4B B8: sender-allowlist has been subsumed into the
+ * agent_group_members table. Migration 014 seeds the legacy JSON file into
+ * the DB at startup. New code should use isMember() from
+ * ./permissions/agent-group-members.js directly.
+ *
+ * This module is kept for backwards compatibility with existing callers
+ * (orchestrator.ts, index.ts). Its file-read path continues to work as a
+ * runtime fallback, but the canonical source of truth is now the DB.
+ *
+ * TODO: remove this module once all callers have been migrated to use the
+ * DB-backed isMember() API.
+ */
 import fs from 'fs';
 
 import { SENDER_ALLOWLIST_PATH } from './config.js';
@@ -30,6 +43,12 @@ function isValidEntry(entry: unknown): entry is ChatAllowlistEntry {
   return validAllow && validMode;
 }
 
+/**
+ * @deprecated Phase 4B B8: membership is now stored in agent_group_members.
+ * Migration 014 has already seeded the legacy JSON into the DB. This function
+ * still reads the file for runtime fallback, but callers should migrate to the
+ * DB-backed isMember() API in ./permissions/agent-group-members.js.
+ */
 export function loadSenderAllowlist(
   pathOverride?: string,
 ): SenderAllowlistConfig {
@@ -95,6 +114,10 @@ function getEntry(
   return cfg.chats[chatJid] ?? cfg.default;
 }
 
+/**
+ * @deprecated Phase 4B B8: use isMember() from
+ * ./permissions/agent-group-members.js for DB-backed membership checks.
+ */
 export function isSenderAllowed(
   chatJid: string,
   sender: string,
@@ -105,6 +128,10 @@ export function isSenderAllowed(
   return entry.allow.includes(sender);
 }
 
+/**
+ * @deprecated Phase 4B B8: the trigger/drop mode distinction maps to
+ * sender_scope='all'/'known' on messaging_group_agents wirings.
+ */
 export function shouldDropMessage(
   chatJid: string,
   cfg: SenderAllowlistConfig,
@@ -112,6 +139,10 @@ export function shouldDropMessage(
   return getEntry(chatJid, cfg).mode === 'drop';
 }
 
+/**
+ * @deprecated Phase 4B B8: use isMember() from
+ * ./permissions/agent-group-members.js for DB-backed membership checks.
+ */
 export function isTriggerAllowed(
   chatJid: string,
   sender: string,

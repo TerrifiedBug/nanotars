@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 
-import { ASSISTANT_NAME, STORE_DIR } from '../config.js';
+import { ASSISTANT_NAME, SENDER_ALLOWLIST_PATH, STORE_DIR } from '../config.js';
 import { logger } from '../logger.js';
 import { runStartupTasks } from './migrate.js';
 
@@ -361,12 +361,91 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
   },
   {
     name: '014_seed_sender_allowlist_to_members',
-    up: (_db) => {
-      // Reserved for Phase 4B Task B8: subsume the sender-allowlist into
-      // agent_group_members so membership is the single source of truth for
-      // "who is permitted to interact with this agent group". No-op for now;
-      // landing the migration entry early lets the rest of Phase 4B (B2-B7)
-      // build on a fixed migration count without renumbering when B8 lands.
+    up: (db) => {
+      // Best-effort: read SENDER_ALLOWLIST_PATH if present and seed
+      // users + agent_group_members rows from per-chat allowlist entries.
+      //
+      // SENDER_ALLOWLIST_PATH is a computed path (not a raw env var) resolved
+      // at module load time from HOME via config.ts. It is captured by the
+      // module-level import above and available here at migration run time.
+      //
+      // Tests (and emergency operator overrides) may set the env var
+      // NANOCLAW_SENDER_ALLOWLIST_PATH to inject a different path without
+      // touching the module cache.
+      //
+      // Failures (no file, malformed JSON, missing tables) are silent — this
+      // is a one-shot legacy import and callers should not rely on it for
+      // correct operation. The trigger/drop mode distinction maps to
+      // sender_scope='all'/'known' on messaging_group_agents wirings; that
+      // mapping is handled at registration time (not here).
+      const allowlistPath =
+        process.env.NANOCLAW_SENDER_ALLOWLIST_PATH ?? SENDER_ALLOWLIST_PATH;
+      let raw: string;
+      try {
+        raw = fs.readFileSync(allowlistPath, 'utf-8');
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+        // Other read errors (permissions, etc.) — silent best-effort.
+        return;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return;
+      }
+
+      const obj = parsed as Record<string, unknown>;
+      if (!obj?.chats || typeof obj.chats !== 'object') return;
+
+      let insertUser: Database.Statement<unknown[]>;
+      let insertMember: Database.Statement<unknown[]>;
+      let findMg: Database.Statement<unknown[]>;
+      let findWirings: Database.Statement<unknown[]>;
+      try {
+        insertUser = db.prepare<unknown[]>(
+          `INSERT OR IGNORE INTO users (id, kind, display_name, created_at) VALUES (?, ?, NULL, ?)`,
+        );
+        insertMember = db.prepare<unknown[]>(
+          `INSERT OR IGNORE INTO agent_group_members (user_id, agent_group_id, added_by, added_at) VALUES (?, ?, NULL, ?)`,
+        );
+        findMg = db.prepare<unknown[]>(
+          `SELECT id, channel_type FROM messaging_groups WHERE platform_id = ? LIMIT 1`,
+        );
+        findWirings = db.prepare<unknown[]>(
+          `SELECT agent_group_id FROM messaging_group_agents WHERE messaging_group_id = ?`,
+        );
+      } catch {
+        // Tables not yet present (shouldn't happen since 010-013 run first,
+        // but guard defensively).
+        return;
+      }
+
+      const now = new Date().toISOString();
+      for (const [jid, entry] of Object.entries(
+        obj.chats as Record<string, unknown>,
+      )) {
+        const e = entry as Record<string, unknown> | null;
+        if (!e?.allow || !Array.isArray(e.allow)) continue;
+
+        const mg = findMg.get(jid) as
+          | { id: string; channel_type: string }
+          | undefined;
+        if (!mg) continue;
+
+        const wirings = findWirings.all(mg.id) as Array<{
+          agent_group_id: string;
+        }>;
+        for (const w of wirings) {
+          for (const handle of e.allow as unknown[]) {
+            if (typeof handle !== 'string') continue;
+            const userId = `${mg.channel_type}:${handle}`;
+            insertUser.run(userId, mg.channel_type, now);
+            insertMember.run(userId, w.agent_group_id, now);
+          }
+        }
+      }
     },
   },
 ];
