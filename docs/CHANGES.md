@@ -217,6 +217,7 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 - **Container shutdown**: `group-queue.ts` explicitly calls `docker stop` with 10s grace period during graceful shutdown
 - **OAuth credential bind mount**: Host `~/.claude/.credentials.json` is bind-mounted directly into containers (file-level mount overlaying the session directory mount) instead of copied at spawn time. If any host process refreshes the token, containers see it immediately — eliminates stale token failures during long conversations
 - **Auth error detection**: `orchestrator.ts` detects auth-specific error patterns (expired OAuth, invalid API key) and sends a targeted `[Auth Error]` notification to the user immediately, even when the agent had already sent output earlier in the conversation. Prevents silent failures where auth expires mid-conversation
+- **Host networking via `--add-host`**: Containers resolve `host.docker.internal` to the host's bridge IP using Docker's `--add-host=host.docker.internal:host-gateway` flag (added to `extraRunArgs()` in `container-runtime.ts`). This replaces the previous socat bridge approach for host-to-container networking (e.g., claude-mem worker access), eliminating a separate systemd service
 
 ---
 
@@ -248,6 +249,24 @@ Upstream targets macOS with Apple Container. This fork adds full Docker support 
 | `container/agent-runner/src/ipc-mcp-stdio.ts` | MCP schema allowlist for folder names (Zod regex + max length) |
 | `CLAUDE.md` | Added security section referencing SECURITY.md |
 | `groups/main/CLAUDE.md` | Anti-prompt-injection rules |
+
+### Sender allowlist
+
+Per-chat access control for who can trigger the bot or have their messages stored. Config at `~/.config/nanoclaw/sender-allowlist.json`. Two modes:
+- **trigger** (default): messages are stored but only allowed senders can trigger the bot
+- **drop**: messages from disallowed senders are not stored at all
+
+Fail-open: if config file is missing, all senders are allowed (backwards compatible).
+
+| File | Purpose |
+|------|---------|
+| `src/sender-allowlist.ts` | Loads config, exports `isSenderAllowed()`, `shouldDropMessage()`, `isTriggerAllowed()` |
+| `src/__tests__/sender-allowlist.test.ts` | Test suite (14 tests) |
+| `src/config.ts` | `SENDER_ALLOWLIST_PATH` constant |
+| `src/orchestrator.ts` | `isTriggerAllowed()` check alongside trigger pattern in both `processGroupMessages()` and `startMessageLoop()` |
+| `src/index.ts` | Drop-mode check in `onMessage` callback — skips `storeMessage()` for disallowed senders |
+
+Port of upstream `4de981b`.
 
 ### How secrets work in containers
 
@@ -406,6 +425,12 @@ These are clean fixes submitted to upstream. If they merge, the divergences coll
 - **Hook error handling** — `startup()`, `runInboundHooks()`, and `runOutboundHooks()` now catch and log errors per-plugin instead of letting one failing plugin take down the chain (`src/plugin-loader.ts`)
 - **WhatsApp exponential backoff** — Reconnect logic now uses exponential backoff (2s → 4s → 8s → ... capped at 5min) instead of a single 5s retry. Prevents log floods and resource exhaustion during persistent failures (port of upstream #466) (`plugins/channels/whatsapp/index.js`)
 - **WhatsApp protocol message filter** — Skip `protocolMessage`, `reactionMessage`, and `editedMessage` early in the handler before JID translation and metadata updates. Saves cycles on system messages that carry no user text (port of upstream #491) (`plugins/channels/whatsapp/index.js`)
+- **Atomic task claims** — `runningTaskId` tracking in `GroupState` prevents the scheduler from re-enqueuing a task that's already executing. Previously only `pendingTasks` was checked. (port of upstream `f794185`) (`src/group-queue.ts`)
+- **Interval task drift fix** — `computeNextRun()` anchors interval tasks to their scheduled time and skips missed intervals (`while (next <= now) next += ms`) instead of using `Date.now() + ms` which accumulates drift. (port of upstream `f794185`) (`src/task-scheduler.ts`)
+- **WhatsApp message handler resilience** — Inner `messages.upsert` loop wrapped in try-catch so one malformed message doesn't crash processing for the entire batch. Error logged with `remoteJid` for debugging. (port of upstream `5e3d8b6`) (`plugins/channels/whatsapp/index.js`)
+- **Third-party model env vars** — `readSecrets()` now includes `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` for third-party API providers. (port of upstream `51bb329`) (`src/container-mounts.ts`)
+- **CJK fonts** — Added `fonts-noto-cjk` to container Dockerfile for Chinese/Japanese/Korean text rendering. (port of upstream `d48ef91`) (`container/Dockerfile`)
+- **SDK update** — Bumped `@anthropic-ai/claude-agent-sdk` from `^0.2.34` to `^0.2.68` in agent-runner. (port of upstream `5955cd6`) (`container/agent-runner/package.json`)
 
 ---
 

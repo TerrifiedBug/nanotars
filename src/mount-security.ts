@@ -220,6 +220,11 @@ export interface MountValidationResult {
   effectiveReadonly?: boolean;
 }
 
+export interface ValidateMountOptions {
+  /** Allow absolute container paths (for admin-installed plugin mounts). */
+  allowAbsoluteContainerPath?: boolean;
+}
+
 /**
  * Validate a single additional mount against the allowlist.
  * Returns validation result with reason.
@@ -227,6 +232,7 @@ export interface MountValidationResult {
 export function validateMount(
   mount: AdditionalMount,
   isMain: boolean,
+  options?: ValidateMountOptions,
 ): MountValidationResult {
   const allowlist = loadMountAllowlist();
 
@@ -242,7 +248,21 @@ export function validateMount(
   const containerPath = mount.containerPath || path.basename(mount.hostPath);
 
   // Validate container path (cheap check)
-  if (!isValidContainerPath(containerPath)) {
+  if (options?.allowAbsoluteContainerPath) {
+    // Plugin mounts are admin-installed — allow absolute paths but still block traversal
+    if (containerPath.includes('..')) {
+      return {
+        allowed: false,
+        reason: `Container path contains "..": "${containerPath}"`,
+      };
+    }
+    if (!containerPath || containerPath.trim() === '') {
+      return {
+        allowed: false,
+        reason: 'Container path is empty',
+      };
+    }
+  } else if (!isValidContainerPath(containerPath)) {
     return {
       allowed: false,
       reason: `Invalid container path: "${containerPath}" - must be relative, non-empty, and not contain ".."`,

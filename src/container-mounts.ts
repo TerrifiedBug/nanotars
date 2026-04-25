@@ -9,7 +9,7 @@ import path from 'path';
 import { DATA_DIR, GROUPS_DIR } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
-import { validateAdditionalMounts } from './mount-security.js';
+import { validateAdditionalMounts, validateMount } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 import type { PluginRegistry } from './plugin-loader.js';
 
@@ -127,15 +127,32 @@ export async function buildVolumeMounts(
       });
     }
 
-    // Plugin-declared container mounts (read-only, validated against allowlist)
+    // Plugin-declared container mounts — admin-installed and trusted.
+    // Unlike group additionalMounts, plugins may use absolute container paths
+    // (e.g. /home/node/.config/gogcli) since they know where tools expect files.
     const pluginMounts = pluginRegistry.getContainerMounts(scopeChannel, scopeGroup);
-    if (pluginMounts.length > 0) {
-      const validated = validateAdditionalMounts(
-        pluginMounts.map(pm => ({ hostPath: pm.hostPath, containerPath: pm.containerPath, readonly: true })),
-        group.name,
+    for (const pm of pluginMounts) {
+      const result = validateMount(
+        { hostPath: pm.hostPath, containerPath: pm.containerPath, readonly: true },
         isMain,
+        { allowAbsoluteContainerPath: true },
       );
-      mounts.push(...validated);
+      if (result.allowed) {
+        // Absolute container paths used as-is; relative ones go under /workspace/extra/
+        const containerPath = pm.containerPath.startsWith('/')
+          ? pm.containerPath
+          : `/workspace/extra/${result.resolvedContainerPath}`;
+        mounts.push({
+          hostPath: result.realHostPath!,
+          containerPath,
+          readonly: result.effectiveReadonly!,
+        });
+      } else {
+        logger.warn(
+          { requestedPath: pm.hostPath, containerPath: pm.containerPath, reason: result.reason },
+          'Plugin mount REJECTED',
+        );
+      }
     }
 
     // MCP server config — merge root .mcp.json with plugin mcp.json fragments
@@ -378,5 +395,5 @@ async function buildEnvMount(
  * Secrets are never written to disk or mounted as files.
  */
 export function readSecrets(): Record<string, string> {
-  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
+  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN']);
 }

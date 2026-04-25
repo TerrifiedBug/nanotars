@@ -632,6 +632,17 @@ async function runQuery(
       const errors = 'errors' in message ? (message as { errors?: string[] }).errors : undefined;
       const errorText = errors?.length ? errors.join('; ') : null;
       log(`Result #${resultCount}: subtype=${message.subtype} is_error=${isError}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}${errorText ? ` errors=${errorText.slice(0, 200)}` : ''}`);
+
+      // Detect stale session errors — throw to trigger fresh session retry in main()
+      // instead of writing the error to stdout (which the host would treat as final)
+      if (isError) {
+        const combinedError = [textResult, errorText].filter(Boolean).join(' ');
+        if (/No message found with message\.uuid/i.test(combinedError)) {
+          ipcPolling = false;
+          throw new Error(combinedError);
+        }
+      }
+
       writeOutput({
         status: isError ? 'error' : 'success',
         result: textResult || null,

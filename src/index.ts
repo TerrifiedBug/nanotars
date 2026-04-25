@@ -45,7 +45,7 @@ import {
   updateTask,
   deleteTask,
   getTaskRunLogs,
-  getRecentTaskRunLogs,
+
   getRecentMessages,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
@@ -57,6 +57,7 @@ import { loadPlugins, PluginRegistry } from './plugin-loader.js';
 import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
 import { MessageOrchestrator } from './orchestrator.js';
+import { isSenderAllowed, loadSenderAllowlist, shouldDropMessage } from './sender-allowlist.js';
 import type { ChannelPluginConfig, PluginContext } from './plugin-types.js';
 
 // Re-export for backwards compatibility during refactor
@@ -160,6 +161,9 @@ async function main(): Promise<void> {
   // Load secret redaction AFTER plugins so publicEnvVars are available
   loadSecrets(plugins.getPublicEnvVars());
 
+  // Load sender allowlist for drop-mode filtering
+  const senderAllowlistCfg = loadSenderAllowlist();
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
@@ -218,7 +222,6 @@ async function main(): Promise<void> {
     updateTask: (id, updates) => updateTask(id, updates),
     deleteTask: (id) => deleteTask(id),
     getTaskRunLogs: (taskId, limit) => getTaskRunLogs(taskId, limit),
-    getRecentTaskRunLogs: (limit) => getRecentTaskRunLogs(limit),
 
     // Messages
     getRecentMessages: (jid, limit) => getRecentMessages(jid, limit ?? 50),
@@ -229,6 +232,13 @@ async function main(): Promise<void> {
   for (const plugin of plugins.getChannelPlugins()) {
     const channelConfig: ChannelPluginConfig = {
       onMessage: async (chatJid, msg) => {
+        // Drop-mode: skip storing messages from disallowed senders entirely
+        if (shouldDropMessage(chatJid, senderAllowlistCfg) &&
+            !msg.is_from_me &&
+            !isSenderAllowed(chatJid, msg.sender, senderAllowlistCfg)) {
+          logger.debug({ chatJid, sender: msg.sender }, 'sender-allowlist: dropping message (drop mode)');
+          return;
+        }
         const transformed = await plugins.runInboundHooks(msg, plugin.manifest.name);
         storeMessage(transformed);
       },
@@ -273,6 +283,7 @@ async function main(): Promise<void> {
     registeredGroups: () => orchestrator.registeredGroups,
     getSessions: () => orchestrator.sessions,
     getResumePositions: () => orchestrator.resumePositions,
+    clearResumePosition: (groupFolder: string) => { delete orchestrator.resumePositions[groupFolder]; },
     queue,
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText, sender) => {

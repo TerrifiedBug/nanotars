@@ -12,6 +12,11 @@ import type { AvailableGroup } from './snapshots.js';
 import type { GroupQueue } from './group-queue.js';
 import type { ScheduledTask } from './types.js';
 import { isAuthError } from './router.js';
+import {
+  isTriggerAllowed,
+  loadSenderAllowlist,
+  type SenderAllowlistConfig,
+} from './sender-allowlist.js';
 
 /** Dependency injection interface for the orchestrator. */
 export interface OrchestratorDeps {
@@ -90,8 +95,11 @@ export class MessageOrchestrator {
   channels: Channel[] = [];
   private messageLoopRunning = false;
   private stopRequested = false;
+  private senderAllowlist: SenderAllowlistConfig;
 
-  constructor(private deps: OrchestratorDeps) {}
+  constructor(private deps: OrchestratorDeps) {
+    this.senderAllowlist = loadSenderAllowlist();
+  }
 
   loadState(): void {
     this.lastTimestamp = this.deps.getRouterState('last_timestamp') || '';
@@ -209,7 +217,8 @@ export class MessageOrchestrator {
     if (!isMainGroup && group.requiresTrigger !== false) {
       const pattern = this.deps.createTriggerPattern(group.trigger);
       const hasTrigger = missedMessages.some((m) =>
-        pattern.test(m.content.trim()),
+        pattern.test(m.content.trim()) &&
+        (m.is_from_me || isTriggerAllowed(chatJid, m.sender, this.senderAllowlist)),
       );
       // Also trigger on replies to the bot's messages
       const hasReplyToBot = missedMessages.some((m) =>
@@ -469,7 +478,8 @@ export class MessageOrchestrator {
             if (needsTrigger) {
               const pattern = this.deps.createTriggerPattern(group.trigger);
               const hasTrigger = groupMessages.some((m) =>
-                pattern.test(m.content.trim()),
+                pattern.test(m.content.trim()) &&
+                (m.is_from_me || isTriggerAllowed(chatJid, m.sender, this.senderAllowlist)),
               );
               // Also trigger on replies to the bot's messages
               const hasReplyToBot = groupMessages.some((m) =>

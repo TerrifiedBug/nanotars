@@ -13,6 +13,7 @@ vi.mock('../config.js', () => ({
 }));
 
 vi.mock('../mount-security.js', () => ({
+  validateMount: vi.fn(() => ({ allowed: false, reason: 'mock reject' })),
   validateAdditionalMounts: vi.fn(() => []),
 }));
 
@@ -21,7 +22,7 @@ vi.mock('../env.js', () => ({
 }));
 
 import * as configMod from '../config.js';
-import { validateAdditionalMounts } from '../mount-security.js';
+import { validateMount, validateAdditionalMounts } from '../mount-security.js';
 import type { RegisteredGroup } from '../types.js';
 
 let tmpDir: string;
@@ -303,24 +304,27 @@ describe('buildVolumeMounts: plugin integration', () => {
     setupProjectDirs();
     setupGroupDirs('main');
 
-    vi.mocked(validateAdditionalMounts).mockReturnValue([
-      { hostPath: '/some/path', containerPath: '/workspace/extra/data', readonly: true },
-    ]);
+    vi.mocked(validateMount).mockReturnValue({
+      allowed: true,
+      realHostPath: '/some/path',
+      effectiveReadonly: true,
+      resolvedContainerPath: 'data',
+    } as any);
 
     setPluginRegistry({
       getSkillPaths: vi.fn(() => []),
       getContainerHookPaths: vi.fn(() => []),
-      getContainerMounts: vi.fn(() => [{ hostPath: '/some/path', containerPath: '/workspace/extra/data' }]),
+      getContainerMounts: vi.fn(() => [{ hostPath: '/some/path', containerPath: 'data' }]),
       getMergedMcpConfig: vi.fn(() => ({ mcpServers: {} })),
       getContainerEnvVars: vi.fn(() => ['ANTHROPIC_API_KEY']),
     } as any);
 
     const mounts = await buildVolumeMounts(makeGroup(), true);
 
-    expect(validateAdditionalMounts).toHaveBeenCalledWith(
-      [{ hostPath: '/some/path', containerPath: '/workspace/extra/data', readonly: true }],
-      'Main',
+    expect(validateMount).toHaveBeenCalledWith(
+      { hostPath: '/some/path', containerPath: 'data', readonly: true },
       true,
+      { allowAbsoluteContainerPath: true },
     );
 
     const extra = mounts.find(m => m.containerPath === '/workspace/extra/data');
@@ -331,6 +335,9 @@ describe('buildVolumeMounts: plugin integration', () => {
   it('filters out rejected plugin container mounts', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
+
+    // Reset validateMount to reject (previous test set it to allow)
+    vi.mocked(validateMount).mockReturnValue({ allowed: false, reason: 'mock reject' } as any);
 
     setPluginRegistry({
       getSkillPaths: vi.fn(() => []),
@@ -583,7 +590,7 @@ describe('readSecrets', () => {
     vi.mocked(readEnvFile).mockReturnValue({ CLAUDE_CODE_OAUTH_TOKEN: 'tok', ANTHROPIC_API_KEY: 'key' });
     const { readSecrets } = await import('../container-mounts.js');
     const secrets = readSecrets();
-    expect(readEnvFile).toHaveBeenCalledWith(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
+    expect(readEnvFile).toHaveBeenCalledWith(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN']);
     expect(secrets).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'tok', ANTHROPIC_API_KEY: 'key' });
   });
 });

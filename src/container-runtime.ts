@@ -170,6 +170,7 @@ export function extraRunArgs(): string[] {
       '--cpus=2',
       '--memory=4g',
       '--pids-limit=256',
+      '--add-host=host.docker.internal:host-gateway',
     ];
   }
   return [];
@@ -191,7 +192,7 @@ export function stop(
 export function fixMountPermissions(hostPath: string): Promise<void> {
   if (detectRuntime() !== 'docker') return Promise.resolve();
   return new Promise((resolve) => {
-    execFile('chown', ['-R', '1000:1000', hostPath], { stdio: 'pipe' }, (err) => {
+    execFile('chown', ['-R', '1000:1000', hostPath], (err: Error | null) => {
       if (err) {
         logger.warn({ hostPath, err: err.message }, 'chown failed on mount path (container may still work)');
       }

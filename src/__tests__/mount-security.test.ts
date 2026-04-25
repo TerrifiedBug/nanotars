@@ -317,6 +317,52 @@ describe('validateMount', () => {
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('No mount allowlist configured');
   });
+
+  it('allows absolute container path with allowAbsoluteContainerPath option', async () => {
+    const subDir = path.join(tmpDir, 'gogcli');
+    fs.mkdirSync(subDir);
+    const filePath = writeAllowlist(validAllowlist());
+    vi.resetModules();
+    (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
+    const { validateMount } = await import('../mount-security.js');
+    const result = validateMount(
+      { hostPath: subDir, containerPath: '/home/node/.config/gogcli' },
+      true,
+      { allowAbsoluteContainerPath: true },
+    );
+    expect(result.allowed).toBe(true);
+    expect(result.resolvedContainerPath).toBe('/home/node/.config/gogcli');
+  });
+
+  it('still rejects traversal in absolute container path', async () => {
+    const subDir = path.join(tmpDir, 'data');
+    fs.mkdirSync(subDir);
+    const filePath = writeAllowlist(validAllowlist());
+    vi.resetModules();
+    (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
+    const { validateMount } = await import('../mount-security.js');
+    const result = validateMount(
+      { hostPath: subDir, containerPath: '/home/node/../../etc/shadow' },
+      true,
+      { allowAbsoluteContainerPath: true },
+    );
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('..');
+  });
+
+  it('rejects absolute container path without the option', async () => {
+    const subDir = path.join(tmpDir, 'gogcli');
+    fs.mkdirSync(subDir);
+    const filePath = writeAllowlist(validAllowlist());
+    vi.resetModules();
+    (configMod as any).MOUNT_ALLOWLIST_PATH = filePath;
+    const { validateMount } = await import('../mount-security.js');
+    const result = validateMount(
+      { hostPath: subDir, containerPath: '/home/node/.config/gogcli' },
+      true,
+    );
+    expect(result.allowed).toBe(false);
+  });
 });
 
 // --- validateAdditionalMounts ---

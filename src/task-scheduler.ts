@@ -30,9 +30,35 @@ export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSessions: () => Record<string, string>;
   getResumePositions: () => Record<string, string>;
+  clearResumePosition: (groupFolder: string) => void;
   queue: GroupQueue;
   onProcess: (groupJid: string, proc: ChildProcess, containerName: string, groupFolder: string) => void;
   sendMessage: (jid: string, text: string, sender?: string) => Promise<void>;
+}
+
+/**
+ * Compute the next run time for a task after execution.
+ * Interval tasks anchor to next_run and skip missed intervals to prevent drift.
+ */
+export function computeNextRun(task: ScheduledTask): string | null {
+  if (task.schedule_type === 'cron') {
+    const interval = CronExpressionParser.parse(task.schedule_value, {
+      tz: TIMEZONE,
+    });
+    return interval.next().toISOString();
+  }
+  if (task.schedule_type === 'interval') {
+    const ms = parseInt(task.schedule_value, 10);
+    const now = Date.now();
+    // Anchor to the scheduled time and skip missed intervals
+    let next = task.next_run
+      ? new Date(task.next_run).getTime() + ms
+      : now + ms;
+    while (next <= now) next += ms;
+    return new Date(next).toISOString();
+  }
+  // 'once' tasks have no next run
+  return null;
 }
 
 async function runTask(
@@ -176,6 +202,12 @@ async function runTask(
 
   const durationMs = Date.now() - startTime;
 
+  // Clear stale resume position on error so subsequent tasks don't hit the same
+  // "No message found with message.uuid" failure repeatedly
+  if (error && task.context_mode === 'group') {
+    deps.clearResumePosition(task.group_folder);
+  }
+
   // Notify user if the task failed (so they don't get silent failures)
   if (error && !hadSuccessfulResponse) {
     const taskLabel = task.prompt.split('\n')[0].slice(0, 60);
@@ -203,17 +235,7 @@ async function runTask(
     error,
   });
 
-  let nextRun: string | null = null;
-  if (task.schedule_type === 'cron') {
-    const interval = CronExpressionParser.parse(task.schedule_value, {
-      tz: TIMEZONE,
-    });
-    nextRun = interval.next().toISOString();
-  } else if (task.schedule_type === 'interval') {
-    const ms = parseInt(task.schedule_value, 10);
-    nextRun = new Date(Date.now() + ms).toISOString();
-  }
-  // 'once' tasks have no next run
+  const nextRun = computeNextRun(task);
 
   const resultSummary = error
     ? `Error: ${error}`
