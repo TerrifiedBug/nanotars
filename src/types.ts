@@ -107,6 +107,16 @@ export interface Channel {
    * unchanged. Returning an empty string is allowed and suppresses delivery.
    */
   transformOutboundText?(text: string, jid: string): string | Promise<string>;
+  /**
+   * Optional: resolve a user handle (e.g., '@alice', 'alice', 'tg:1234567')
+   * to a chat JID that subsequent sendMessage calls can target.
+   *
+   * Returns null if the handle cannot be resolved (e.g., user does not exist,
+   * channel does not support DM resolution from a handle, or privacy settings
+   * prevent it). Channels that don't support cold-DM resolution should leave
+   * this method undefined.
+   */
+  openDM?(handle: string): Promise<string | null>;
   sendFile?(jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string): Promise<void>;
   react?(jid: string, messageId: string, emoji: string, participant?: string, fromMe?: boolean): Promise<void>;
   isConnected(): boolean;
