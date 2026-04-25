@@ -136,8 +136,7 @@ async function main(): Promise<void> {
     getNewMessages,
     getAllChats,
     getAllTasks,
-    recordUnregisteredSender: (channel, platformId, senderName) =>
-      recordUnregisteredSender(getDb(), channel, platformId, senderName),
+    recordUnregisteredSender,
     formatMessages,
     routeOutbound,
     stripInternalTags,

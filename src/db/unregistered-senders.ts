@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { getDb } from './init.js';
 
 export interface UnregisteredSenderRow {
   channel: string;
@@ -17,10 +18,10 @@ export interface UnregisteredSenderRow {
  * Adopted from upstream nanoclaw v2 unregistered_senders accessor.
  */
 export function recordUnregisteredSender(
-  db: Database.Database,
   channel: string,
   platformId: string,
   senderName: string,
+  db: Database.Database = getDb(),
 ): void {
   const now = new Date().toISOString();
   db.prepare(`
@@ -33,16 +34,18 @@ export function recordUnregisteredSender(
   `).run(channel, platformId, senderName, now, now);
 }
 
-export function listUnregisteredSenders(db: Database.Database): UnregisteredSenderRow[] {
+export function listUnregisteredSenders(
+  db: Database.Database = getDb(),
+): UnregisteredSenderRow[] {
   return db
     .prepare(`SELECT channel, platform_id, sender_name, count, first_seen, last_seen FROM unregistered_senders ORDER BY last_seen DESC`)
     .all() as UnregisteredSenderRow[];
 }
 
 export function clearUnregisteredSender(
-  db: Database.Database,
   channel: string,
   platformId: string,
+  db: Database.Database = getDb(),
 ): void {
   db.prepare(`DELETE FROM unregistered_senders WHERE channel = ? AND platform_id = ?`).run(channel, platformId);
 }
