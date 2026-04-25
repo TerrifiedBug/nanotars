@@ -2,7 +2,7 @@ import { describe, it, expectTypeOf } from 'vitest';
 import type { Channel } from '../types.js';
 
 describe('Channel.openDM', () => {
-  it('is an optional method that returns a JID', () => {
+  it('is an optional method that returns a Promise<string> (throws on failure)', () => {
     const ch: Channel = {
       name: 'test',
       connect: async () => {},
@@ -10,12 +10,14 @@ describe('Channel.openDM', () => {
       isConnected: () => true,
       ownsJid: () => true,
       disconnect: async () => {},
-      openDM: async (handle: string) => `dm:${handle}@example`,
+      openDM: async (handle: string) => `${handle}@dm.test`,
     };
-    expectTypeOf(ch.openDM).toMatchTypeOf<((handle: string) => Promise<string | null>) | undefined>();
+    // Exact-shape assertion: signature drift (e.g., re-introducing `| null`,
+    // adding a parameter, returning a non-Promise) will fail this test.
+    expectTypeOf(ch.openDM).toEqualTypeOf<((handle: string) => Promise<string>) | undefined>();
   });
 
-  it('omitting openDM still satisfies Channel', () => {
+  it('omitting openDM still satisfies Channel (backward compat)', () => {
     const ch: Channel = {
       name: 'test',
       connect: async () => {},
@@ -24,6 +26,6 @@ describe('Channel.openDM', () => {
       ownsJid: () => true,
       disconnect: async () => {},
     };
-    expectTypeOf(ch.openDM).toMatchTypeOf<((handle: string) => Promise<string | null>) | undefined>();
+    expectTypeOf(ch.openDM).toEqualTypeOf<((handle: string) => Promise<string>) | undefined>();
   });
 });

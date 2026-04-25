@@ -111,12 +111,16 @@ export interface Channel {
    * Optional: resolve a user handle (e.g., '@alice', 'alice', 'tg:1234567')
    * to a chat JID that subsequent sendMessage calls can target.
    *
-   * Returns null if the handle cannot be resolved (e.g., user does not exist,
-   * channel does not support DM resolution from a handle, or privacy settings
-   * prevent it). Channels that don't support cold-DM resolution should leave
-   * this method undefined.
+   * Throws if the handle cannot be resolved (e.g., user does not exist,
+   * channel does not support DM resolution from a handle, or privacy
+   * settings prevent it). Channels that don't support cold-DM resolution
+   * should leave this method undefined.
+   *
+   * Higher-level callers (e.g., the Phase 4 ensureUserDm wrapper) translate
+   * throws to null at their policy layer rather than forcing every channel
+   * implementation to do so.
    */
-  openDM?(handle: string): Promise<string | null>;
+  openDM?(handle: string): Promise<string>;
   sendFile?(jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string): Promise<void>;
   react?(jid: string, messageId: string, emoji: string, participant?: string, fromMe?: boolean): Promise<void>;
   isConnected(): boolean;
