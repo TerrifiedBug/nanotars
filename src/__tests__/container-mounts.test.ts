@@ -595,6 +595,49 @@ describe('readSecrets', () => {
   });
 });
 
+// --- Per-group skills tier ---
+
+describe('buildVolumeMounts: per-group skills tier', () => {
+  let buildVolumeMounts: typeof import('../container-mounts.js').buildVolumeMounts;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const mod = await import('../container-mounts.js');
+    buildVolumeMounts = mod.buildVolumeMounts;
+  });
+
+  it('mounts groups/<folder>/skills/ at /workspace/.claude/skills/group/ when the dir exists', async () => {
+    setupProjectDirs();
+    const groupFolder = 'testgroup';
+    setupGroupDirs(groupFolder);
+
+    // Create a per-group skills directory with a sample file
+    const groupSkillsDir = path.join((configMod as any).GROUPS_DIR, groupFolder, 'skills');
+    fs.mkdirSync(groupSkillsDir, { recursive: true });
+    fs.writeFileSync(path.join(groupSkillsDir, 'sample-skill.md'), '# Sample Skill');
+
+    const mounts = await buildVolumeMounts(makeGroup({ folder: groupFolder, name: 'Test Group' }), false);
+
+    const groupSkillsMount = mounts.find(m => m.containerPath === '/workspace/.claude/skills/group');
+    expect(groupSkillsMount).toBeDefined();
+    expect(groupSkillsMount!.hostPath).toBe(groupSkillsDir);
+    expect(groupSkillsMount!.readonly).toBe(true);
+  });
+
+  it('does not include the per-group mount when the dir does not exist', async () => {
+    setupProjectDirs();
+    const groupFolder = 'testgroup';
+    setupGroupDirs(groupFolder);
+
+    // Deliberately do NOT create the skills directory
+
+    const mounts = await buildVolumeMounts(makeGroup({ folder: groupFolder, name: 'Test Group' }), false);
+
+    const groupSkillsMount = mounts.find(m => m.containerPath === '/workspace/.claude/skills/group');
+    expect(groupSkillsMount).toBeUndefined();
+  });
+});
+
 // --- ensureClaudeLocal ---
 
 describe('ensureClaudeLocal', () => {

@@ -109,6 +109,17 @@ export async function buildVolumeMounts(
     }
   }
 
+  // Per-group skills tier — operator-curated content that doesn't need to ship as a plugin.
+  // Coexists with the shared (container/skills) and per-plugin (container-skills/) tiers.
+  const groupSkillsDir = path.join(GROUPS_DIR, group.folder, 'skills');
+  if (fs.existsSync(groupSkillsDir)) {
+    mounts.push({
+      hostPath: groupSkillsDir,
+      containerPath: '/workspace/.claude/skills/group',
+      readonly: true,
+    });
+  }
+
   // Plugin skill directories — each plugin's container-skills/ mounted individually
   // Scoped by channel and group so plugins only inject into matching containers
   const scopeChannel = group.channel;
