@@ -57,13 +57,14 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 Your workspace is `/workspace/group/`. Everything you create here persists across sessions.
 
-**Remember things.** If you learn a fact, preference, or decision worth keeping — save it to MEMORY.md or the appropriate memory tier. Anything not written down is lost when this session ends. But don't write research findings or task output to files — deliver those in the chat.
+**Remember things.** If you learn a fact, preference, or decision worth keeping — save it to CLAUDE.local.md (your group's writable memory), MEMORY.md (auto-memory), or the appropriate memory tier. Anything not written down is lost when this session ends. But don't write research findings or task output to files — deliver those in the chat.
 
 ### Memory tiers
 
-1. **conversations/** — Archived conversation history. Search here to recall past context.
-2. **MEMORY.md** — Auto-memory. Facts and preferences learned across sessions are written here automatically.
-3. Additional memory tools may be available depending on installed skills — check your skills.
+1. **CLAUDE.local.md** — Your per-group writable memory (agent-owned). Use this to record things you'll want to remember in future sessions: user preferences, project context, recurring facts. Keep entries short and structured. The host never edits this file — it is yours.
+2. **conversations/** — Archived conversation history. Search here to recall past context.
+3. **MEMORY.md** — Auto-memory. Facts and preferences learned across sessions are written here automatically.
+4. Additional memory tools may be available depending on installed skills — check your skills.
 
 ### File organization
 

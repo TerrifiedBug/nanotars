@@ -8,6 +8,7 @@ import path from 'path';
 
 import { DATA_DIR, GROUPS_DIR } from './config.js';
 import { readEnvFile } from './env.js';
+import { ensureClaudeLocal } from './ensure-claude-local.js';
 import { logger } from './logger.js';
 import { validateAdditionalMounts, validateMount } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
@@ -87,6 +88,9 @@ export async function buildVolumeMounts(
   const mounts: VolumeMount[] = [];
   const homeDir = getHomeDir();
   const projectRoot = process.cwd();
+
+  // Ensure per-group CLAUDE.local.md exists (agent-owned writable memory)
+  ensureClaudeLocal(GROUPS_DIR, group.folder);
 
   // Core agent skills — mount each subdirectory individually so plugin skill
   // mounts can coexist (mounting the parent as read-only blocks child mounts)

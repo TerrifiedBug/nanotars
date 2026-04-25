@@ -594,3 +594,43 @@ describe('readSecrets', () => {
     expect(secrets).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'tok', ANTHROPIC_API_KEY: 'key' });
   });
 });
+
+// --- ensureClaudeLocal ---
+
+describe('ensureClaudeLocal', () => {
+  let ensureClaudeLocal: typeof import('../ensure-claude-local.js').ensureClaudeLocal;
+  let tmp: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const mod = await import('../ensure-claude-local.js');
+    ensureClaudeLocal = mod.ensureClaudeLocal;
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-local-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it('creates an empty CLAUDE.local.md if missing', () => {
+    fs.mkdirSync(path.join(tmp, 'groups', 'test'), { recursive: true });
+    ensureClaudeLocal(path.join(tmp, 'groups'), 'test');
+    const filePath = path.join(tmp, 'groups', 'test', 'CLAUDE.local.md');
+    expect(fs.existsSync(filePath)).toBe(true);
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe('');
+  });
+
+  it('preserves existing CLAUDE.local.md content', () => {
+    fs.mkdirSync(path.join(tmp, 'groups', 'test'), { recursive: true });
+    const filePath = path.join(tmp, 'groups', 'test', 'CLAUDE.local.md');
+    fs.writeFileSync(filePath, 'agent memory contents');
+    ensureClaudeLocal(path.join(tmp, 'groups'), 'test');
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe('agent memory contents');
+  });
+
+  it('creates the group dir if missing', () => {
+    ensureClaudeLocal(path.join(tmp, 'groups'), 'new-group');
+    expect(fs.existsSync(path.join(tmp, 'groups', 'new-group'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, 'groups', 'new-group', 'CLAUDE.local.md'))).toBe(true);
+  });
+});
