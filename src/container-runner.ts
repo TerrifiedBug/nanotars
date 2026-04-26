@@ -213,7 +213,21 @@ async function buildContainerArgs(
     }
   }
 
-  args.push(CONTAINER_IMAGE);
+  // Phase 5B: prefer the per-agent-group image when one has been built.
+  // `container_config.imageTag` is populated by `buildAgentGroupImage` after
+  // a successful self-mod. When unset (no apt/npm extras yet, or the group
+  // never self-modded), fall back to the shared base image so existing
+  // groups keep working unchanged.
+  let perGroupImageTag: string | undefined;
+  if (group?.container_config) {
+    try {
+      const cfg = JSON.parse(group.container_config) as ContainerConfig;
+      if (cfg.imageTag) perGroupImageTag = cfg.imageTag;
+    } catch {
+      /* invalid JSON is logged elsewhere in runContainerAgent; fall back here */
+    }
+  }
+  args.push(perGroupImageTag || CONTAINER_IMAGE);
 
   return args;
 }
