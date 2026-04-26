@@ -260,6 +260,40 @@ cat <<EOF
 
 EOF
 
+# --- Install user wrapper: ~/.local/bin/nanotars ---
+
+WRAPPER_DIR="$HOME/.local/bin"
+WRAPPER_PATH="$WRAPPER_DIR/nanotars"
+log_step "Installing 'nanotars' wrapper at $WRAPPER_PATH"
+mkdir -p "$WRAPPER_DIR"
+sed "s|__INSTALL_DIR__|$PROJECT_ROOT|g" "$PROJECT_ROOT/setup/wrapper-template.sh" > "$WRAPPER_PATH"
+chmod +x "$WRAPPER_PATH"
+
+# Ensure ~/.local/bin is on PATH for future shells. Idempotent — only
+# appends to the rc file if the line isn't already there.
+ensure_local_bin_on_path() {
+  case ":$PATH:" in
+    *":$WRAPPER_DIR:"*) return 0 ;;
+  esac
+  case "${SHELL:-}" in
+    */zsh)  RC="$HOME/.zshrc" ;;
+    */bash) RC="$HOME/.bashrc" ;;
+    *)      RC="" ;;
+  esac
+  if [ -z "${RC:-}" ]; then
+    log_warn "$WRAPPER_DIR is not on PATH and shell ($SHELL) is unrecognized."
+    log_warn "Add this to your shell rc file: export PATH=\"$WRAPPER_DIR:\$PATH\""
+    return 0
+  fi
+  if [ -f "$RC" ] && grep -qE "PATH=.*\.local/bin" "$RC" 2>/dev/null; then
+    log_info "$WRAPPER_DIR already on PATH per $RC (current shell may need restart)"
+    return 0
+  fi
+  printf '\n# Added by nanotars setup.sh\nexport PATH="%s:$PATH"\n' "$WRAPPER_DIR" >> "$RC"
+  log_info "appended PATH export to $RC — open a new shell or run: source $RC"
+}
+ensure_local_bin_on_path
+
 # --- Onboarding bridge: name + channels ---
 
 # We can only collect this interactively. Honor a TTY check + an explicit
