@@ -522,7 +522,7 @@ async function runQuery(
   if (agentNames.size > 0) {
     mergedHooks.PreToolUse.push({
       matcher: 'Task',
-      hooks: [async (input) => {
+      hooks: [(async (input) => {
         const hookInput = input as { tool_input?: { subagent_type?: string; run_in_background?: boolean } };
         const taskInput = hookInput.tool_input;
         if (taskInput?.subagent_type && agentNames.has(taskInput.subagent_type) && !taskInput.run_in_background) {
@@ -530,7 +530,7 @@ async function runQuery(
           return { updatedInput: { ...taskInput, run_in_background: true } };
         }
         return {};
-      }],
+      }) as HookCallback],
     });
   }
 
