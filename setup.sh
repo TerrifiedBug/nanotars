@@ -260,6 +260,91 @@ cat <<EOF
 
 EOF
 
+# --- Onboarding bridge: name + channels ---
+
+# We can only collect this interactively. Honor a TTY check + an explicit
+# skip flag so CI / scripted re-runs don't hang.
+if [ "${NANOTARS_SKIP_ONBOARDING_PROMPT:-}" != "true" ] && [ -t 0 ]; then
+  echo
+  echo "  ─── Onboarding (saves to data/onboarding.json) ────────────────"
+  echo
+
+  # 1. User's name (so TARS addresses them by name).
+  read -r -p "  What's your name? (used by TARS when addressing you): " USER_NAME </dev/tty
+  USER_NAME="${USER_NAME:-}"
+
+  # 2. Channel multi-select. Catalog mirrors .claude/skills/nanoclaw-setup
+  #    — these are the channels the in-claude setup skill knows how to install.
+  echo
+  echo "  Available chat channels:"
+  echo "    1) telegram   (bot API)"
+  echo "    2) discord    (servers + DMs)"
+  echo "    3) whatsapp   (via Baileys)"
+  echo "    4) slack      (socket mode)"
+  echo
+  read -r -p "  Pick numbers (space-separated, e.g. '1 3'; blank = decide later): " PICKS </dev/tty
+
+  declare -a CHANNELS_PICKED=()
+  for n in $PICKS; do
+    case "$n" in
+      1) CHANNELS_PICKED+=("telegram") ;;
+      2) CHANNELS_PICKED+=("discord") ;;
+      3) CHANNELS_PICKED+=("whatsapp") ;;
+      4) CHANNELS_PICKED+=("slack") ;;
+    esac
+  done
+
+  # 3. Persist the selections so the in-claude /nanoclaw-setup skill can
+  #    read them and dispatch the right /add-* skills.
+  mkdir -p "$PROJECT_ROOT/data"
+  CHANNELS_JSON="["
+  first=1
+  for c in "${CHANNELS_PICKED[@]:-}"; do
+    [ -z "$c" ] && continue
+    if [ "$first" = "1" ]; then first=0; else CHANNELS_JSON="${CHANNELS_JSON},"; fi
+    CHANNELS_JSON="${CHANNELS_JSON}\"${c}\""
+  done
+  CHANNELS_JSON="${CHANNELS_JSON}]"
+
+  cat > "$PROJECT_ROOT/data/onboarding.json" <<EOF
+{
+  "name": "${USER_NAME}",
+  "channels": ${CHANNELS_JSON},
+  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  log_info "saved $PROJECT_ROOT/data/onboarding.json"
+
+  # 4. Bake the user's name into groups/main/IDENTITY.md so TARS knows
+  #    who it's talking to from the very first message. Idempotent —
+  #    re-running setup.sh updates the User block without duplicating it.
+  IDENTITY="$PROJECT_ROOT/groups/main/IDENTITY.md"
+  mkdir -p "$(dirname "$IDENTITY")"
+  if [ -n "$USER_NAME" ]; then
+    if [ -f "$IDENTITY" ] && grep -q '^## User$' "$IDENTITY" 2>/dev/null; then
+      # Replace existing User block (between '## User' and next '## ' or EOF).
+      python3 - "$IDENTITY" "$USER_NAME" <<'PY' 2>/dev/null || true
+import sys, re
+path, name = sys.argv[1], sys.argv[2]
+with open(path) as f: t = f.read()
+new = f"## User\n\nYou are working with **{name}**. Address them as {name} when greeting and replying.\n\n"
+t = re.sub(r"## User\n.*?(?=\n## |\Z)", new, t, count=1, flags=re.DOTALL)
+with open(path, "w") as f: f.write(t)
+PY
+    else
+      cat >> "$IDENTITY" <<EOF
+
+## User
+
+You are working with **${USER_NAME}**. Address them as ${USER_NAME} when greeting and replying.
+EOF
+    fi
+    log_info "set user name in $IDENTITY"
+  fi
+
+  echo
+fi
+
 # --- Skill marketplace prompt ---
 
 if [ "${NANOTARS_SKIP_MARKETPLACE_PROMPT:-}" != "true" ] && [ -t 0 ]; then
