@@ -134,30 +134,35 @@ bash "$PROJECT_ROOT/setup/install-docker.sh" || {
 
 # --- Host install ---
 
-log_step "pnpm install --frozen-lockfile"
-pnpm install --frozen-lockfile 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"
+# Run a noisy command silently to logs/setup.log; print one ✓ line on
+# success or tail the log on failure. Keeps the user-facing output tight.
+run_quiet() {
+  local label="$1"; shift
+  log_step "$label"
+  if "$@" >> "$PROJECT_ROOT/logs/setup.log" 2>&1; then
+    log_info "✓ $label"
+  else
+    log_error "$label failed — last 20 lines of logs/setup.log:"
+    tail -n 20 "$PROJECT_ROOT/logs/setup.log" >&2
+    exit 1
+  fi
+}
 
-log_step "Verifying better-sqlite3 native binding"
-if ! node -e "require('better-sqlite3')" 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"; then
-  log_error "better-sqlite3 failed to load — check logs/setup.log"
+run_quiet "pnpm install" pnpm install --frozen-lockfile
+
+if ! node -e "require('better-sqlite3')" >> "$PROJECT_ROOT/logs/setup.log" 2>&1; then
+  log_error "better-sqlite3 native binding failed to load — check logs/setup.log"
   exit 1
 fi
-log_info "better-sqlite3 loads OK"
+log_info "✓ better-sqlite3 binding"
 
-# --- Host build ---
-
-log_step "pnpm run build (compile host TypeScript to dist/)"
-pnpm run build 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"
+run_quiet "pnpm run build" pnpm run build
 if [ ! -f "$PROJECT_ROOT/dist/index.js" ]; then
-  log_error "pnpm run build did not produce dist/index.js — check logs/setup.log"
+  log_error "build did not produce dist/index.js — check logs/setup.log"
   exit 1
 fi
-log_info "dist/index.js produced"
 
-# --- Container build ---
-
-log_step "Building agent container image (this can take a few minutes on first run)"
-bash "$PROJECT_ROOT/container/build.sh" 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"
+run_quiet "container build (this can take a few minutes on first run)" bash "$PROJECT_ROOT/container/build.sh"
 
 # --- Service install + start ---
 
@@ -178,8 +183,7 @@ esac
 if [ "$SERVICE_MANAGER" = "nohup" ]; then
   WRAPPER="$PROJECT_ROOT/start-nanotars.sh"
   if [ -x "$WRAPPER" ]; then
-    log_step "Starting nanotars (nohup)"
-    bash "$WRAPPER" 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"
+    run_quiet "starting nanotars (nohup)" bash "$WRAPPER"
   fi
 fi
 
@@ -221,6 +225,15 @@ else
   SERVICE_LINE="Service:  $SERVICE_MANAGER (NOT running — see logs/nanotars.error.log)"
 fi
 
+PATH_HINT=
+if [ -n "$PATH_RC_TO_SOURCE" ]; then
+  PATH_HINT="
+    First — pick up the new PATH for the 'nanotars' command:
+      source $PATH_RC_TO_SOURCE
+    (or just open a new shell)
+"
+fi
+
 cat <<EOF
 
   ================================================================
@@ -229,48 +242,23 @@ cat <<EOF
 
     Install:  $PROJECT_ROOT
     $SERVICE_LINE
-    Logs:     $PROJECT_ROOT/logs/nanotars.log
-    Errors:   $PROJECT_ROOT/logs/nanotars.error.log
-
-    Manage with:
-      nanotars status      # health snapshot
-      nanotars logs        # tail (or show error log if main is empty)
-      nanotars restart     # restart
-      nanotars stop        # stop
-
-      (or 'bash nanotars.sh <cmd>' if ~/.local/bin isn't on PATH yet)
-
+${PATH_HINT}
   ─── Next: bootstrap your first agent ────────────────────────────
 
-    1. Open Claude Code (in the install dir) — just type:
+    1. Open Claude in the install dir:
          nanotars
 
-    2. From inside Claude, run the setup skill:
+    2. Inside Claude, run:
          /nanotars-setup
-       Reads data/onboarding.json (your name + channel picks) and
-       walks through:
-         • Install the picked channel plugin(s)
-         • Authenticate each channel
-         • Wire your first agent group to one channel
-         • Verify the agent responds in chat
+       (Reads data/onboarding.json — your name + channel picks — and
+       walks through channel install, auth, wiring, and verification.)
 
-    3. (Optional) Tune personality + instructions:
-         $PROJECT_ROOT/groups/main/IDENTITY.md   # personality / soul
-         $PROJECT_ROOT/groups/main/CLAUDE.md     # operational guidance
+    3. (Optional) Tune personality:  groups/main/IDENTITY.md
+       (Optional) OneCLI vault:      /init-onecli (inside Claude)
 
-    4. (Optional) OneCLI credential vault for safer secrets:
-         from inside Claude Code → /init-onecli
-
-  ─── Plugin scope tip ────────────────────────────────────────────
-
-    Skills bundled in this repo (.claude/skills/) are only visible when
-    you're in $PROJECT_ROOT.
-
-    Skills you '/plugin install' from a marketplace land in user-global
-    (~/.claude/plugins/) and will be visible in every Claude Code
-    session — including any other repos. If you're dual-running with
-    another nanoclaw-style project, prefer keeping nanotars-specific
-    skills bundled in this repo over user-global installs.
+    Service control:  nanotars start | stop | restart | status | logs
+    Logs:             $PROJECT_ROOT/logs/nanotars.log
+EOF
 
 EOF
 
@@ -285,6 +273,9 @@ chmod +x "$WRAPPER_PATH"
 
 # Ensure ~/.local/bin is on PATH for future shells. Idempotent — only
 # appends to the rc file if the line isn't already there.
+# Sets PATH_RC_TO_SOURCE if the parent shell needs to source an rc file
+# to pick up the wrapper.
+PATH_RC_TO_SOURCE=
 ensure_local_bin_on_path() {
   case ":$PATH:" in
     *":$WRAPPER_DIR:"*) return 0 ;;
@@ -300,11 +291,11 @@ ensure_local_bin_on_path() {
     return 0
   fi
   if [ -f "$RC" ] && grep -qE "PATH=.*\.local/bin" "$RC" 2>/dev/null; then
-    log_info "$WRAPPER_DIR already on PATH per $RC (current shell may need restart)"
+    PATH_RC_TO_SOURCE="$RC"
     return 0
   fi
   printf '\n# Added by nanotars setup.sh\nexport PATH="%s:$PATH"\n' "$WRAPPER_DIR" >> "$RC"
-  log_info "appended PATH export to $RC — open a new shell or run: source $RC"
+  PATH_RC_TO_SOURCE="$RC"
 }
 ensure_local_bin_on_path
 
@@ -393,27 +384,17 @@ EOF
   echo
 fi
 
-# --- Skill marketplace prompt ---
+# --- Skill marketplace auto-registration ---
 
-if [ "${NANOTARS_SKIP_MARKETPLACE_PROMPT:-}" != "true" ] && [ -t 0 ]; then
-  read -r -p "  Register a Claude Code skill marketplace now? (y/N) " ANS </dev/tty
-  case "${ANS:-}" in
-    y|Y|yes|YES)
-      DEFAULT_MARKETPLACE="TerrifiedBug/nanotars-skills"
-      read -r -p "    Marketplace repo [${DEFAULT_MARKETPLACE}]: " REPO </dev/tty
-      REPO="${REPO:-$DEFAULT_MARKETPLACE}"
-      printf '\n  To register, run from inside Claude Code:\n'
-      printf '    /plugin marketplace add %s\n\n' "$REPO"
-      printf '  Then: /plugin install <skill-name>\n\n'
-      ;;
-    *)
-      printf '\n  Skipping. To register later, from inside Claude Code:\n'
-      printf '    /plugin marketplace add <owner>/<repo>\n\n'
-      ;;
-  esac
+DEFAULT_MARKETPLACE="${NANOTARS_MARKETPLACE:-TerrifiedBug/nanotars-skills}"
+if command -v claude >/dev/null 2>&1; then
+  if claude plugin marketplace add "$DEFAULT_MARKETPLACE" >> "$PROJECT_ROOT/logs/setup.log" 2>&1; then
+    log_info "✓ marketplace $DEFAULT_MARKETPLACE registered with Claude Code"
+  else
+    log_warn "claude plugin marketplace add failed (non-fatal). To retry later, run: claude plugin marketplace add $DEFAULT_MARKETPLACE"
+  fi
 else
-  printf '\n  To register a skill marketplace later, from inside Claude Code:\n'
-  printf '    /plugin marketplace add <owner>/<repo>\n\n'
+  log_info "claude CLI not on PATH — install Claude Code, then run: claude plugin marketplace add $DEFAULT_MARKETPLACE"
 fi
 
 log_info "setup.sh finished cleanly"
