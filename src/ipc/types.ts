@@ -60,6 +60,10 @@ export function isIpcMessage(data: unknown): data is IpcMessage {
 export const TASK_IPC_TYPES = new Set([
   'schedule_task', 'pause_task', 'resume_task', 'update_task', 'cancel_task',
   'refresh_groups', 'register_group', 'emergency_stop', 'resume_processing',
+  // Phase 4D D4: agent-asks-user-a-question card. Container writes the
+  // payload here; host persists a pending_questions row. Card delivery +
+  // answer round-trip wiring is deferred to D6.
+  'ask_question',
 ]);
 
 /** Validate that raw IPC data has a known task type. */

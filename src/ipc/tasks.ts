@@ -2,10 +2,42 @@ import { CronExpressionParser } from 'cron-parser';
 
 import { TIMEZONE } from '../config.js';
 import { createTask, deleteTask, getTaskById, isValidGroupFolder, updateTask } from '../db.js';
+import { hasTable, getDb } from '../db/init.js';
 import { logger } from '../logger.js';
+import {
+  createPendingQuestion,
+  type NormalizedOption,
+} from '../permissions/pending-questions.js';
 import { ContainerConfig, EngageMode, SenderScope, IgnoredMessagePolicy } from '../types.js';
 import { authorizedTaskAction } from './auth.js';
 import { IpcDeps } from './types.js';
+
+/**
+ * Phase 4D D4: normalise an `ask_question` options array. Accepts plain
+ * strings (used as both label and value) or `{label, selectedLabel?, value?}`
+ * objects. Mirrors v2 `container/agent-runner/src/mcp-tools/interactive.ts`'s
+ * shape so the post-D6 card-render path can pull title + options straight
+ * from the pending_questions row without re-normalising.
+ */
+function normaliseOptions(raw: unknown): NormalizedOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: NormalizedOption[] = [];
+  for (const o of raw) {
+    if (typeof o === 'string') {
+      out.push({ label: o, selectedLabel: o, value: o });
+      continue;
+    }
+    if (o && typeof o === 'object') {
+      const obj = o as Record<string, unknown>;
+      const label = typeof obj.label === 'string' ? obj.label : null;
+      if (!label) continue;
+      const selectedLabel = typeof obj.selectedLabel === 'string' ? obj.selectedLabel : label;
+      const value = typeof obj.value === 'string' ? obj.value : label;
+      out.push({ label, selectedLabel, value });
+    }
+  }
+  return out;
+}
 
 /** Compute the next run time for a schedule. Returns null nextRun on parse error. */
 function computeNextRun(
@@ -68,6 +100,17 @@ export async function processTaskIpc(
     sender_scope?: SenderScope;
     ignored_message_policy?: IgnoredMessagePolicy;
     containerConfig?: ContainerConfig;
+    // Phase 4D D4: ask_question payload fields. Container fills these in
+    // when the agent calls the `ask_question` MCP tool.
+    questionId?: string;
+    title?: string;
+    question?: string;
+    options?: unknown;
+    timeout?: number;
+    platform_id?: string | null;
+    channel_type?: string | null;
+    thread_id?: string | null;
+    message_out_id?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -298,6 +341,68 @@ export async function processTaskIpc(
       }
       logger.info({ sourceGroup }, 'Resume requested via IPC');
       if (deps.resumeProcessing) deps.resumeProcessing();
+      break;
+    }
+
+    case 'ask_question': {
+      // Phase 4D D4: persist a pending_questions row for the agent's
+      // ask_user_question call. The actual outbound card delivery and the
+      // answer round-trip wiring (writing question_response back to the
+      // agent's inbox) are deferred to D6 — this handler just records the
+      // open question so D6 can find it, and so the `pending_questions`
+      // PRIMARY KEY drops retries with the same question_id silently.
+      //
+      // Authorization: every group can ask its own agent a question. There's
+      // no isMain gate because non-main groups have a legitimate need (e.g.
+      // a child agent asking the user for confirmation in their own chat).
+      if (!hasTable(getDb(), 'pending_questions')) {
+        logger.warn(
+          { sourceGroup },
+          'ask_question received but pending_questions table missing — schema_version < 18?',
+        );
+        break;
+      }
+      if (!data.questionId || !data.question) {
+        logger.warn(
+          { sourceGroup, hasQuestionId: !!data.questionId, hasQuestion: !!data.question },
+          'ask_question rejected: missing questionId or question text',
+        );
+        break;
+      }
+      const options = normaliseOptions(data.options);
+      const inserted = createPendingQuestion({
+        question_id: data.questionId,
+        // v1-archive's session is the per-group container, so session_id
+        // == sourceGroup (group_folder). D6 will use this to look up the
+        // agent inbox when routing the response back.
+        session_id: sourceGroup,
+        message_out_id: data.message_out_id ?? data.questionId,
+        platform_id: data.platform_id ?? null,
+        channel_type: data.channel_type ?? null,
+        thread_id: data.thread_id ?? null,
+        title: typeof data.title === 'string' ? data.title : '',
+        options,
+        approval_id: null,
+        created_at: new Date().toISOString(),
+      });
+      if (inserted) {
+        logger.info(
+          {
+            sourceGroup,
+            questionId: data.questionId,
+            optionCount: options.length,
+            // TODO(D6): wire actual card delivery + answer round-trip.
+          },
+          'ask_question received — pending_questions row persisted (D6 will deliver)',
+        );
+      } else {
+        // Same question_id arrived twice (agent retry, IPC replay, etc.).
+        // PK conflict means the first row is still in flight; log + drop.
+        logger.info(
+          { sourceGroup, questionId: data.questionId },
+          'ask_question duplicate dropped (question_id already pending)',
+        );
+      }
       break;
     }
 
