@@ -12,7 +12,13 @@ import {
 import { ensureUser } from '../permissions/users.js';
 import { grantRole } from '../permissions/user-roles.js';
 import { addMember } from '../permissions/agent-group-members.js';
+import { ensureUserDm } from '../permissions/user-dms.js';
 import { resolveSender } from '../permissions/sender-resolver.js';
+import {
+  getPendingSenderApproval,
+  hasInFlightSenderApproval,
+} from '../permissions/sender-approval.js';
+import { clearApprovalHandlers } from '../permissions/approval-primitive.js';
 
 /**
  * Test helper: seed a (channel, jid, folder) tuple into the new entity-model
@@ -150,6 +156,7 @@ const DEFAULT_USER_ID = 'whatsapp:user@s';
 
 beforeEach(() => {
   _initTestDatabase();
+  clearApprovalHandlers();
 });
 
 describe('MessageOrchestrator', () => {
@@ -1153,6 +1160,267 @@ describe('MessageOrchestrator', () => {
         platform_id: 'group@s.whatsapp.net',
         sender_handle: 'user@s',
       })).toBe(DEFAULT_USER_ID);
+    });
+  });
+
+  describe('Phase 4D D2: pending-sender approval flow', () => {
+    // The processGroupMessages and startMessageLoop gates each issue a
+    // requestSenderApproval when a sender_scope='known' wiring denies a
+    // not-a-member sender. We verify that:
+    //   1. The pending_sender_approvals row is created (one DB write per
+    //      unknown sender), and
+    //   2. The message is still dropped — no agent dispatch.
+    //
+    // These tests seed an owner + DM so 4C's pickApprover finds someone;
+    // without that, requestSenderApproval short-circuits with a warn log
+    // and never writes the cross-reference row.
+
+    async function seedOwner(): Promise<void> {
+      ensureUser({ id: 'whatsapp:owner', kind: 'whatsapp' });
+      grantRole({ user_id: 'whatsapp:owner', role: 'owner' });
+      await ensureUserDm({ user_id: 'whatsapp:owner', channel_type: 'whatsapp' });
+    }
+
+    it('processGroupMessages: known-scope + not-a-member triggers requestSenderApproval', async () => {
+      await seedOwner();
+      const ag = createAgentGroup({ name: 'Strict', folder: 'strict-d2' });
+      const mg = createMessagingGroup({
+        channel_type: 'whatsapp',
+        platform_id: 'd2@g.us',
+        name: 'D2',
+      });
+      createWiring({
+        messaging_group_id: mg.id,
+        agent_group_id: ag.id,
+        engage_mode: 'always',
+        sender_scope: 'known',
+      });
+
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({
+            chat_jid: 'd2@g.us',
+            sender: 'stranger@s',
+            sender_name: 'Stranger',
+            content: 'please let me in',
+            timestamp: '2024-01-01T00:00:05.000Z',
+          }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.setChannels([mockWhatsAppChannel()]);
+
+      const result = await orch.processGroupMessages('d2@g.us');
+      expect(result).toBe(true);
+      // Message dropped — agent never dispatched.
+      expect(deps.runContainerAgent).not.toHaveBeenCalled();
+
+      // Wait long enough for the fire-and-forget requestSenderApproval to
+      // settle — pickApprovalDelivery is async (touches user_dms) and
+      // requestApproval persists synchronously after.
+      await new Promise((r) => setTimeout(r, 150));
+
+      // Cross-reference row materialized for the unknown sender.
+      expect(hasInFlightSenderApproval(mg.id, 'whatsapp:stranger@s')).toBe(true);
+      const psa = getPendingSenderApproval({
+        messaging_group_id: mg.id,
+        sender_identity: 'whatsapp:stranger@s',
+      });
+      expect(psa?.agent_group_id).toBe(ag.id);
+      expect(psa?.original_message).toBe('please let me in');
+    });
+
+    it('processGroupMessages: a member is admitted (no approval written)', async () => {
+      await seedOwner();
+      const ag = createAgentGroup({ name: 'Strict', folder: 'strict-d2-member' });
+      const mg = createMessagingGroup({
+        channel_type: 'whatsapp',
+        platform_id: 'd2-mem@g.us',
+        name: 'D2-mem',
+      });
+      createWiring({
+        messaging_group_id: mg.id,
+        agent_group_id: ag.id,
+        engage_mode: 'always',
+        sender_scope: 'known',
+      });
+      ensureUser({ id: 'whatsapp:bob@s', kind: 'whatsapp' });
+      addMember({ user_id: 'whatsapp:bob@s', agent_group_id: ag.id });
+
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({
+            chat_jid: 'd2-mem@g.us',
+            sender: 'bob@s',
+            timestamp: '2024-01-01T00:00:05.000Z',
+          }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.setChannels([mockWhatsAppChannel()]);
+
+      await orch.processGroupMessages('d2-mem@g.us');
+      // Member admitted — agent dispatched, no approval row.
+      expect(deps.runContainerAgent).toHaveBeenCalled();
+      expect(hasInFlightSenderApproval(mg.id, 'whatsapp:bob@s')).toBe(false);
+    });
+
+    it('processGroupMessages: idempotent — second drop does not double-write the row', async () => {
+      await seedOwner();
+      const ag = createAgentGroup({ name: 'Strict', folder: 'strict-d2-idem' });
+      const mg = createMessagingGroup({
+        channel_type: 'whatsapp',
+        platform_id: 'd2-idem@g.us',
+        name: 'D2-idem',
+      });
+      createWiring({
+        messaging_group_id: mg.id,
+        agent_group_id: ag.id,
+        engage_mode: 'always',
+        sender_scope: 'known',
+      });
+
+      const deps = makeDeps({
+        getMessagesSince: vi.fn(() => [
+          makeMessage({
+            chat_jid: 'd2-idem@g.us',
+            sender: 'spammer@s',
+            sender_name: 'Spammer',
+            timestamp: '2024-01-01T00:00:05.000Z',
+          }),
+        ]),
+        mainGroupFolder: 'other-main',
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.setChannels([mockWhatsAppChannel()]);
+
+      await orch.processGroupMessages('d2-idem@g.us');
+      await new Promise((r) => setTimeout(r, 150));
+      await orch.processGroupMessages('d2-idem@g.us');
+      await new Promise((r) => setTimeout(r, 150));
+
+      // UNIQUE constraint guarantees exactly one row across the two drops.
+      const { getDb } = await import('../db/init.js');
+      const n = (getDb()
+        .prepare(
+          `SELECT COUNT(*) AS n FROM pending_sender_approvals WHERE messaging_group_id = ? AND sender_identity = ?`,
+        )
+        .get(mg.id, 'whatsapp:spammer@s') as { n: number }).n;
+      expect(n).toBe(1);
+    });
+  });
+
+  describe('Phase 4D D3: pending-channel approval flow', () => {
+    // When startMessageLoop sees inbound messages on a chat with no
+    // messaging_group_agents wiring (allRegistered[chatJid] is undefined),
+    // it now calls requestChannelApproval in addition to the legacy
+    // recordUnregisteredSender bookkeeping. The call is fire-and-forget;
+    // these tests assert the pending_channel_approvals row materializes.
+    //
+    // Seeding requires:
+    //   - at least one agent_group (otherwise requestChannelApproval
+    //     short-circuits with "no agent groups configured"), and
+    //   - an owner with a DM (otherwise pickApprovalDelivery returns
+    //     undefined and the 4D row is not written).
+
+    async function seedOwnerAndAgent(): Promise<void> {
+      ensureUser({ id: 'whatsapp:owner', kind: 'whatsapp' });
+      grantRole({ user_id: 'whatsapp:owner', role: 'owner' });
+      await ensureUserDm({ user_id: 'whatsapp:owner', channel_type: 'whatsapp' });
+      createAgentGroup({ name: 'Existing', folder: 'existing-d3' });
+    }
+
+    it('startMessageLoop: unwired channel triggers requestChannelApproval', async () => {
+      await seedOwnerAndAgent();
+
+      const dbEvents = new EventEmitter();
+      const deps = makeDeps({
+        dbEvents,
+        pollInterval: 60000,
+        getNewMessages: vi.fn(() => ({
+          messages: [
+            makeMessage({
+              id: 'd3-1',
+              chat_jid: 'unwired@g.us',
+              sender: 'stranger@s.whatsapp.net',
+              sender_name: 'Stranger',
+              is_from_me: false,
+              timestamp: '2024-01-01T00:00:02.000Z',
+            }),
+          ],
+          newTimestamp: '2024-01-01T00:00:02.000Z',
+        })),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.channels = [mockWhatsAppChannel()];
+
+      const loopPromise = orch.startMessageLoop();
+      // Wait long enough for the fire-and-forget requestChannelApproval to
+      // settle — pickApprovalDelivery is async (touches user_dms) and
+      // requestApproval persists synchronously after.
+      await new Promise((r) => setTimeout(r, 80));
+      orch.stop();
+      await loopPromise;
+
+      // Pending row was written for the unwired chat.
+      const { getMessagingGroup } = await import('../db/agent-groups.js');
+      const { getPendingChannelApproval } = await import('../permissions/channel-approval.js');
+      const mg = getMessagingGroup('whatsapp', 'unwired@g.us');
+      expect(mg).toBeDefined();
+      const row = getPendingChannelApproval(mg!.id);
+      expect(row).toBeDefined();
+      expect(row!.approver_user_id).toBe('whatsapp:owner');
+
+      // Legacy diagnostic write still happens — the new branch added the
+      // approval call without removing recordUnregisteredSender.
+      expect(deps.recordUnregisteredSender).toHaveBeenCalledWith(
+        'whatsapp',
+        'unwired@g.us',
+        'Stranger',
+      );
+    });
+
+    it('startMessageLoop: is_from_me messages do not trigger an approval card', async () => {
+      await seedOwnerAndAgent();
+
+      const dbEvents = new EventEmitter();
+      const deps = makeDeps({
+        dbEvents,
+        pollInterval: 60000,
+        getNewMessages: vi.fn(() => ({
+          messages: [
+            makeMessage({
+              id: 'd3-self',
+              chat_jid: 'unwired-self@g.us',
+              sender: 'me@s.whatsapp.net',
+              sender_name: 'Me',
+              is_from_me: true,
+              timestamp: '2024-01-01T00:00:02.000Z',
+            }),
+          ],
+          newTimestamp: '2024-01-01T00:00:02.000Z',
+        })),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.channels = [mockWhatsAppChannel()];
+
+      const loopPromise = orch.startMessageLoop();
+      await new Promise((r) => setTimeout(r, 80));
+      orch.stop();
+      await loopPromise;
+
+      // No pending row — only externalMessages (filter !is_from_me) drive
+      // the approval flow.
+      const { getMessagingGroup } = await import('../db/agent-groups.js');
+      const mg = getMessagingGroup('whatsapp', 'unwired-self@g.us');
+      // The messaging_group might not even be created if the branch never
+      // runs requestChannelApproval. Either way, no pending row.
+      if (mg) {
+        const { getPendingChannelApproval } = await import('../permissions/channel-approval.js');
+        expect(getPendingChannelApproval(mg.id)).toBeUndefined();
+      }
     });
   });
 });

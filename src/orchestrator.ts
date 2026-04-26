@@ -41,6 +41,10 @@ import {
 } from './db/agent-groups.js';
 import { canAccessAgentGroup } from './permissions/access.js';
 import { resolveSender, type SenderInfo } from './permissions/sender-resolver.js';
+import {
+  registerChannelApprovalHandler,
+  requestChannelApproval,
+} from './permissions/channel-approval.js';
 
 // TODO(phase-4d-D6): wire chat-sdk button-click events into
 // `handleApprovalClick` from './permissions/approval-click-auth.js'. v1
@@ -153,6 +157,10 @@ export class MessageOrchestrator {
 
   constructor(private deps: OrchestratorDeps) {
     this.senderAllowlist = loadSenderAllowlist();
+    // Phase 4D D3: register the unknown-channel approval handler with 4C's
+    // approval primitive. Idempotent in the registry, so multiple
+    // orchestrator instances (tests) overwrite-but-warn rather than crash.
+    registerChannelApprovalHandler();
   }
 
   /**
@@ -781,6 +789,28 @@ export class MessageOrchestrator {
                   channelName,
                   chatJid,
                   lastMsg.sender_name || chatJid,
+                );
+
+                // Phase 4D D3: surface unknown-CHANNEL inbound messages to
+                // an admin via a pending-channel approval card instead of
+                // dropping silently. requestChannelApproval is idempotent
+                // (PK on messaging_group_id) and short-circuits when the
+                // chat has been sticky-denied or no agent group / DM is
+                // reachable — the call is fire-and-forget.
+                const senderInfo: SenderInfo = {
+                  channel: channelName,
+                  platform_id: chatJid,
+                  sender_handle: lastMsg.sender,
+                  sender_name: lastMsg.sender_name,
+                };
+                const senderUserId = resolveSender(senderInfo);
+                void requestChannelApproval({
+                  channel_type: channelName,
+                  platform_id: chatJid,
+                  chat_name: lastMsg.sender_name ?? undefined,
+                  sender_user_id: senderUserId,
+                }).catch((err) =>
+                  this.deps.logger.warn({ err }, 'requestChannelApproval failed'),
                 );
               }
               continue;
