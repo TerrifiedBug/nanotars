@@ -31,8 +31,8 @@ _install_die() {
 
 # --- pre-flight ---
 
-if [ "$(id -u 2>/dev/null)" = "0" ]; then
-  _install_die "Do not run install.sh as root. nanotars installs per-user (\$HOME/nanotars). Re-run as your normal user."
+if [ "$(id -u 2>/dev/null)" = "0" ] && [ "${NANOTARS_ALLOW_ROOT:-0}" != "1" ]; then
+  _install_die "Do not run install.sh as root. nanotars installs per-user (\$HOME/nanotars). Re-run as your normal user, or set NANOTARS_ALLOW_ROOT=1 if root really is your normal account on this host."
 fi
 
 case "$(uname -s 2>/dev/null)" in

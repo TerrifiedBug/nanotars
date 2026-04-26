@@ -24,8 +24,9 @@ log_step "nanotars setup"
 log_info "platform: $PLATFORM (arch=$ARCH, wsl=$IS_WSL, pkg=$PKG_MANAGER, service=$SERVICE_MANAGER)"
 log_info "project:  $PROJECT_ROOT"
 
-if [ "$IS_ROOT" = "true" ]; then
+if [ "$IS_ROOT" = "true" ] && [ "${NANOTARS_ALLOW_ROOT:-0}" != "1" ]; then
   log_error "Do not run setup.sh as root. nanotars installs per-user."
+  log_error "Set NANOTARS_ALLOW_ROOT=1 if root really is your normal account on this host."
   exit 1
 fi
 
