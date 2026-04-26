@@ -195,7 +195,7 @@ onecli secrets list
 
 If an Anthropic secret already exists, skip to Phase 4.
 
-Otherwise, register credentials using the same flow as `/nanoclaw-setup`:
+Otherwise, register credentials using the same flow as `/nanotars-setup`:
 
 AskUserQuestion: Do you want to use your **Claude subscription** (Pro/Max) or an **Anthropic API key**?
 

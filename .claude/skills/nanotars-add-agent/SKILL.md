@@ -50,7 +50,7 @@ Discover the full picture — what's installed in this group vs what templates a
 ls -d groups/{folder}/agents/*/agent.json 2>/dev/null
 
 # Available pre-built templates (not yet installed)
-ls -d .claude/skills/nanoclaw-add-agent/agents/*/agent.json 2>/dev/null
+ls -d .claude/skills/nanotars-add-agent/agents/*/agent.json 2>/dev/null
 ```
 
 For each entry found, read the description from its `agent.json`.
@@ -78,7 +78,7 @@ Present options using `AskUserQuestion` — list each available (uninstalled) te
 If the user picks a template, copy the files from the template directory and skip Steps 3-4:
 
 ```bash
-cp -r .claude/skills/nanoclaw-add-agent/agents/{name}/ groups/{folder}/agents/{name}/
+cp -r .claude/skills/nanotars-add-agent/agents/{name}/ groups/{folder}/agents/{name}/
 ```
 
 Confirm the name with the user — they may want to rename it (e.g., `research` → `marine-biologist`). If renamed, copy the files and update the `sender` references in CLAUDE.md.
@@ -174,7 +174,7 @@ Omit `disallowedTools` entirely if "All capabilities" was selected.
 
 **IDENTITY.md** — Write based on the role description from Step 4. Keep it concise — 3-5 sentences that define who this agent is.
 
-**CLAUDE.md** — Write based on capabilities from Step 4. Follow the same structure as the pre-built templates in `.claude/skills/nanoclaw-add-agent/agents/` — include "Your Role", "How to Work", and "Communication Rules" sections. The communication rules are critical for Agent Teams to work properly (sender parameter, message formatting, internal tags).
+**CLAUDE.md** — Write based on capabilities from Step 4. Follow the same structure as the pre-built templates in `.claude/skills/nanotars-add-agent/agents/` — include "Your Role", "How to Work", and "Communication Rules" sections. The communication rules are critical for Agent Teams to work properly (sender parameter, message formatting, internal tags).
 
 ### Step 6: Optional Scheduled Task
 
@@ -226,16 +226,16 @@ That's it — the lead agent discovers agents by scanning the directory, so remo
 
 ## Adding New Templates
 
-To add a new pre-built agent template, create a directory under `.claude/skills/nanoclaw-add-agent/agents/`:
+To add a new pre-built agent template, create a directory under `.claude/skills/nanotars-add-agent/agents/`:
 
 ```
-.claude/skills/nanoclaw-add-agent/agents/{name}/
+.claude/skills/nanotars-add-agent/agents/{name}/
   agent.json     ← REQUIRED: description, model, maxTurns
   IDENTITY.md    ← First line should be a one-sentence summary
   CLAUDE.md      ← Instructions following the standard structure (Your Role, How to Work, Communication Rules)
 ```
 
-The skill discovers templates dynamically — no SKILL.md edits needed. New templates appear as options the next time `/nanoclaw-add-agent` is run.
+The skill discovers templates dynamically — no SKILL.md edits needed. New templates appear as options the next time `/nanotars-add-agent` is run.
 
 ## Boundaries
 

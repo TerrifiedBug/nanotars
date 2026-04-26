@@ -12,13 +12,13 @@ There are three ways to contribute to NanoClaw.
 
 A skill plugin adds an integration (calendar, weather, search, home automation, etc.) that agents can use inside their containers. Skills are installed per-deployment — the `plugins/` directory is gitignored so each user's installation is different.
 
-Skills live in the [nanoclaw-skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills). The main repo contains only core skills (`nanoclaw-*`) and creation tools (`create-*-plugin`).
+Skills live in the [nanotars-skills marketplace](https://github.com/TerrifiedBug/nanotars-skills). The main repo contains only core skills (`nanotars-*`) and creation tools (`create-*-plugin`).
 
 **How to contribute a skill plugin:**
 
 1. Run `/create-skill-plugin` — it scaffolds everything: `plugin.json`, hook files, container skills, and an installation skill
 2. Test it locally with the generated `/add-skill-{name}` command
-3. Publish to the marketplace with `/nanoclaw-publish-skill {name}`
+3. Publish to the marketplace with `/nanotars-publish-skill {name}`
 
 ## 3. Channel Plugins
 
@@ -28,7 +28,7 @@ A channel plugin connects NanoClaw to a messaging platform (Telegram, Slack, SMS
 
 1. Run `/create-channel-plugin` — it scaffolds the channel implementation and an installation skill
 2. Test it locally with the generated `/add-channel-{name}` command
-3. Publish to the marketplace with `/nanoclaw-publish-skill {name}`
+3. Publish to the marketplace with `/nanotars-publish-skill {name}`
 
 ## Plugin Structure
 

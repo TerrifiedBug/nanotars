@@ -246,7 +246,7 @@ cat <<EOF
          nanotars
 
     2. From inside Claude, run the setup skill:
-         /nanoclaw-setup
+         /nanotars-setup
        Reads data/onboarding.json (your name + channel picks) and
        walks through:
          • Install the picked channel plugin(s)
@@ -321,7 +321,7 @@ if [ "${NANOTARS_SKIP_ONBOARDING_PROMPT:-}" != "true" ] && [ -t 0 ]; then
   read -r -p "  What's your name? (used by TARS when addressing you): " USER_NAME </dev/tty
   USER_NAME="${USER_NAME:-}"
 
-  # 2. Channel multi-select. Catalog mirrors .claude/skills/nanoclaw-setup
+  # 2. Channel multi-select. Catalog mirrors .claude/skills/nanotars-setup
   #    — these are the channels the in-claude setup skill knows how to install.
   echo
   echo "  Available chat channels:"
@@ -342,7 +342,7 @@ if [ "${NANOTARS_SKIP_ONBOARDING_PROMPT:-}" != "true" ] && [ -t 0 ]; then
     esac
   done
 
-  # 3. Persist the selections so the in-claude /nanoclaw-setup skill can
+  # 3. Persist the selections so the in-claude /nanotars-setup skill can
   #    read them and dispatch the right /add-* skills.
   mkdir -p "$PROJECT_ROOT/data"
   CHANNELS_JSON="["
@@ -399,7 +399,7 @@ if [ "${NANOTARS_SKIP_MARKETPLACE_PROMPT:-}" != "true" ] && [ -t 0 ]; then
   read -r -p "  Register a Claude Code skill marketplace now? (y/N) " ANS </dev/tty
   case "${ANS:-}" in
     y|Y|yes|YES)
-      DEFAULT_MARKETPLACE="TerrifiedBug/nanoclaw-skills"
+      DEFAULT_MARKETPLACE="TerrifiedBug/nanotars-skills"
       read -r -p "    Marketplace repo [${DEFAULT_MARKETPLACE}]: " REPO </dev/tty
       REPO="${REPO:-$DEFAULT_MARKETPLACE}"
       printf '\n  To register, run from inside Claude Code:\n'

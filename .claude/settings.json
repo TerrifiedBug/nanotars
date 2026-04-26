@@ -1,9 +1,9 @@
 {
   "extraKnownMarketplaces": {
-    "nanoclaw-skills": {
+    "nanotars-skills": {
       "source": {
         "source": "github",
-        "repo": "TerrifiedBug/nanoclaw-skills"
+        "repo": "TerrifiedBug/nanotars-skills"
       }
     }
   }

@@ -9,7 +9,7 @@ description: Pull updates from the nanoclaw fork, preview core and plugin change
 
 Your NanoClaw installation (nanotars) tracks the fork at `TerrifiedBug/nanoclaw`. This skill fetches from the fork, shows you exactly what would change — both code and plugins — then lets you decide whether to apply the update.
 
-Run `/nanoclaw-update` in Claude Code.
+Run `/nanotars-update` in Claude Code.
 
 ## How it works
 
@@ -115,7 +115,7 @@ Bucket the fork changed files:
 
 Check for marketplace plugin updates by matching installed plugin names to the marketplace cache.
 
-If no marketplace cache exists at `~/.claude/plugins/marketplaces/nanoclaw-skills/`, tell the user:
+If no marketplace cache exists at `~/.claude/plugins/marketplaces/nanotars-skills/`, tell the user:
 > Marketplace not synced locally. Run `/plugin marketplace update nanoclaw-skills` to sync.
 
 Then skip plugin scanning entirely.
@@ -125,7 +125,7 @@ Then skip plugin scanning entirely.
 For each directory under `plugins/` and `plugins/channels/`:
 1. Extract the directory name (e.g., `weather` from `plugins/weather/`, `whatsapp` from `plugins/channels/whatsapp/`)
 2. Check if the marketplace cache has a matching plugin:
-   `~/.claude/plugins/marketplaces/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
+   `~/.claude/plugins/marketplaces/nanotars-skills/plugins/nanotars-{name}/files/`
 3. If the cache directory doesn't exist, skip (no marketplace match)
 4. **Compare versions** — only offer updates when the marketplace has a higher version:
    ```bash
@@ -216,7 +216,7 @@ Would you like to update these plugins?
 
 If user says yes, for each plugin to update:
 1. Read the installed `plugin.json` to capture current `channels` and `groups` arrays (user scoping)
-2. Resolve the marketplace source: `~/.claude/plugins/marketplaces/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
+2. Resolve the marketplace source: `~/.claude/plugins/marketplaces/nanotars-skills/plugins/nanotars-{name}/files/`
 3. Copy all files from marketplace source over the installed plugin directory:
    ```bash
    cp -r {source}/* {installed}/

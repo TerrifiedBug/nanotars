@@ -5,11 +5,11 @@ description: Sync improved local plugins to the NanoClaw skills marketplace and 
 
 # Update Plugin in Marketplace
 
-Syncs changes from locally installed plugins to the NanoClaw skills marketplace at `TerrifiedBug/nanoclaw-skills` via a pull request.
+Syncs changes from locally installed plugins to the NanoClaw skills marketplace at `TerrifiedBug/nanotars-skills` via a pull request.
 
-Use `/nanoclaw-publish-skill` for **new** plugins. Use this skill for **updating** existing marketplace plugins.
+Use `/nanotars-publish-skill` for **new** plugins. Use this skill for **updating** existing marketplace plugins.
 
-Run `/nanoclaw-update-skill` (all changed plugins) or `/nanoclaw-update-skill weather` (specific plugin).
+Run `/nanotars-update-skill` (all changed plugins) or `/nanotars-update-skill weather` (specific plugin).
 
 ## Step 0: Preflight
 
@@ -22,7 +22,7 @@ If not authenticated, tell the user to run `gh auth login` first and stop.
 
 Verify marketplace cache exists:
 ```bash
-[ -d ~/.claude/plugins/marketplaces/nanoclaw-skills ] && echo "CACHE: ok" || echo "CACHE: missing"
+[ -d ~/.claude/plugins/marketplaces/nanotars-skills ] && echo "CACHE: ok" || echo "CACHE: missing"
 ```
 
 If missing, tell the user:
@@ -41,8 +41,8 @@ If no argument, scan all installed plugins.
 
 For each plugin directory under `plugins/` and `plugins/channels/`:
 1. Extract the directory name (e.g., `weather`, `whatsapp`)
-2. Locate marketplace cache: `~/.claude/plugins/marketplaces/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
-3. If no marketplace match, skip (local-only plugin — use `/nanoclaw-publish-skill` instead)
+2. Locate marketplace cache: `~/.claude/plugins/marketplaces/nanotars-skills/plugins/nanotars-{name}/files/`
+3. If no marketplace match, skip (local-only plugin — use `/nanotars-publish-skill` instead)
 4. Diff installed vs marketplace cache (excluding `node_modules`, `package-lock.json`, and user-scoping fields in `plugin.json`):
    ```bash
    diff -rq -x node_modules -x package-lock.json -x plugin.json {installed}/ {cache}/
@@ -87,7 +87,7 @@ Local improvements (safe to sync → marketplace):
 
 **If ALL plugins are flagged "marketplace ahead"**, tell the user:
 > No local improvements detected. The marketplace appears to be ahead of your local plugins.
-> Run `/nanoclaw-update` to pull marketplace updates into your local installation instead.
+> Run `/nanotars-update` to pull marketplace updates into your local installation instead.
 
 Then stop.
 
@@ -105,11 +105,11 @@ Options: list each changed plugin as an option.
 ## Step 3: Clone or update marketplace repo
 
 ```bash
-if [ -d /tmp/nanoclaw-skills/.git ]; then
-  cd /tmp/nanoclaw-skills && git checkout main && git pull origin main
+if [ -d /tmp/nanotars-skills/.git ]; then
+  cd /tmp/nanotars-skills && git checkout main && git pull origin main
 else
-  gh repo clone TerrifiedBug/nanoclaw-skills /tmp/nanoclaw-skills
-  cd /tmp/nanoclaw-skills
+  gh repo clone TerrifiedBug/nanotars-skills /tmp/nanotars-skills
+  cd /tmp/nanotars-skills
 fi
 ```
 
@@ -125,7 +125,7 @@ For each selected plugin:
 
 Determine paths:
 - Installed: `plugins/{name}/` or `plugins/channels/{name}/`
-- Marketplace: `/tmp/nanoclaw-skills/plugins/nanoclaw-{name}/files/`
+- Marketplace: `/tmp/nanotars-skills/plugins/nanotars-{name}/files/`
 
 Sync plugin runtime files (excluding `plugin.json` which needs special handling):
 ```bash
@@ -133,7 +133,7 @@ rsync -av \
   --exclude node_modules \
   --exclude package-lock.json \
   --exclude plugin.json \
-  {installed}/ /tmp/nanoclaw-skills/plugins/nanoclaw-{name}/files/
+  {installed}/ /tmp/nanotars-skills/plugins/nanotars-{name}/files/
 ```
 
 **Do NOT use `--delete`** — the marketplace may contain files not present locally (README, docs added by other contributors). Only sync files that exist locally.
@@ -141,7 +141,7 @@ rsync -av \
 Sync `plugin.json` separately, preserving marketplace `version`, `channels`, and `groups` fields:
 ```bash
 # Start with marketplace plugin.json (preserves version + scoping)
-MARKET_PJ="/tmp/nanoclaw-skills/plugins/nanoclaw-{name}/files/plugin.json"
+MARKET_PJ="/tmp/nanotars-skills/plugins/nanotars-{name}/files/plugin.json"
 LOCAL_PJ="{installed}/plugin.json"
 
 # Merge: take all fields from local EXCEPT version/channels/groups which stay from marketplace
@@ -160,7 +160,7 @@ SKILL_TYPE="skill"  # or "channel" for channel plugins
 SKILL_DIR="add-${SKILL_TYPE}-${name}"
 if [ -d ".claude/skills/${SKILL_DIR}" ]; then
   rsync -av \
-    .claude/skills/${SKILL_DIR}/ /tmp/nanoclaw-skills/plugins/nanoclaw-{name}/skills/${SKILL_DIR}/
+    .claude/skills/${SKILL_DIR}/ /tmp/nanotars-skills/plugins/nanotars-{name}/skills/${SKILL_DIR}/
 fi
 ```
 
@@ -168,7 +168,7 @@ fi
 
 Show what will be committed:
 ```bash
-cd /tmp/nanoclaw-skills && git diff --stat
+cd /tmp/nanotars-skills && git diff --stat
 ```
 
 For a detailed diff:
@@ -186,7 +186,7 @@ If matches found, warn the user and ask for confirmation before proceeding.
 ## Step 6: Commit and create PR
 
 ```bash
-cd /tmp/nanoclaw-skills
+cd /tmp/nanotars-skills
 git add .
 git commit -m "update: sync {plugin_names} from local"
 git push -u origin "update/${NAMES}"
@@ -195,7 +195,7 @@ git push -u origin "update/${NAMES}"
 Create the pull request. **Must use `--head`** because cwd may not be the marketplace checkout:
 ```bash
 gh pr create \
-  --repo TerrifiedBug/nanoclaw-skills \
+  --repo TerrifiedBug/nanotars-skills \
   --head "update/${NAMES}" \
   --title "update: {plugin_names}" \
   --body "$(cat <<'PREOF'
@@ -222,7 +222,7 @@ Analyze the diff from Step 5 and determine the semver bump level:
 
 If the bump level is `minor` or `major`, apply the label:
 ```bash
-gh pr edit {pr_number} --repo TerrifiedBug/nanoclaw-skills --add-label "{level}"
+gh pr edit {pr_number} --repo TerrifiedBug/nanotars-skills --add-label "{level}"
 ```
 
 Tell the user what you chose and why:
@@ -236,4 +236,4 @@ Show the PR URL.
 Tell the user:
 > PR created. The GitHub Action will auto-bump the version on merge ({level}).
 >
-> After merge, users running `/nanoclaw-update` will see the new version and be offered the update.
+> After merge, users running `/nanotars-update` will see the new version and be offered the update.

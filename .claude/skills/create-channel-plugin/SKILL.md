@@ -468,11 +468,11 @@ docker image inspect nanoclaw-agent:latest &>/dev/null && echo "IMAGE: ok" || ec
 (grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f ~/.claude/.credentials.json ]) && echo "AUTH: ok" || echo "AUTH: missing"
 \`\`\`
 
-If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
+If any check fails, tell the user to run `/nanotars-setup` first and stop.
 
 ## Prerequisites
 
-- NanoClaw must be set up and running (`/nanoclaw-setup`)
+- NanoClaw must be set up and running (`/nanotars-setup`)
 {- Platform-specific prerequisites (bot creation, API keys, etc.)}
 
 ## Install
@@ -512,7 +512,7 @@ If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
 
 ## Register a Chat
 
-After the channel connects, use `/nanoclaw-add-group` to register a group/chat on this channel.
+After the channel connects, use `/nanotars-add-group` to register a group/chat on this channel.
 
 ## Verify
 
@@ -579,7 +579,7 @@ To remove the {Platform} channel:
 After testing the channel plugin locally with `/add-channel-{name}`, you can publish it to the NanoClaw skills marketplace:
 
 ```
-/nanoclaw-publish-skill {name}
+/nanotars-publish-skill {name}
 ```
 
-This restructures the skill into Claude Code plugin format and pushes it to `TerrifiedBug/nanoclaw-skills`. Publishing is optional — channels work locally without it.
+This restructures the skill into Claude Code plugin format and pushes it to `TerrifiedBug/nanotars-skills`. Publishing is optional — channels work locally without it.

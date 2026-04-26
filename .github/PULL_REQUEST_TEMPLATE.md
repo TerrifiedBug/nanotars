@@ -11,7 +11,7 @@
 ## For Skills (marketplace)
 
 - [ ] I tested this skill locally before publishing
-- [ ] Skill is published to [nanoclaw-skills](https://github.com/TerrifiedBug/nanoclaw-skills) marketplace
+- [ ] Skill is published to [nanoclaw-skills](https://github.com/TerrifiedBug/nanotars-skills) marketplace
 - [ ] No hardcoded secrets
 
 ## For Core Skills (nanoclaw-*, create-*)

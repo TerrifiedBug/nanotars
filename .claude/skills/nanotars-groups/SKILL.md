@@ -13,7 +13,7 @@ triggers:
 
 # Group Config Management
 
-View and manage NanoClaw group registrations. For adding new groups, use `/nanoclaw-add-group`.
+View and manage NanoClaw group registrations. For adding new groups, use `/nanotars-add-group`.
 
 ## Step 1: Determine the operation
 

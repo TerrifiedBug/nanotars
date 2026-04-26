@@ -64,12 +64,12 @@ Based on the results, determine the setup state:
 
 Use `AskUserQuestion` with options:
 1. **Re-authenticate channel** — Re-run channel auth (e.g., if WhatsApp got disconnected)
-2. **Add another channel or group** — Use `/nanoclaw-add-group`
+2. **Add another channel or group** — Use `/nanotars-add-group`
 3. **Reconfigure from scratch** — Start over from step 1
 4. **Nothing, looks good** — Exit
 
 If they pick option 1: Skip to section 5 (Authenticate Channel).
-If they pick option 2: Tell them to use `/nanoclaw-add-group` instead.
+If they pick option 2: Tell them to use `/nanotars-add-group` instead.
 If they pick option 3: Continue with section 1 below.
 If they pick option 4: Done.
 
@@ -271,7 +271,7 @@ grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null && echo "MARKETPLACE
 >
 > Browse available plugins:
 > - `/plugin` Discover tab in Claude Code
-> - Or visit: https://github.com/TerrifiedBug/nanoclaw-skills
+> - Or visit: https://github.com/TerrifiedBug/nanotars-skills
 >
 > Install example:
 > 1. `/plugin install nanoclaw-weather@nanoclaw-skills`
@@ -285,7 +285,7 @@ grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null && echo "MARKETPLACE
 >
 > To enable the marketplace:
 > ```
-> /plugin marketplace add TerrifiedBug/nanoclaw-skills
+> /plugin marketplace add TerrifiedBug/nanotars-skills
 > ```
 >
 > After adding, browse with `/plugin` or install directly:

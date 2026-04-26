@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/nanoclaw-logo.png" alt="NanoClaw" width="400">
+  <img src="assets/nanotars-logo.png" alt="NanoClaw" width="400">
 </p>
 
 <p align="center">
@@ -43,7 +43,7 @@ bash nanotars.sh stop       # stop
    ```bash
    cd $HOME/nanotars && claude
    ```
-2. Inside Claude, run `/nanoclaw-setup` — walks through:
+2. Inside Claude, run `/nanotars-setup` — walks through:
    - Pick a chat channel (Telegram, Discord, Slack, WhatsApp, …)
    - Install the channel plugin (`/add-<channel>` if needed)
    - Wire your first agent group to that channel
@@ -60,7 +60,7 @@ bash nanotars.sh stop       # stop
 
 ## What This Is
 
-A heavily customized fork of [NanoClaw](https://github.com/qwibitai/nanoclaw) — a lightweight Claude assistant that runs agents in Linux containers. This fork adds a plugin architecture, multi-channel support, Docker/Linux hosting, security hardening, an admin dashboard, agent teams, and a [skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills) with 27 installable integrations. The core philosophy remains: small enough to understand, secure by OS-level isolation.
+A heavily customized fork of [NanoClaw](https://github.com/qwibitai/nanoclaw) — a lightweight Claude assistant that runs agents in Linux containers. This fork adds a plugin architecture, multi-channel support, Docker/Linux hosting, security hardening, an admin dashboard, agent teams, and a [skills marketplace](https://github.com/TerrifiedBug/nanotars-skills) with 27 installable integrations. The core philosophy remains: small enough to understand, secure by OS-level isolation.
 
 ## What It Does
 
@@ -125,11 +125,11 @@ Everything is installed via [Claude Code skills](https://code.claude.com/docs/en
 
 ### Integration & Channel Skills (27 — via marketplace)
 
-Integration skills (weather, calendar, search, etc.) and channel skills (Discord, Telegram, Slack, WhatsApp) are available from the [NanoClaw skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills). Browse and install via Claude Code's built-in plugin system:
+Integration skills (weather, calendar, search, etc.) and channel skills (Discord, Telegram, Slack, WhatsApp) are available from the [nanotars skills marketplace](https://github.com/TerrifiedBug/nanotars-skills). Browse and install via Claude Code's built-in plugin system:
 
 ```
-/plugin marketplace add TerrifiedBug/nanoclaw-skills
-/plugin install nanoclaw-weather@nanoclaw-skills
+/plugin marketplace add TerrifiedBug/nanotars-skills
+/plugin install nanotars-weather@nanotars-skills
 ```
 
 Or browse all 27 skills in the `/plugin` Discover tab. Categories: messaging channels, productivity, search, media, monitoring, smart home, and utilities.
@@ -138,31 +138,31 @@ Or browse all 27 skills in the `/plugin` Discover tab. Categories: messaging cha
 
 | Skill | What it does |
 |-------|-------------|
-| `/nanoclaw-setup` | First-time install, auth, service config |
-| `/nanoclaw-debug` | Container troubleshooting and health checks |
-| `/nanoclaw-set-model` | Change Claude model for containers |
-| `/nanoclaw-update` | Pull fork updates, compare plugin versions |
-| `/nanoclaw-add-group` | Register a group on any channel |
-| `/nanoclaw-add-agent` | Create agent definitions for a group |
-| `/nanoclaw-security-audit` | Pre-install security audit of skill plugins |
-| `/nanoclaw-publish-skill` | Publish a local skill to the marketplace |
-| `/nanoclaw-update-skill` | Sync plugin improvements to marketplace |
+| `/nanotars-setup` | First-time install, auth, service config |
+| `/nanotars-debug` | Container troubleshooting and health checks |
+| `/nanotars-set-model` | Change Claude model for containers |
+| `/nanotars-update` | Pull fork updates, compare plugin versions |
+| `/nanotars-add-group` | Register a group on any channel |
+| `/nanotars-add-agent` | Create agent definitions for a group |
+| `/nanotars-security-audit` | Pre-install security audit of skill plugins |
+| `/nanotars-publish-skill` | Publish a local skill to the marketplace |
+| `/nanotars-update-skill` | Sync plugin improvements to marketplace |
 | `/create-skill-plugin` | Build a new skill plugin from scratch |
 | `/create-channel-plugin` | Build a new channel plugin from scratch |
 
 ## Plugins
 
-NanoClaw ships with no plugins installed — you add only what you need from the [skill marketplace](https://github.com/TerrifiedBug/nanoclaw-skills).
+NanoClaw ships with no plugins installed — you add only what you need from the [skill marketplace](https://github.com/TerrifiedBug/nanotars-skills).
 
-After running `/nanoclaw-setup`, install plugins with:
-1. `/plugin install nanoclaw-{name}@nanoclaw-skills`
+After running `/nanotars-setup`, install plugins with:
+1. `/plugin install nanotars-{name}@nanotars-skills`
 2. Run the install skill: `/add-skill-{name}`
 
-See the [marketplace README](https://github.com/TerrifiedBug/nanoclaw-skills) for the full list of 27 available plugins.
+See the [marketplace README](https://github.com/TerrifiedBug/nanotars-skills) for the full list of 27 available plugins.
 
-To remove a plugin: `/nanoclaw-remove-plugin`
-To check for plugin updates: `/nanoclaw-update`
-To sync local plugin improvements to marketplace: `/nanoclaw-update-skill`
+To remove a plugin: `/nanotars-remove-plugin`
+To check for plugin updates: `/nanotars-update`
+To sync local plugin improvements to marketplace: `/nanotars-update-skill`
 
 ## Getting Started
 
@@ -172,7 +172,7 @@ cd nanotars
 claude
 ```
 
-Then run `/nanoclaw-setup`. Claude handles dependencies, authentication, container build, and service configuration.
+Then run `/nanotars-setup`. Claude handles dependencies, authentication, container build, and service configuration.
 
 ## Requirements
 

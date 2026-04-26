@@ -11,7 +11,7 @@ triggers:
 
 # NanoClaw Health Check
 
-Quick pass/fail check on all system components. For deeper investigation, use `/nanoclaw-debug`.
+Quick pass/fail check on all system components. For deeper investigation, use `/nanotars-debug`.
 
 ## Run all checks
 
@@ -109,4 +109,4 @@ fi
 
 ## Present results
 
-Format as a clean summary table. If any check is FAIL, recommend `/nanoclaw-debug`.
+Format as a clean summary table. If any check is FAIL, recommend `/nanotars-debug`.

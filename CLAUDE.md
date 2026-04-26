@@ -48,17 +48,17 @@ All capabilities must be achieved through the plugin interface: `plugin.json`, `
 
 | Skill | When to Use |
 |-------|-------------|
-| `/nanoclaw-setup` | First-time installation, authentication, service configuration |
+| `/nanotars-setup` | First-time installation, authentication, service configuration |
 | `/create-channel-plugin` | Build a new channel plugin (Discord, Slack, etc.) from scratch |
-| `/nanoclaw-add-group` | Add a group/chat to an existing channel plugin |
+| `/nanotars-add-group` | Add a group/chat to an existing channel plugin |
 | `/create-skill-plugin` | Build a new skill plugin (integrations, tools, hooks) from scratch |
-| `/nanoclaw-publish-skill` | Publish a local skill to the marketplace repo |
-| `/nanoclaw-update-skill` | Sync improved local plugins to the marketplace repo |
-| `/nanoclaw-remove-plugin` | Remove a plugin (runtime + env vars + marketplace cleanup) |
-| `/nanoclaw-debug` | Container issues, logs, troubleshooting |
-| `/nanoclaw-health` | Quick system health check with pass/fail status |
-| `/nanoclaw-db-maintenance` | Database optimization, cleanup, integrity checks |
-| `/nanoclaw-groups` | List, view, and manage group configurations |
+| `/nanotars-publish-skill` | Publish a local skill to the marketplace repo |
+| `/nanotars-update-skill` | Sync improved local plugins to the marketplace repo |
+| `/nanotars-remove-plugin` | Remove a plugin (runtime + env vars + marketplace cleanup) |
+| `/nanotars-debug` | Container issues, logs, troubleshooting |
+| `/nanotars-health` | Quick system health check with pass/fail status |
+| `/nanotars-db-maintenance` | Database optimization, cleanup, integrity checks |
+| `/nanotars-groups` | List, view, and manage group configurations |
 
 ## Change Tracking
 
@@ -74,17 +74,24 @@ npm run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
 ```
 
-Service management (macOS):
+Service management (preferred — using the wrapper installed by setup.sh):
 ```bash
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+nanotars start | stop | restart | status | logs
 ```
 
-Service management (Linux):
+Or directly:
+
+macOS:
 ```bash
-sudo systemctl start nanoclaw
-sudo systemctl stop nanoclaw
-sudo journalctl -u nanoclaw -f   # Follow logs
+launchctl load ~/Library/LaunchAgents/com.nanotars.plist
+launchctl unload ~/Library/LaunchAgents/com.nanotars.plist
+```
+
+Linux (systemd-user):
+```bash
+systemctl --user start nanotars
+systemctl --user stop nanotars
+journalctl --user -u nanotars -f   # follow logs
 ```
 
 ## Supply Chain Security (pnpm)

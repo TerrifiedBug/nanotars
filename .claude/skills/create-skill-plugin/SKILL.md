@@ -79,7 +79,7 @@ Before generating anything:
 
    **Important:** The generated SKILL.md MUST include the Preflight section. This is mandatory for all installation skills.
 
-5. **Run `/nanoclaw-security-audit`** on the generated files before offering to install. If the audit returns FAIL, fix the issues before proceeding. If REVIEW NEEDED, show the findings to the user.
+5. **Run `/nanotars-security-audit`** on the generated files before offering to install. If the audit returns FAIL, fix the issues before proceeding. If REVIEW NEEDED, show the findings to the user.
 
 6. **Offer to install immediately** — "Want me to install this plugin now?"
 
@@ -210,11 +210,11 @@ docker image inspect nanoclaw-agent:latest &>/dev/null && echo "IMAGE: ok" || ec
 (grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f ~/.claude/.credentials.json ]) && echo "AUTH: ok" || echo "AUTH: missing"
 \`\`\`
 
-If any check fails, tell the user to run `/nanoclaw-setup` first and stop.
+If any check fails, tell the user to run `/nanotars-setup` first and stop.
 
 ## Prerequisites
 
-- NanoClaw must be set up and running (`/nanoclaw-setup`)
+- NanoClaw must be set up and running (`/nanotars-setup`)
 {Additional prerequisites if needed — e.g., npm packages, API key signup}
 
 ## Install
@@ -719,7 +719,7 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
 {
   "name": "string (required) — plugin identifier, used for directory and logging",
   "description": "string — human-readable description",
-  "version": "string — semver version (e.g. \"1.0.0\"). Used by /nanoclaw-update to detect plugin updates",
+  "version": "string — semver version (e.g. \"1.0.0\"). Used by /nanotars-update to detect plugin updates",
   "containerEnvVars": ["string — env var NAMES from .env to pass into agent containers"],
   "publicEnvVars": ["string — subset of containerEnvVars whose values are safe to appear in chat (exempt from secret redaction). Defaults to [] — all values redacted. Use for non-secret config like URLs."],
   "hooks": ["string — host-side hook function names exported from index.js. Valid: onStartup, onShutdown, onInboundMessage, onChannel"],
@@ -811,7 +811,7 @@ Container hooks from `plugins/{name}/hooks/` are mounted into the container and 
 After testing the skill locally with `/add-skill-{name}`, you can publish it to the NanoClaw skills marketplace:
 
 ```
-/nanoclaw-publish-skill {name}
+/nanotars-publish-skill {name}
 ```
 
-This restructures the skill into Claude Code plugin format and pushes it to `TerrifiedBug/nanoclaw-skills`. Publishing is optional — skills work locally without it.
+This restructures the skill into Claude Code plugin format and pushes it to `TerrifiedBug/nanotars-skills`. Publishing is optional — skills work locally without it.

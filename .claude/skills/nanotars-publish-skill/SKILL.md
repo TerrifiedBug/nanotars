@@ -1,11 +1,11 @@
 ---
 name: nanotars-publish-skill
-description: Publish a local skill to the NanoClaw skills marketplace. Restructures a .claude/skills/add-* skill into Claude Code plugin format and creates a PR on TerrifiedBug/nanoclaw-skills. Triggers on "publish skill", "publish to marketplace", "nanoclaw publish".
+description: Publish a local skill to the NanoClaw skills marketplace. Restructures a .claude/skills/add-* skill into Claude Code plugin format and creates a PR on TerrifiedBug/nanotars-skills. Triggers on "publish skill", "publish to marketplace", "nanoclaw publish".
 ---
 
 # Publish Skill to Marketplace
 
-Publishes a local skill (`.claude/skills/add-skill-{name}/` or `.claude/skills/add-channel-{name}/`) to the NanoClaw skills marketplace at `TerrifiedBug/nanoclaw-skills` via a pull request.
+Publishes a local skill (`.claude/skills/add-skill-{name}/` or `.claude/skills/add-channel-{name}/`) to the NanoClaw skills marketplace at `TerrifiedBug/nanotars-skills` via a pull request.
 
 ## Step 0: Prerequisites
 
@@ -16,9 +16,9 @@ gh auth status
 
 If not authenticated, tell the user to run `gh auth login` first and stop.
 
-If the user is not the owner of `TerrifiedBug/nanoclaw-skills`, they need to fork it first:
+If the user is not the owner of `TerrifiedBug/nanotars-skills`, they need to fork it first:
 ```bash
-gh repo fork TerrifiedBug/nanoclaw-skills --clone=false
+gh repo fork TerrifiedBug/nanotars-skills --clone=false
 ```
 
 ## Step 1: Identify the Skill
@@ -58,17 +58,17 @@ If they haven't tested, recommend doing so before publishing. Do not block if th
 
 Check if the marketplace repo is already cloned:
 ```bash
-[ -d "/tmp/nanoclaw-skills/.git" ] && echo "MARKETPLACE: local at /tmp/nanoclaw-skills" || echo "MARKETPLACE: needs clone"
+[ -d "/tmp/nanotars-skills/.git" ] && echo "MARKETPLACE: local at /tmp/nanotars-skills" || echo "MARKETPLACE: needs clone"
 ```
 
 If not found, clone it:
 ```bash
-gh repo clone TerrifiedBug/nanoclaw-skills /tmp/nanoclaw-skills
+gh repo clone TerrifiedBug/nanotars-skills /tmp/nanotars-skills
 ```
 
 Pull latest and create a feature branch:
 ```bash
-cd /tmp/nanoclaw-skills && git checkout main && git pull
+cd /tmp/nanotars-skills && git checkout main && git pull
 git checkout -b feat/add-${SHORT_NAME}
 ```
 
@@ -81,7 +81,7 @@ Derive names:
 
 Create the plugin directory:
 ```bash
-PLUGIN_DIR="/tmp/nanoclaw-skills/plugins/${PLUGIN_NAME}"
+PLUGIN_DIR="/tmp/nanotars-skills/plugins/${PLUGIN_NAME}"
 mkdir -p "$PLUGIN_DIR/.claude-plugin"
 mkdir -p "$PLUGIN_DIR/skills/${SKILL_DIR}"
 ```
@@ -120,7 +120,7 @@ This copies the runtime plugin manifest (`files/plugin.json`), container skills,
 
 ## Step 6: Update marketplace.json
 
-Read `/tmp/nanoclaw-skills/.claude-plugin/marketplace.json`.
+Read `/tmp/nanotars-skills/.claude-plugin/marketplace.json`.
 
 Check if a plugin with this name already exists:
 - If yes: update the existing entry (bump version if changed)
@@ -133,12 +133,12 @@ Write the updated marketplace.json.
 
 ## Step 7: Update README.md
 
-Add the new skill to the appropriate category table in `/tmp/nanoclaw-skills/README.md`. Match the format of existing entries.
+Add the new skill to the appropriate category table in `/tmp/nanotars-skills/README.md`. Match the format of existing entries.
 
 ## Step 8: Create Pull Request
 
 ```bash
-cd /tmp/nanoclaw-skills
+cd /tmp/nanotars-skills
 git add -A
 git status
 ```
@@ -152,7 +152,7 @@ git push -u origin feat/add-${SHORT_NAME}
 
 Create the pull request:
 ```bash
-gh pr create --repo TerrifiedBug/nanoclaw-skills \
+gh pr create --repo TerrifiedBug/nanotars-skills \
   --head feat/add-${SHORT_NAME} \
   --base main \
   --title "feat: add ${PLUGIN_NAME}" \
