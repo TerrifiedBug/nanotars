@@ -42,6 +42,10 @@ import {
 import { canAccessAgentGroup } from './permissions/access.js';
 import { resolveSender, type SenderInfo } from './permissions/sender-resolver.js';
 import {
+  registerSenderApprovalHandler,
+  requestSenderApproval,
+} from './permissions/sender-approval.js';
+import {
   registerChannelApprovalHandler,
   requestChannelApproval,
 } from './permissions/channel-approval.js';
@@ -157,6 +161,9 @@ export class MessageOrchestrator {
 
   constructor(private deps: OrchestratorDeps) {
     this.senderAllowlist = loadSenderAllowlist();
+    // Phase 4D D2: register the sender-approval handler with 4C's
+    // approval primitive. Idempotent in the registry.
+    registerSenderApprovalHandler();
     // Phase 4D D3: register the unknown-channel approval handler with 4C's
     // approval primitive. Idempotent in the registry, so multiple
     // orchestrator instances (tests) overwrite-but-warn rather than crash.
@@ -498,6 +505,27 @@ export class MessageOrchestrator {
           { jid: chatJid, folder: group.folder, agentGroupId: agentGroupRow.id, userId, reason: access.reason },
           'Dropped by sender_scope=known gate',
         );
+        // Phase 4D D2: when the gate denies a non-member (vs. a missing user
+        // id, which is a different failure), open a pending-sender approval
+        // card so an admin can grant access. The message is still dropped
+        // here — replay on approve is deferred to D6.
+        if (access.reason === 'not-a-member') {
+          const mg = getMessagingGroup(senderInfo.channel, chatJid);
+          if (mg) {
+            void requestSenderApproval({
+              user_id: userId,
+              agent_group_id: agentGroupRow.id,
+              agent_group_folder: agentGroupRow.folder,
+              messaging_group_id: mg.id,
+              sender_identity: userId,
+              display_name: senderInfo.sender_name ?? undefined,
+              message_text: lastMsg.content,
+              originating_channel: senderInfo.channel,
+            }).catch((err) =>
+              this.deps.logger.warn({ err }, 'requestSenderApproval failed'),
+            );
+          }
+        }
         return true;
       }
     }
@@ -837,6 +865,25 @@ export class MessageOrchestrator {
                   { jid: chatJid, folder: group.folder, agentGroupId: agentGroupRow.id, userId, reason: access.reason },
                   'Dropped by sender_scope=known gate',
                 );
+                // Phase 4D D2: open a pending-sender approval card on
+                // not-a-member denials. Same logic as processGroupMessages.
+                if (access.reason === 'not-a-member') {
+                  const mg = getMessagingGroup(senderInfo.channel, chatJid);
+                  if (mg) {
+                    void requestSenderApproval({
+                      user_id: userId,
+                      agent_group_id: agentGroupRow.id,
+                      agent_group_folder: agentGroupRow.folder,
+                      messaging_group_id: mg.id,
+                      sender_identity: userId,
+                      display_name: senderInfo.sender_name ?? undefined,
+                      message_text: lastMsg.content,
+                      originating_channel: senderInfo.channel,
+                    }).catch((err) =>
+                      this.deps.logger.warn({ err }, 'requestSenderApproval failed'),
+                    );
+                  }
+                }
                 continue;
               }
             }
