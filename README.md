@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/TerrifiedBug/nanotars/v1-archive/se
 
 This clones into `$HOME/nanotars` (override with `NANOTARS_DIR`), installs Node 22 + pnpm + verifies Docker, builds host + agent container, writes a launchd plist (macOS) / systemd-user unit (Linux) / nohup wrapper (root or WSL), and starts the service.
 
-> Running as root on a single-user box (homelab, dedicated VM)? Prefix the command with `NANOTARS_ALLOW_ROOT=1`.
+Running as root (homelab, dedicated VM, root container)? Just run it — no flag needed. The service install detects root and uses a nohup wrapper instead of launchd/systemd-user.
 
 **Manual install:**
 

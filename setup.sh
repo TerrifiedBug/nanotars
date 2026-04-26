@@ -13,8 +13,7 @@
 #   NANOTARS_DIR                            install location (default $HOME/nanotars; bootstrap mode only)
 #   NANOTARS_BRANCH                         branch (default v1-archive; bootstrap mode only)
 #   NANOTARS_REPO                           git URL (default https://github.com/TerrifiedBug/nanotars.git)
-#   NANOTARS_ALLOW_ROOT=1                   allow running as root
-#   NANOTARS_SKIP_MARKETPLACE_PROMPT=true   skip the marketplace y/N at the end
+#   NANOTARS_MARKETPLACE                    override default Claude marketplace (default TerrifiedBug/nanotars-skills)
 #   NO_COLOR=1                              plain output
 
 set -euo pipefail
@@ -34,10 +33,6 @@ if [ -z "${BASH_SOURCE[0]:-}" ] || [ ! -f "${BASH_SOURCE[0]:-/dev/null}" ]; then
   }
   _bootstrap_log() { printf '%s %s\n' "$(_bootstrap_color)" "$*"; }
   _bootstrap_die() { printf '\033[0;31m[bootstrap]\033[0m %s\n' "$*" >&2; exit 1; }
-
-  if [ "$(id -u 2>/dev/null)" = "0" ] && [ "${NANOTARS_ALLOW_ROOT:-0}" != "1" ]; then
-    _bootstrap_die "Do not run setup.sh as root. nanotars installs per-user (\$HOME/nanotars). Re-run as your normal user, or set NANOTARS_ALLOW_ROOT=1 if root really is your normal account."
-  fi
 
   case "$(uname -s 2>/dev/null)" in
     Darwin|Linux) ;;
@@ -95,10 +90,8 @@ log_step "nanotars setup"
 log_info "platform: $PLATFORM (arch=$ARCH, wsl=$IS_WSL, pkg=$PKG_MANAGER, service=$SERVICE_MANAGER)"
 log_info "project:  $PROJECT_ROOT"
 
-if [ "$IS_ROOT" = "true" ] && [ "${NANOTARS_ALLOW_ROOT:-0}" != "1" ]; then
-  log_error "Do not run setup.sh as root. nanotars installs per-user."
-  log_error "Set NANOTARS_ALLOW_ROOT=1 if root really is your normal account on this host."
-  exit 1
+if [ "$IS_ROOT" = "true" ]; then
+  log_info "running as root — service install will use the nohup wrapper path (launchd/systemd-user need a per-user session)"
 fi
 
 # --- Prereqs ---
