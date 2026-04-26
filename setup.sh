@@ -317,8 +317,8 @@ for p in data.get("plugins", []):
     if cat != "channels" or not name.startswith("nanotars-"):
         continue
     short = name[len("nanotars-"):]
-    # Filter out non-chat-channel helpers (formatting, swarm-pool, etc.)
-    if short.endswith("-formatting") or short.endswith("-swarm"):
+    # Filter out swarm pool: fanout helper, not a primary channel
+    if short.endswith("-swarm"):
         continue
     desc = (p.get("description") or "").split(".")[0][:60]
     print(f"{short}\t{desc}")
