@@ -30,6 +30,30 @@ export interface AllowedRoot {
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
+
+  // --- Phase 5B: per-agent-group image build ---
+  /**
+   * Per-group apt + npm packages, layered on top of `nanoclaw-agent:latest`
+   * by `buildAgentGroupImage`. Populated by `install_packages` self-mod.
+   */
+  packages?: { apt: string[]; npm: string[] };
+  /**
+   * Project-relative paths to per-group Dockerfile.partial fragments. Stack
+   * on top of the base image (which already has plugin partials baked in).
+   * HOST-MANAGED: agents cannot mutate this via self-mod. Only an operator
+   * with file-system access can edit container_config.dockerfilePartials.
+   */
+  dockerfilePartials?: string[];
+  /**
+   * Populated by buildAgentGroupImage. When unset, runtime falls back to
+   * CONTAINER_IMAGE (i.e., the shared base nanoclaw-agent:latest).
+   */
+  imageTag?: string | null;
+  /**
+   * Phase 5C: agent-installable MCP servers. Read at agent-runner startup;
+   * merged with plugin-provided MCP fragments.
+   */
+  mcpServers?: Record<string, { command: string; args: string[]; env: Record<string, string> }>;
 }
 
 export type EngageMode = 'pattern' | 'always' | 'mention-sticky';
