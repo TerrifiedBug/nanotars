@@ -14,6 +14,7 @@ import {
 } from './config.js';
 import { ensureRunning as ensureContainerRuntime } from './container-runtime.js';
 import {
+  buildAgentGroupImage,
   mapTasksToSnapshot,
   runContainerAgent,
   writeGroupsSnapshot,
@@ -59,6 +60,7 @@ import { logger } from './logger.js';
 import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
 import { registerAddMcpServerHandler } from './permissions/add-mcp-server.js';
 import { registerInstallPackagesHandler } from './permissions/install-packages.js';
+import { notifyAgent } from './permissions/approval-primitive.js';
 import { startOneCLIBridge, stopOneCLIBridge } from './permissions/onecli-bridge.js';
 import { setReplayHook } from './permissions/approval-replay.js';
 import { setApprovalFallbackSender } from './permissions/approval-delivery.js';
@@ -135,13 +137,28 @@ async function main(): Promise<void> {
   // also get reaped without keeping the event loop alive.
   startApprovalExpiryPoll();
 
-  // Phase 5C: register self-mod approval handlers so the click-router
-  // (Phase 4D D7) can render + dispatch install_packages / add_mcp_server
-  // approvals. 5C-03 only registers the `render` half; 5C-04 extends the
-  // registration to inject buildImage/restartGroup deps and wire
-  // applyDecision (mutate config + rebuild + restart on approve).
-  registerInstallPackagesHandler();
-  registerAddMcpServerHandler();
+  // Phase 5C: register self-mod approval handlers with full apply deps.
+  //   - install_packages → buildAgentGroupImage (5B) + queue.restartGroup
+  //     (5C-04) + a 5-second-deferred notifyAgent (so the new container is
+  //     up before the "verify" prompt arrives).
+  //   - add_mcp_server  → queue.restartGroup only (no image rebuild;
+  //     mcpServers is read at agent-runner startup).
+  // notifyAfter is a thin setTimeout wrapper around notifyAgent; the same
+  // injection mechanism (5C-05) routes the deferred message through the
+  // standard inbound pipeline.
+  registerInstallPackagesHandler({
+    buildImage: buildAgentGroupImage,
+    restartGroup: (folder, reason) => queue.restartGroup(folder, reason),
+    notifyAfter: (groupId, text, deferMs) => {
+      // unref'd timer so a pending notify doesn't keep the process alive
+      // through shutdown.
+      const t = setTimeout(() => notifyAgent(groupId, text), deferMs);
+      if (typeof t.unref === 'function') t.unref();
+    },
+  });
+  registerAddMcpServerHandler({
+    restartGroup: (folder, reason) => queue.restartGroup(folder, reason),
+  });
 
   // Phase 4C C6: OneCLI manual-approval bridge. Long-polls the gateway for
   // credentialed-action approval requests, persists them via the C2

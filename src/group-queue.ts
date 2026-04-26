@@ -371,6 +371,58 @@ export class GroupQueue {
     }
   }
 
+  /**
+   * Phase 5C-04: stop the active container for a given group folder so the
+   * next inbound respawns it on whatever image `container_config.imageTag`
+   * resolves to (i.e., the freshly-rebuilt per-group image after a self-mod
+   * approval lands).
+   *
+   * Two cases:
+   *   1. Active container running for the group → stop it; set
+   *      `pendingMessages = true` so `enqueueMessageCheck` (or any future
+   *      inbound) respawns immediately on the new image.
+   *   2. No active container → no-op other than logging. The next inbound
+   *      will pick up the new imageTag through the standard spawn path.
+   *
+   * Distinct from `emergencyStop`:
+   *   - `emergencyStop` flips `shuttingDown=true` (terminal) so no further
+   *     wakes occur. `restartGroup` is non-terminal — wakes resume after
+   *     the container respawns.
+   *   - `emergencyStop` stops every active container. `restartGroup` stops
+   *     a single named group.
+   */
+  async restartGroup(groupFolder: string, reason: string): Promise<void> {
+    for (const [groupJid, state] of this.groups) {
+      if (state.groupFolder !== groupFolder) continue;
+
+      if (state.process && !state.process.killed && state.containerName) {
+        const name = state.containerName;
+        logger.info({ groupFolder, groupJid, reason }, 'Restarting group container');
+        await new Promise<void>((resolve) => {
+          containerRuntime.stop(name, (err) => {
+            if (err) {
+              logger.warn(
+                { container: name, err: err.message },
+                'restartGroup: stop returned error (container may have already exited)',
+              );
+            } else {
+              logger.info({ container: name }, 'Container stopped (restart)');
+            }
+            // Ensure we respawn on the next wake even if no inbound arrives soon.
+            state.pendingMessages = true;
+            this.waitingGroups.add(groupJid);
+            resolve();
+          });
+        });
+        return;
+      }
+    }
+    logger.debug(
+      { groupFolder, reason },
+      'restartGroup: no active container; new imageTag picks up on next spawn',
+    );
+  }
+
   async emergencyStop(): Promise<void> {
     this.shuttingDown = true;
     const stopPromises: Promise<void>[] = [];

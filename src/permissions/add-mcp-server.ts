@@ -27,9 +27,14 @@
  * scheme (signature verification, file-checksum allowlist, …) is out of
  * scope; v1's threat model treats the host filesystem as trusted.
  */
-import { getAgentGroupByFolder } from '../db/agent-groups.js';
+import {
+  getAgentGroupById,
+  getAgentGroupByFolder,
+  updateAgentGroupContainerConfig,
+} from '../db/agent-groups.js';
 import { logger } from '../logger.js';
 import {
+  getPendingApproval,
   notifyAgent,
   registerApprovalHandler,
   requestApproval,
@@ -127,10 +132,21 @@ export async function handleAddMcpServerRequest(
 }
 
 /**
- * Register the `add_mcp_server` approval handler. 5C-03 wires only the
- * `render` half; 5C-04 adds `applyDecision` (mutate config + restart).
+ * Dependencies the `applyDecision` half needs at runtime. Only `restartGroup`
+ * is required — `add_mcp_server` does NOT rebuild the per-group image
+ * (mcpServers is read at agent-runner startup, no image layer change).
  */
-export function registerAddMcpServerHandler(): void {
+export interface AddMcpServerDeps {
+  /** Stop the active container for `folder` so the next inbound respawns. */
+  restartGroup: (folder: string, reason: string) => Promise<void>;
+}
+
+/**
+ * Register the `add_mcp_server` approval handler. Pass `deps` to wire the
+ * full apply path (mutate mcpServers + restart). Omit for a render-only
+ * registration (5C-03 unit tests). Handler is idempotent on overwrite.
+ */
+export function registerAddMcpServerHandler(deps?: AddMcpServerDeps): void {
   registerApprovalHandler('add_mcp_server', {
     render({ payload }) {
       const name = (payload.name as string | undefined) ?? '<unknown>';
@@ -148,6 +164,101 @@ export function registerAddMcpServerHandler(): void {
         ],
       };
     },
-    // applyDecision wired in 5C-04 (mutate mcpServers + restart).
+
+    async applyDecision({ approvalId, payload, decision }) {
+      const name = (payload.name as string | undefined) ?? '';
+      const command = (payload.command as string | undefined) ?? '';
+      const args = (payload.args as string[] | undefined) ?? [];
+      const env = (payload.env as Record<string, string> | undefined) ?? {};
+
+      const approval = getPendingApproval(approvalId);
+      const agentGroupId =
+        typeof approval?.agent_group_id === 'string'
+          ? approval.agent_group_id
+          : null;
+      if (!agentGroupId) {
+        logger.warn(
+          { approvalId },
+          'add_mcp_server applyDecision: approval row missing agent_group_id; nothing to mutate',
+        );
+        return;
+      }
+      const ag = getAgentGroupById(agentGroupId);
+      if (!ag) {
+        logger.warn(
+          { approvalId, agentGroupId },
+          'add_mcp_server applyDecision: agent group not found',
+        );
+        return;
+      }
+
+      if (decision === 'rejected' || decision === 'expired') {
+        const verb = decision === 'expired' ? 'expired' : 'rejected';
+        notifyAgent(
+          agentGroupId,
+          `add_mcp_server ${verb} for "${name}". MCP server NOT wired.`,
+        );
+        return;
+      }
+
+      if (decision !== 'approved') {
+        logger.warn(
+          { approvalId, decision },
+          'add_mcp_server applyDecision: unknown decision value; skipping',
+        );
+        return;
+      }
+
+      if (!name || !command) {
+        logger.warn(
+          { approvalId, agentGroupId },
+          'add_mcp_server applyDecision: payload missing name or command; skipping',
+        );
+        return;
+      }
+
+      // Merge into mcpServers; existing entry with the same name is replaced
+      // (the admin already approved this exact command/args/env). No image
+      // rebuild needed — agent-runner reads mcpServers at startup.
+      updateAgentGroupContainerConfig(agentGroupId, (cfg) => ({
+        ...cfg,
+        mcpServers: {
+          ...(cfg.mcpServers ?? {}),
+          [name]: { command, args, env },
+        },
+      }));
+
+      if (!deps) {
+        logger.warn(
+          { approvalId, agentGroupId },
+          'add_mcp_server approved but deps not wired — restart skipped, ' +
+            'config mutation persisted. Render-only registration (tests).',
+        );
+        notifyAgent(
+          agentGroupId,
+          `MCP server "${name}" added to config; container will pick it up on next spawn.`,
+        );
+        return;
+      }
+
+      try {
+        await deps.restartGroup(ag.folder, 'add_mcp_server applied');
+        notifyAgent(
+          agentGroupId,
+          `MCP server "${name}" added. Container restarting; tools will be live on next turn.`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        notifyAgent(
+          agentGroupId,
+          `MCP server "${name}" persisted but restart failed: ${msg}. ` +
+            `It will load on the next normal restart.`,
+        );
+        logger.error(
+          { err, agentGroupId, approvalId },
+          'add_mcp_server applyDecision: restart failed',
+        );
+      }
+    },
   });
 }

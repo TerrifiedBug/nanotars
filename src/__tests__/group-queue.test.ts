@@ -23,6 +23,20 @@ vi.mock('fs', async () => {
   };
 });
 
+// Mock containerRuntime so restartGroup tests can control the stop callback.
+const stopMock = vi.fn(
+  (_name: string, cb?: (err?: { message: string }) => void) => {
+    // Default: succeed synchronously.
+    if (cb) cb();
+  },
+);
+vi.mock('../container-runtime.js', () => ({
+  stop: (name: string, cb?: (err?: { message: string }) => void) =>
+    stopMock(name, cb),
+  cli: () => 'docker',
+  ensureRunning: () => undefined,
+}));
+
 describe('GroupQueue', () => {
   let queue: GroupQueue;
 
@@ -384,6 +398,84 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(50);
 
     expect(processed).toContain('group1@g.us');
+  });
+
+  // --- Phase 5C-04: restartGroup ---
+
+  it('restartGroup stops the named group container and flags pendingMessages', async () => {
+    stopMock.mockClear();
+    let resolveProcess: () => void;
+    const processMessages = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.setProcessMessagesFn(processMessages);
+
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'group1@g.us',
+      { killed: false } as unknown as import('child_process').ChildProcess,
+      'container-1',
+      'main',
+    );
+
+    await queue.restartGroup('main', 'install_packages applied');
+    expect(stopMock).toHaveBeenCalledWith('container-1', expect.any(Function));
+
+    const status = queue.getStatus();
+    const g1 = status.groups.find((g) => g.jid === 'group1@g.us');
+    expect(g1?.pendingMessages).toBe(true);
+
+    // Cleanup: let the existing processMessages call resolve.
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
+  it('restartGroup is a no-op when no active container matches the folder', async () => {
+    stopMock.mockClear();
+    await queue.restartGroup('does-not-exist', 'reason');
+    expect(stopMock).not.toHaveBeenCalled();
+  });
+
+  it('restartGroup does not stop containers belonging to other folders', async () => {
+    stopMock.mockClear();
+    let resolveA: () => void;
+    let resolveB: () => void;
+    const processMessages = vi.fn(async (jid: string) => {
+      await new Promise<void>((resolve) => {
+        if (jid === 'a@g.us') resolveA = resolve;
+        else resolveB = resolve;
+      });
+      return true;
+    });
+    queue.setProcessMessagesFn(processMessages);
+
+    queue.enqueueMessageCheck('a@g.us');
+    queue.enqueueMessageCheck('b@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'a@g.us',
+      { killed: false } as unknown as import('child_process').ChildProcess,
+      'container-a',
+      'folder-a',
+    );
+    queue.registerProcess(
+      'b@g.us',
+      { killed: false } as unknown as import('child_process').ChildProcess,
+      'container-b',
+      'folder-b',
+    );
+
+    await queue.restartGroup('folder-a', 'reason');
+    expect(stopMock).toHaveBeenCalledTimes(1);
+    expect(stopMock).toHaveBeenCalledWith('container-a', expect.any(Function));
+
+    resolveA!();
+    resolveB!();
+    await vi.advanceTimersByTimeAsync(10);
   });
 
   it('pausedGate also blocks task enqueues', async () => {
