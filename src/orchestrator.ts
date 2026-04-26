@@ -42,6 +42,19 @@ import {
 import { canAccessAgentGroup } from './permissions/access.js';
 import { resolveSender, type SenderInfo } from './permissions/sender-resolver.js';
 
+// TODO(phase-4d-D6): wire chat-sdk button-click events into
+// `handleApprovalClick` from './permissions/approval-click-auth.js'. v1
+// currently has no chat-sdk button-click flow, so the handler is unused
+// outside its tests. When channel adapters start emitting click events,
+// the handler signature is:
+//   await handleApprovalClick({
+//     approval_id,        // from button callback_data
+//     clicker_user_id,    // resolveSender({channel, platform_id, sender_handle}).user.id
+//     decision,           // 'approved' | 'rejected'
+//   });
+// Auth (approver-self vs admin-override) is fully encapsulated inside
+// approval-click-auth.ts — the orchestrator should not re-check it.
+
 /** Dependency injection interface for the orchestrator. */
 export interface OrchestratorDeps {
   // DB functions
