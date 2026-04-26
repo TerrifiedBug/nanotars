@@ -79,6 +79,8 @@ fi
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
+DEFAULT_MARKETPLACE="${NANOTARS_MARKETPLACE:-TerrifiedBug/nanotars-skills}"
+
 # shellcheck source=setup/lib/log.sh
 source "$PROJECT_ROOT/setup/lib/log.sh"
 # shellcheck source=setup/lib/platform.sh
@@ -200,12 +202,46 @@ case "$SERVICE_MANAGER" in
     ;;
 esac
 
+# --- Timezone auto-detect ---
+
+DETECTED_TZ=""
+if command -v timedatectl >/dev/null 2>&1; then
+  DETECTED_TZ="$(timedatectl show --property=Timezone --value 2>/dev/null || true)"
+fi
+if [ -z "$DETECTED_TZ" ] && [ -L /etc/localtime ]; then
+  DETECTED_TZ="$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')"
+fi
+DETECTED_TZ="${DETECTED_TZ:-Etc/UTC}"
+touch "$PROJECT_ROOT/.env"
+if grep -q '^TZ=' "$PROJECT_ROOT/.env" 2>/dev/null; then
+  log_info "✓ TZ already set in .env"
+else
+  printf 'TZ=%s\n' "$DETECTED_TZ" >> "$PROJECT_ROOT/.env"
+  log_info "✓ TZ=$DETECTED_TZ written to .env"
+fi
+
+# --- Claude auth check ---
+
+HAS_CLAUDE_AUTH=false
+if [ -f "$HOME/.claude/.credentials.json" ]; then
+  HAS_CLAUDE_AUTH=true
+elif [ -f "$PROJECT_ROOT/.env" ] && grep -qE '^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=' "$PROJECT_ROOT/.env" 2>/dev/null; then
+  HAS_CLAUDE_AUTH=true
+fi
+if [ "$HAS_CLAUDE_AUTH" = "true" ]; then
+  log_info "✓ Claude auth detected"
+else
+  log_warn "Claude Code is not authenticated yet — agent containers will fail to start without it."
+  log_warn "  In another terminal, run:    claude setup-token"
+  log_warn "  Or set ANTHROPIC_API_KEY in: $PROJECT_ROOT/.env"
+fi
+
 # --- OneCLI hint ---
 
 if command -v onecli >/dev/null 2>&1; then
-  log_info "OneCLI detected ($(onecli version 2>/dev/null | head -1))"
+  log_info "✓ OneCLI present ($(onecli version 2>/dev/null | head -1 | cut -c1-40))"
 else
-  log_info "OneCLI not detected — to enable the credential vault later, open Claude Code in this directory and run /init-onecli"
+  log_info "OneCLI not detected — open Claude in the install dir and run /init-onecli to enable the credential vault later"
 fi
 
 # --- Install user wrapper: ~/.local/bin/nanotars ---
@@ -258,24 +294,61 @@ if [ "${NANOTARS_SKIP_ONBOARDING_PROMPT:-}" != "true" ] && [ -t 0 ]; then
   read -r -p "  What's your name? (used by TARS when addressing you): " USER_NAME </dev/tty
   USER_NAME="${USER_NAME:-}"
 
-  # 2. Channel multi-select. Catalog mirrors .claude/skills/nanotars-setup
-  #    — these are the channels the in-claude setup skill knows how to install.
+  # 2. Channel multi-select. Catalog is fetched live from the marketplace
+  #    so adding a new channel plugin upstream surfaces here automatically.
+  MARKETPLACE_RAW="https://raw.githubusercontent.com/${DEFAULT_MARKETPLACE}/main/.claude-plugin/marketplace.json"
+  declare -a CHANNEL_NAMES=()
+  declare -a CHANNEL_DESCS=()
+  MARKETPLACE_BLOB="$(curl -fsSL --max-time 8 "$MARKETPLACE_RAW" 2>/dev/null || true)"
+  if [ -n "$MARKETPLACE_BLOB" ]; then
+    while IFS=$'\t' read -r name desc; do
+      [ -z "$name" ] && continue
+      CHANNEL_NAMES+=("$name")
+      CHANNEL_DESCS+=("$desc")
+    done < <(printf '%s' "$MARKETPLACE_BLOB" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for p in data.get("plugins", []):
+    cat = (p.get("category") or "").lower()
+    name = (p.get("name") or "")
+    if cat != "channels" or not name.startswith("nanotars-"):
+        continue
+    short = name[len("nanotars-"):]
+    # Filter out non-chat-channel helpers (formatting, swarm-pool, etc.)
+    if short.endswith("-formatting") or short.endswith("-swarm"):
+        continue
+    desc = (p.get("description") or "").split(".")[0][:60]
+    print(f"{short}\t{desc}")
+' 2>/dev/null)
+  fi
+  if [ "${#CHANNEL_NAMES[@]}" -eq 0 ]; then
+    log_warn "could not fetch channel list from marketplace ($MARKETPLACE_RAW); using fallback"
+    CHANNEL_NAMES=(telegram discord whatsapp slack)
+    CHANNEL_DESCS=("Telegram bot" "Discord server + DMs" "WhatsApp via Baileys" "Slack socket mode")
+  fi
   echo
   echo "  Available chat channels:"
-  echo "    1) telegram   (bot API)"
-  echo "    2) discord    (servers + DMs)"
-  echo "    3) whatsapp   (via Baileys)"
-  echo "    4) slack      (socket mode)"
+  i=1
+  for n in "${!CHANNEL_NAMES[@]}"; do
+    printf "    %d) %-12s %s\n" "$i" "${CHANNEL_NAMES[$n]}" "${CHANNEL_DESCS[$n]:-}"
+    i=$((i+1))
+  done
   echo
   read -r -p "  Pick numbers (space-separated, e.g. '1 3'; blank = decide later): " PICKS </dev/tty
 
   declare -a CHANNELS_PICKED=()
   for n in $PICKS; do
     case "$n" in
-      1) CHANNELS_PICKED+=("telegram") ;;
-      2) CHANNELS_PICKED+=("discord") ;;
-      3) CHANNELS_PICKED+=("whatsapp") ;;
-      4) CHANNELS_PICKED+=("slack") ;;
+      ''|*[!0-9]*) continue ;;
+      *)
+        idx=$((n - 1))
+        if [ "$idx" -ge 0 ] && [ "$idx" -lt "${#CHANNEL_NAMES[@]}" ]; then
+          CHANNELS_PICKED+=("${CHANNEL_NAMES[$idx]}")
+        fi
+        ;;
     esac
   done
 
@@ -332,7 +405,6 @@ fi
 
 # --- Skill marketplace auto-registration ---
 
-DEFAULT_MARKETPLACE="${NANOTARS_MARKETPLACE:-TerrifiedBug/nanotars-skills}"
 if command -v claude >/dev/null 2>&1; then
   if claude plugin marketplace add "$DEFAULT_MARKETPLACE" >> "$PROJECT_ROOT/logs/setup.log" 2>&1; then
     log_info "✓ marketplace $DEFAULT_MARKETPLACE registered with Claude Code"
