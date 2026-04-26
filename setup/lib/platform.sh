@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup/lib/platform.sh — platform detection for install.sh and setup.sh.
+# setup/lib/platform.sh — platform detection for setup.sh.
 # Sourced; do not execute. Sets globals; does not return values.
 #
 # After sourcing, the following are exported:

@@ -11,10 +11,12 @@
 **One-liner (macOS or Linux):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TerrifiedBug/nanotars/v1-archive/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TerrifiedBug/nanotars/v1-archive/setup.sh | bash
 ```
 
-This clones into `$HOME/nanotars` (override with `NANOTARS_DIR`), installs Node 22 + pnpm + verifies Docker, builds the agent container, writes a launchd plist (macOS) or systemd-user unit (Linux), and starts the service.
+This clones into `$HOME/nanotars` (override with `NANOTARS_DIR`), installs Node 22 + pnpm + verifies Docker, builds host + agent container, writes a launchd plist (macOS) / systemd-user unit (Linux) / nohup wrapper (root or WSL), and starts the service.
+
+> Running as root on a single-user box (homelab, dedicated VM)? Prefix the command with `NANOTARS_ALLOW_ROOT=1`.
 
 **Manual install:**
 
@@ -24,15 +26,37 @@ cd nanotars
 bash setup.sh
 ```
 
+(Same `setup.sh` as the curl one-liner — it detects whether it's piped from curl, and clones on first run only.)
+
 **After install — manage the service:**
 
 ```bash
-bash nanotars.sh status     # health check
-bash nanotars.sh logs       # tail logs
+bash nanotars.sh status     # health snapshot
+bash nanotars.sh logs       # tail logs (or show error log if main is empty)
 bash nanotars.sh restart    # restart
+bash nanotars.sh stop       # stop
 ```
 
-**Bootstrap the first agent:** open a Claude Code session in the install directory and run `/nanoclaw-setup`.
+**Bootstrap your first agent:**
+
+1. Open Claude Code in the install directory:
+   ```bash
+   cd $HOME/nanotars && claude
+   ```
+2. Inside Claude, run `/nanoclaw-setup` — walks through:
+   - Pick a chat channel (Telegram, Discord, Slack, WhatsApp, …)
+   - Install the channel plugin (`/add-<channel>` if needed)
+   - Wire your first agent group to that channel
+   - Verify the agent responds in chat
+3. (Optional) Edit personality + instructions:
+   - `groups/main/IDENTITY.md` — soul / personality
+   - `groups/main/CLAUDE.md` — operational guidance
+4. (Optional) Register a Claude skill marketplace:
+   ```
+   /plugin marketplace add <owner>/<repo>
+   /plugin install <skill-name>
+   ```
+5. (Optional) Enable the OneCLI credential vault: from inside Claude, `/init-onecli`
 
 ## What This Is
 

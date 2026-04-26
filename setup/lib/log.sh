@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup/lib/log.sh — logging helpers shared by install.sh, setup.sh, and the
+# setup/lib/log.sh — logging helpers shared by setup.sh and the
 # per-prereq scripts under setup/. Source this file; do not execute it.
 #
 # Public API:

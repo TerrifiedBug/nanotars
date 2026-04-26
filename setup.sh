@@ -1,14 +1,85 @@
 #!/usr/bin/env bash
-# setup.sh — main installer. Run after install.sh has cloned the repo, or
-# directly after a manual `git clone`. Idempotent; safe to re-run.
+# setup.sh — install or upgrade nanotars.
+#
+# Two ways to invoke:
+#   1. Inside the repo (after manual git clone):
+#        bash setup.sh
+#   2. Via the wget one-liner (auto-clones into $HOME/nanotars first):
+#        curl -fsSL https://raw.githubusercontent.com/TerrifiedBug/nanotars/v1-archive/setup.sh | bash
+#
+# Idempotent; safe to re-run for upgrades.
 #
 # Honours:
-#   NANOTARS_SKIP_FIRST_AGENT_PROMPT=true   skip the y/N prompt at the end
+#   NANOTARS_DIR                            install location (default $HOME/nanotars; bootstrap mode only)
+#   NANOTARS_BRANCH                         branch (default v1-archive; bootstrap mode only)
+#   NANOTARS_REPO                           git URL (default https://github.com/TerrifiedBug/nanotars.git)
+#   NANOTARS_ALLOW_ROOT=1                   allow running as root
+#   NANOTARS_SKIP_MARKETPLACE_PROMPT=true   skip the marketplace y/N at the end
 #   NO_COLOR=1                              plain output
-#
-# Logs to logs/setup.log.
 
 set -euo pipefail
+
+# ────────────────────────────────────────────────────────────────────────
+# Bootstrap mode — only fires when piped from `curl | bash` (no real
+# BASH_SOURCE file). Clones the repo, then exec's the in-tree setup.sh.
+# ────────────────────────────────────────────────────────────────────────
+
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ ! -f "${BASH_SOURCE[0]:-/dev/null}" ]; then
+  REPO_URL="${NANOTARS_REPO:-https://github.com/TerrifiedBug/nanotars.git}"
+  BRANCH="${NANOTARS_BRANCH:-v1-archive}"
+  TARGET_DIR="${NANOTARS_DIR:-$HOME/nanotars}"
+
+  _bootstrap_color() {
+    [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && printf '\033[0;36m[bootstrap]\033[0m' || printf '[bootstrap]'
+  }
+  _bootstrap_log() { printf '%s %s\n' "$(_bootstrap_color)" "$*"; }
+  _bootstrap_die() { printf '\033[0;31m[bootstrap]\033[0m %s\n' "$*" >&2; exit 1; }
+
+  if [ "$(id -u 2>/dev/null)" = "0" ] && [ "${NANOTARS_ALLOW_ROOT:-0}" != "1" ]; then
+    _bootstrap_die "Do not run setup.sh as root. nanotars installs per-user (\$HOME/nanotars). Re-run as your normal user, or set NANOTARS_ALLOW_ROOT=1 if root really is your normal account."
+  fi
+
+  case "$(uname -s 2>/dev/null)" in
+    Darwin|Linux) ;;
+    *) _bootstrap_die "Unsupported platform: $(uname -s 2>/dev/null). Supported: macOS, Linux." ;;
+  esac
+
+  for cmd in git bash; do
+    command -v "$cmd" >/dev/null 2>&1 || _bootstrap_die "Required command not found: $cmd"
+  done
+
+  _bootstrap_log "platform: $(uname -s) $(uname -m)"
+  _bootstrap_log "target:   $TARGET_DIR"
+  _bootstrap_log "branch:   $BRANCH"
+
+  if [ -d "$TARGET_DIR/.git" ]; then
+    EXISTING_REMOTE="$(git -C "$TARGET_DIR" remote get-url origin 2>/dev/null || echo '')"
+    case "$EXISTING_REMOTE" in
+      *TerrifiedBug/nanotars*|*nanotars.git|*/nanotars)
+        _bootstrap_log "existing checkout at $TARGET_DIR; running in-tree setup.sh"
+        ;;
+      *)
+        _bootstrap_die "$TARGET_DIR is a git checkout of '$EXISTING_REMOTE', not nanotars. Set NANOTARS_DIR to a different path or remove the directory."
+        ;;
+    esac
+  elif [ -d "$TARGET_DIR" ] && [ -n "$(ls -A "$TARGET_DIR" 2>/dev/null || true)" ]; then
+    _bootstrap_die "$TARGET_DIR exists and is not a nanotars checkout. Set NANOTARS_DIR to a different path or remove the directory."
+  else
+    _bootstrap_log "cloning $REPO_URL#$BRANCH into $TARGET_DIR"
+    git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$TARGET_DIR"
+  fi
+
+  if [ ! -f "$TARGET_DIR/setup.sh" ]; then
+    _bootstrap_die "$TARGET_DIR/setup.sh not found. Repo may be on the wrong branch."
+  fi
+
+  _bootstrap_log "handing off to in-tree setup.sh"
+  exec bash "$TARGET_DIR/setup.sh"
+fi
+
+# ────────────────────────────────────────────────────────────────────────
+# In-repo mode — the actual installer.
+# ────────────────────────────────────────────────────────────────────────
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
