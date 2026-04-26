@@ -38,8 +38,9 @@ cat > "$PLIST_PATH" <<EOF
     <string>${LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${NODE_PATH}</string>
-        <string>${PROJECT_ROOT}/dist/index.js</string>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>set -a; [ -f "${PROJECT_ROOT}/.env" ] &amp;&amp; . "${PROJECT_ROOT}/.env"; set +a; exec "${NODE_PATH}" "${PROJECT_ROOT}/dist/index.js"</string>
     </array>
     <key>WorkingDirectory</key>
     <string>${PROJECT_ROOT}</string>

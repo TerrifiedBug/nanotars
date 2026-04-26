@@ -44,6 +44,12 @@ if [ -f "${PIDFILE}" ]; then
     sleep 2
   fi
 fi
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${PROJECT_ROOT}/.env"
+  set +a
+fi
 echo "Starting nanotars..."
 nohup "${NODE_PATH}" "${PROJECT_ROOT}/dist/index.js" \\
   >> "${PROJECT_ROOT}/logs/nanotars.log" \\

@@ -1,5 +1,5 @@
 import type { Logger } from 'pino';
-import type { AgentGroup, Channel, NewMessage, OnInboundMessage, OnChatMetadata, ScheduledTask, TaskRunLog } from './types.js';
+import type { AgentGroup, Channel, MessagingGroup, MessagingGroupAgent, NewMessage, OnInboundMessage, OnChatMetadata, ScheduledTask, TaskRunLog } from './types.js';
 import type { ChatInfo } from './db.js';
 
 /** Plugin manifest (plugin.json) */
@@ -53,11 +53,26 @@ export interface ChannelPluginConfig {
   /**
    * Phase 4A entity-model successor to the legacy `registeredGroups`
    * Record<jid, RegisteredGroup>. Plugins now receive an array of
-   * AgentGroup rows; iterate or filter as needed. Channels that previously
-   * keyed by JID should query the entity-model accessors directly (e.g.
-   * `resolveAgentsForInbound(channel, jid)`) for chat-level routing data.
+   * AgentGroup rows; iterate or filter as needed. For per-chat routing,
+   * use `resolveAgentsForInbound` below — the chat-level lookup the old
+   * `registeredGroups()[jid]` access was actually used for.
    */
   agentGroups: () => AgentGroup[];
+  /**
+   * Per-chat routing lookup. Returns the wiring rows (with their resolved
+   * messaging_group + agent_group) for an inbound message on `(channel,
+   * platformId)`. Empty array means the chat is not registered — channels
+   * use this to drop unregistered chats at the inbound boundary the same
+   * way they used `registeredGroups()[jid]` on the legacy schema.
+   */
+  resolveAgentsForInbound: (
+    channel: string,
+    platformId: string,
+  ) => Array<{
+    agentGroup: AgentGroup;
+    wiring: MessagingGroupAgent;
+    messagingGroup: MessagingGroup;
+  }>;
   /** Project paths and config values channels may need */
   paths: {
     storeDir: string;

@@ -670,7 +670,11 @@ export class MessageOrchestrator {
 
     if (output === 'error' || hadError) {
       if (lastTriggerMessageId && this.deps.react) {
-        this.deps.react(chatJid, lastTriggerMessageId, '\u{274C}').catch(() => {});
+        // 🤡 — Telegram only allows a fixed set of reaction emojis for bot
+        // accounts (no ❌). 🤡 is on the allowlist and reads as "this didn't
+        // go well". Any future channels with stricter allowlists should
+        // override or feature-detect.
+        this.deps.react(chatJid, lastTriggerMessageId, '\u{1F921}').catch(() => {});
       }
       if (outputSentToUser) {
         this.consecutiveErrors[chatJid] = 0;

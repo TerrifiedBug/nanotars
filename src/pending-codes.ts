@@ -379,9 +379,15 @@ function registerForIntent(args: {
 
   let wiring: MessagingGroupAgent | undefined = getWiring(mg.id, ag.id);
   if (!wiring) {
+    // DMs default to engage_mode='always' so the bot responds to every
+    // message without requiring a trigger prefix. Group chats keep the
+    // 'pattern' default (require @<assistant-name> mention). The operator
+    // can flip either via UPDATE messaging_group_agents SET engage_mode=...
+    // post-hoc.
     wiring = createWiring({
       messaging_group_id: mg.id,
       agent_group_id: ag.id,
+      engage_mode: args.isGroup ? 'pattern' : 'always',
     });
   }
 

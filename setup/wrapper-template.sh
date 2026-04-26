@@ -7,6 +7,7 @@
 #   nanotars start | stop |      # service control
 #   nanotars restart | status |
 #   nanotars logs
+#   nanotars pair-main           # issue a pairing code for the main chat
 #   nanotars setup               # re-run setup.sh
 #   nanotars <prompt...>         # claude "<prompt...>" (one-shot pass-through)
 
@@ -25,7 +26,7 @@ case "${1:-}" in
   "")
     exec claude
     ;;
-  start|stop|restart|status|logs)
+  start|stop|restart|status|logs|pair-main)
     exec bash ./nanotars.sh "$@"
     ;;
   setup)

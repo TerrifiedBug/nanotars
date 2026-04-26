@@ -51,6 +51,7 @@ import {
 
   getRecentMessages,
   recordUnregisteredSender,
+  resolveAgentsForInbound,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
@@ -346,6 +347,8 @@ async function main(): Promise<void> {
       },
       onChatMetadata: (chatJid, timestamp, name) => storeChatMetadata(chatJid, timestamp, name),
       agentGroups: () => orchestrator.getAgentGroups(),
+      resolveAgentsForInbound: (channel, platformId) =>
+        resolveAgentsForInbound(channel, platformId),
       paths: {
         storeDir: STORE_DIR,
         groupsDir: GROUPS_DIR,

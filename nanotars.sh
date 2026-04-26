@@ -3,11 +3,13 @@
 # systemctl --user / nohup-wrapper depending on platform.
 #
 # Subcommands:
-#   start   — start the service
-#   stop    — stop the service
-#   restart — restart the service
-#   status  — service + dependency snapshot (calls setup/probe.sh)
-#   logs    — tail -f logs/nanotars.log
+#   start     — start the service
+#   stop      — stop the service
+#   restart   — restart the service
+#   status    — service + dependency snapshot (calls setup/probe.sh)
+#   logs      — tail -f logs/nanotars.log
+#   pair-main — issue a 4-digit pairing code for the main control chat
+#               (forwards extra args to dist/cli/pair-main.js)
 
 set -euo pipefail
 
@@ -28,11 +30,12 @@ usage() {
 Usage: bash nanotars.sh <command>
 
 Commands:
-  start    Start the nanotars service
-  stop     Stop the nanotars service
-  restart  Restart the nanotars service
-  status   Show service + dependency status
-  logs     Tail logs/nanotars.log
+  start      Start the nanotars service
+  stop       Stop the nanotars service
+  restart    Restart the nanotars service
+  status     Show service + dependency status
+  logs       Tail logs/nanotars.log
+  pair-main  Issue a 4-digit pairing code for the main control chat
 EOF
 }
 
@@ -118,6 +121,15 @@ cmd_status() {
   fi
 }
 
+cmd_pair_main() {
+  local cli="$PROJECT_ROOT/dist/cli/pair-main.js"
+  if [ ! -f "$cli" ]; then
+    log_error "$cli missing — run 'npm run build' first."
+    exit 1
+  fi
+  exec node "$cli" "$@"
+}
+
 cmd_logs() {
   LOG="$PROJECT_ROOT/logs/nanotars.log"
   ERR="$PROJECT_ROOT/logs/nanotars.error.log"
@@ -148,11 +160,12 @@ cmd_logs() {
 }
 
 case "${1:-}" in
-  start)   cmd_start ;;
-  stop)    cmd_stop ;;
-  restart) cmd_restart ;;
-  status)  cmd_status ;;
-  logs)    cmd_logs ;;
+  start)     cmd_start ;;
+  stop)      cmd_stop ;;
+  restart)   cmd_restart ;;
+  status)    cmd_status ;;
+  logs)      cmd_logs ;;
+  pair-main) shift; cmd_pair_main "$@" ;;
   ""|-h|--help|help) usage ;;
-  *)       usage; exit 1 ;;
+  *)         usage; exit 1 ;;
 esac

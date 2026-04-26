@@ -930,3 +930,20 @@ Host-process hooks (archetype 3) and container hooks (archetype 4) cannot be cre
 - Tests: `src/permissions/__tests__/create-skill-plugin-{request,apply}.test.ts`, `src/__tests__/e2e/create-skill-plugin-flow.test.ts`, `container/agent-runner/src/mcp-tools/__tests__/self-mod.test.ts` (extended)
 - `scripts/check-skill-drift.sh` + `docs/skill-drift-log.md` — periodic accuracy re-check tooling
 
+---
+
+## 19. First-Time Setup Bootstrap
+
+`/nanotars-setup` was failing end-to-end on a fresh install because (a) the nohup launch wrapper didn't source `.env`, so plugin env vars (`TELEGRAM_BOT_TOKEN` etc.) never reached the host process; (b) the skill still wrote to the `registered_groups` table that migration 009 dropped; and (c) there was no bootstrap path for the *first* main chat — `/pair-telegram` requires an existing admin and the pairing primitive throws when `agent_groups[folder='main']` is missing.
+
+### What changed
+
+- **`setup/service-systemd.sh`** — nohup wrapper now sources `.env` before exec'ing node (matches the systemd-user unit's `EnvironmentFile=-…/.env`).
+- **`setup/service-launchd.sh`** — launchd plist `ProgramArguments` wraps node in a bash exec that sources `.env` (launchd has no `EnvironmentFile` equivalent).
+- **`src/cli/pair-main.ts`** (new) — `nanotars pair-main` seeds `agent_groups[folder='main']` if absent and allocates a 4-digit pending pairing code via the production `createPendingCode({intent:'main'})` primitive. Channel-agnostic with `--channel <name>` and auto-detect when exactly one channel plugin is installed. Idempotent.
+- **`nanotars.sh` + `setup/wrapper-template.sh`** — added `pair-main` subcommand that delegates to `dist/cli/pair-main.js`.
+- **`src/plugin-types.ts` + `src/index.ts`** — added `resolveAgentsForInbound(channel, platformId)` to `ChannelPluginConfig`. The Telegram plugin still called the legacy `registeredGroups()[jid]` API (removed in the entity-model migration); plugins now use the explicit per-chat lookup. Local Telegram plugin patched to match — marketplace upstream PR pending.
+- **`src/pending-codes.ts`** — `registerForIntent` now passes `engage_mode: 'always'` for DMs (`is_group=0`) so the bot responds without an `@<assistant>` prefix. Group chats keep `engage_mode='pattern'` (require trigger).
+- **`src/orchestrator.ts`** — failure-state Telegram reaction `❌` (`U+274C`) replaced with `🤡` (`U+1F921`). Telegram bot accounts are restricted to a fixed allowlist of reaction emojis; `❌` was rejected with `REACTION_INVALID`.
+- **`container/skills/agent-browser/`** — removed. The skill moved to `plugins/agent-browser/container-skills/` but the legacy copy was still present, causing Docker `Duplicate mount point: /workspace/.claude/skills/agent-browser` and blocking every container spawn.
+- **`src/cli/__tests__/pair-main.test.ts`** (new) — 9 tests covering seed, idempotence, channel auto-detect, single-channel default, malformed plugin.json, and explicit `--channel` arg.
