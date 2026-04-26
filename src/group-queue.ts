@@ -4,6 +4,7 @@ import path from 'path';
 
 import { DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
 import * as containerRuntime from './container-runtime.js';
+import { pausedGate } from './lifecycle.js';
 import { logger } from './logger.js';
 
 interface QueuedTask {
@@ -80,6 +81,13 @@ export class GroupQueue {
 
     const state = this.getGroup(groupJid);
 
+    if (pausedGate.isPaused()) {
+      state.pendingMessages = true;
+      this.waitingGroups.add(groupJid);
+      logger.debug({ groupJid }, 'pausedGate is set; message queued, no wake');
+      return;
+    }
+
     if (state.active) {
       state.pendingMessages = true;
       logger.debug({ groupJid }, 'Container active, message queued');
@@ -109,6 +117,13 @@ export class GroupQueue {
     // Prevent double-queuing of the same task
     if (state.pendingTasks.some((t) => t.id === taskId)) {
       logger.debug({ groupJid, taskId }, 'Task already queued, skipping');
+      return;
+    }
+
+    if (pausedGate.isPaused()) {
+      state.pendingTasks.push({ id: taskId, groupJid, fn });
+      this.waitingGroups.add(groupJid);
+      logger.debug({ groupJid, taskId }, 'pausedGate is set; task queued, no wake');
       return;
     }
 

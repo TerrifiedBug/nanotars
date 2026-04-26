@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 import { GroupQueue } from '../group-queue.js';
+import { pausedGate, _resetPausedGate } from '../lifecycle.js';
 
 // Mock config to control concurrency limit
 vi.mock('../config.js', () => ({
@@ -28,10 +29,12 @@ describe('GroupQueue', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     queue = new GroupQueue();
+    _resetPausedGate();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    _resetPausedGate();
   });
 
   // --- Single group at a time ---
@@ -346,5 +349,62 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
 
     expect(processed).toContain('group3@g.us');
+  });
+
+  // --- pausedGate gates wakes ---
+
+  it('pausedGate.isPaused() blocks new wakes; resume drains waiting groups', async () => {
+    const processed: string[] = [];
+
+    const processMessages = vi.fn(async (groupJid: string) => {
+      processed.push(groupJid);
+      return true;
+    });
+
+    queue.setProcessMessagesFn(processMessages);
+
+    // Pause first, then enqueue
+    pausedGate.pause('test');
+    queue.enqueueMessageCheck('group1@g.us');
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    // No wake while paused
+    expect(processMessages).not.toHaveBeenCalled();
+
+    // Status reflects pendingMessages = true
+    const status = queue.getStatus();
+    const g1 = status.groups.find((g) => g.jid === 'group1@g.us');
+    expect(g1?.active).toBe(false);
+    expect(g1?.pendingMessages).toBe(true);
+
+    // Resume + drain — group1 should now spawn
+    pausedGate.resume('test');
+    queue.resumeProcessing(); // also clears shuttingDown; drainWaiting runs
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(processed).toContain('group1@g.us');
+  });
+
+  it('pausedGate also blocks task enqueues', async () => {
+    const processMessages = vi.fn(async () => true);
+    queue.setProcessMessagesFn(processMessages);
+
+    pausedGate.pause('test');
+    const taskFn = vi.fn(async () => {});
+    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(taskFn).not.toHaveBeenCalled();
+    const status = queue.getStatus();
+    const g1 = status.groups.find((g) => g.jid === 'group1@g.us');
+    expect(g1?.pendingTaskCount).toBe(1);
+
+    pausedGate.resume('test');
+    queue.resumeProcessing();
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(taskFn).toHaveBeenCalledTimes(1);
   });
 });
