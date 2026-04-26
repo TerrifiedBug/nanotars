@@ -11,6 +11,11 @@ import fs from 'fs';
 import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
+import {
+  askQuestionInputSchema,
+  buildAskQuestionPayload,
+} from './mcp-tools/ask-question.js';
+
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
@@ -494,6 +499,33 @@ Keep it natural — one reaction at a time, not every message.`,
     writeIpcFile(MESSAGES_DIR, data);
 
     return { content: [{ type: 'text' as const, text: `Reacted with ${args.emoji}` }] };
+  },
+);
+
+server.tool(
+  'ask_question',
+  `Ask the user a question and persist it to the host's pending_questions table.
+
+Use this when you need explicit input from the user before continuing — confirmations, multiple-choice picks, free-form prompts. Provide a clear question and (for multiple choice) an array of options. Each option may be a plain string used as both label and value, or an object { label, selectedLabel?, value? } where selectedLabel is shown on the card after the user clicks.
+
+Phase 4D D4 status: this is currently fire-and-forget — the host persists the question, but card delivery to the chat and routing the user's answer back to you are deferred to D6. The tool returns the question_id immediately. Until D6 lands, treat the question as queued: you won't receive an answer in this tool call. Do not block on it.`,
+  askQuestionInputSchema,
+  async (args) => {
+    const payload = buildAskQuestionPayload(args, { groupFolder });
+    const filename = writeIpcFile(TASKS_DIR, payload);
+    const optCount = payload.options.length;
+    const summary = optCount > 0 ? `${optCount} option(s)` : 'free-form';
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            `Question queued (id: ${payload.questionId}, ${summary}, ipc: ${filename}). ` +
+            'NOTE: D4 only persists the question; card delivery and answer round-trip will land in D6, ' +
+            'so you will not receive a response from this tool call.',
+        },
+      ],
+    };
   },
 );
 
