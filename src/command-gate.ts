@@ -17,6 +17,11 @@ const ADMIN_COMMANDS = new Set<string>([
   '/register-group',
   '/delete-group',
   '/restart',
+  // Phase 5D: soft-pause / resume the host. Layered on top of the existing
+  // GroupQueue.emergencyStop kill-now path — see src/lifecycle.ts and
+  // src/lifecycle-handlers.ts.
+  '/pause',
+  '/resume',
 ]);
 
 export function isAdminCommand(text: string): boolean {
