@@ -120,7 +120,30 @@ cmd_status() {
 
 cmd_logs() {
   LOG="$PROJECT_ROOT/logs/nanotars.log"
-  [ -f "$LOG" ] || { log_warn "$LOG not yet present — service may not have started"; exit 0; }
+  ERR="$PROJECT_ROOT/logs/nanotars.error.log"
+
+  # If main log doesn't exist yet, fall through to error-log diagnostics.
+  if [ ! -f "$LOG" ] && [ ! -f "$ERR" ]; then
+    log_warn "$LOG not present — service may not have started"
+    exit 0
+  fi
+
+  # If main log is empty but error log has content, the service crashed
+  # before producing any normal output. Show the error log instead.
+  if [ ! -s "$LOG" ] && [ -f "$ERR" ] && [ -s "$ERR" ]; then
+    log_warn "$LOG is empty; service likely crashed at start. Last 30 lines of $ERR:"
+    echo "----------------------------------------------------------------"
+    tail -n 30 "$ERR"
+    echo "----------------------------------------------------------------"
+    if [ -f "$PIDFILE" ]; then
+      PID="$(cat "$PIDFILE" 2>/dev/null || echo "")"
+      if [ -n "$PID" ] && ! kill -0 "$PID" 2>/dev/null; then
+        log_warn "PID $PID in $PIDFILE is no longer running. Run: bash nanotars.sh start"
+      fi
+    fi
+    exit 0
+  fi
+
   tail -f "$LOG"
 }
 
