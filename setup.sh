@@ -208,53 +208,6 @@ else
   log_info "OneCLI not detected — to enable the credential vault later, open Claude Code in this directory and run /init-onecli"
 fi
 
-# --- Post-install banner + onboarding ---
-
-log_step "Setup complete"
-
-if [ "$SERVICE_LIVE" = "true" ]; then
-  SERVICE_LINE="Service:  $SERVICE_MANAGER (running)"
-else
-  SERVICE_LINE="Service:  $SERVICE_MANAGER (NOT running — see logs/nanotars.error.log)"
-fi
-
-PATH_HINT=
-if [ -n "$PATH_RC_TO_SOURCE" ]; then
-  PATH_HINT="
-    First — pick up the new PATH for the 'nanotars' command:
-      source $PATH_RC_TO_SOURCE
-    (or just open a new shell)
-"
-fi
-
-cat <<EOF
-
-  ================================================================
-    nanotars setup complete
-  ================================================================
-
-    Install:  $PROJECT_ROOT
-    $SERVICE_LINE
-${PATH_HINT}
-  ─── Next: bootstrap your first agent ────────────────────────────
-
-    1. Open Claude in the install dir:
-         nanotars
-
-    2. Inside Claude, run:
-         /nanotars-setup
-       (Reads data/onboarding.json — your name + channel picks — and
-       walks through channel install, auth, wiring, and verification.)
-
-    3. (Optional) Tune personality:  groups/main/IDENTITY.md
-       (Optional) OneCLI vault:      /init-onecli (inside Claude)
-
-    Service control:  nanotars start | stop | restart | status | logs
-    Logs:             $PROJECT_ROOT/logs/nanotars.log
-EOF
-
-EOF
-
 # --- Install user wrapper: ~/.local/bin/nanotars ---
 
 WRAPPER_DIR="$HOME/.local/bin"
@@ -389,5 +342,49 @@ if command -v claude >/dev/null 2>&1; then
 else
   log_info "claude CLI not on PATH — install Claude Code, then run: claude plugin marketplace add $DEFAULT_MARKETPLACE"
 fi
+
+# --- Post-install banner ---
+
+if [ "$SERVICE_LIVE" = "true" ]; then
+  SERVICE_LINE="Service:  $SERVICE_MANAGER (running)"
+else
+  SERVICE_LINE="Service:  $SERVICE_MANAGER (NOT running — see logs/nanotars.error.log)"
+fi
+
+PATH_HINT=
+if [ -n "${PATH_RC_TO_SOURCE:-}" ]; then
+  PATH_HINT="
+    First — pick up the new PATH for the 'nanotars' command:
+      source $PATH_RC_TO_SOURCE
+    (or just open a new shell)
+"
+fi
+
+cat <<EOF
+
+  ================================================================
+    nanotars setup complete
+  ================================================================
+
+    Install:  $PROJECT_ROOT
+    $SERVICE_LINE
+${PATH_HINT}
+  ─── Next: bootstrap your first agent ────────────────────────────
+
+    1. Open Claude in the install dir:
+         nanotars
+
+    2. Inside Claude, run:
+         /nanotars-setup
+       (Reads data/onboarding.json — your name + channel picks — and
+       walks through channel install, auth, wiring, and verification.)
+
+    3. (Optional) Tune personality:  groups/main/IDENTITY.md
+       (Optional) OneCLI vault:      /init-onecli (inside Claude)
+
+    Service control:  nanotars start | stop | restart | status | logs
+    Logs:             $PROJECT_ROOT/logs/nanotars.log
+
+EOF
 
 log_info "setup.sh finished cleanly"
