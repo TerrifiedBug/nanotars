@@ -142,6 +142,13 @@ export async function processTaskIpc(
     // Phase 5E: create_agent optional instructions (CLAUDE.md content for
     // the new agent). `name` and `folder` reuse the existing fields above.
     instructions?: string | null;
+    // Phase 5C: install_packages payload fields. Validated in the handler.
+    apt?: unknown;
+    npm?: unknown;
+    // Phase 5C: add_mcp_server payload fields. `name` reused from above.
+    command?: unknown;
+    args?: unknown;
+    env?: unknown;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -384,6 +391,82 @@ export async function processTaskIpc(
           isMain,
         },
         undefined,
+      );
+      break;
+    }
+
+    case 'install_packages': {
+      // Phase 5C: agent-initiated package install request. Host validates,
+      // queues an admin approval card via the 4C primitive, and (on approve)
+      // mutates container_config + rebuilds the per-group image (5B) +
+      // restarts the container (5C-04).
+      //
+      // No senderUserId threading on this path (same gap as
+      // lifecycle-handlers.ts / create-agent.ts). The approval click-router
+      // (Phase 4D D7) is the gate that enforces admin policy.
+      const { handleInstallPackagesRequest } = await import(
+        '../permissions/install-packages.js'
+      );
+      const apt = Array.isArray((data as { apt?: unknown }).apt)
+        ? ((data as { apt: unknown[] }).apt.filter(
+            (x) => typeof x === 'string',
+          ) as string[])
+        : [];
+      const npm = Array.isArray((data as { npm?: unknown }).npm)
+        ? ((data as { npm: unknown[] }).npm.filter(
+            (x) => typeof x === 'string',
+          ) as string[])
+        : [];
+      const reason =
+        typeof (data as { reason?: unknown }).reason === 'string'
+          ? ((data as { reason: string }).reason)
+          : '';
+      await handleInstallPackagesRequest(
+        {
+          apt,
+          npm,
+          reason,
+          groupFolder: sourceGroup,
+        },
+        '',
+      );
+      break;
+    }
+
+    case 'add_mcp_server': {
+      // Phase 5C: agent-initiated MCP-server wire request. Same shape as
+      // install_packages but no image rebuild — agent-runner reads
+      // mcpServers from container_config at spawn time.
+      const { handleAddMcpServerRequest } = await import(
+        '../permissions/add-mcp-server.js'
+      );
+      const args = Array.isArray((data as { args?: unknown }).args)
+        ? ((data as { args: unknown[] }).args.filter(
+            (x) => typeof x === 'string',
+          ) as string[])
+        : [];
+      const env =
+        typeof (data as { env?: unknown }).env === 'object' &&
+        (data as { env?: unknown }).env !== null &&
+        !Array.isArray((data as { env?: unknown }).env)
+          ? Object.fromEntries(
+              Object.entries((data as { env: Record<string, unknown> }).env)
+                .filter(([, v]) => typeof v === 'string')
+                .map(([k, v]) => [k, v as string]),
+            )
+          : {};
+      await handleAddMcpServerRequest(
+        {
+          name: typeof data.name === 'string' ? data.name : '',
+          command:
+            typeof (data as { command?: unknown }).command === 'string'
+              ? ((data as { command: string }).command)
+              : '',
+          args,
+          env,
+          groupFolder: sourceGroup,
+        },
+        '',
       );
       break;
     }

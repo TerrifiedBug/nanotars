@@ -57,6 +57,8 @@ import { formatMessages, routeOutbound, routeOutboundFile, stripInternalTags } f
 import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
 import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
+import { registerAddMcpServerHandler } from './permissions/add-mcp-server.js';
+import { registerInstallPackagesHandler } from './permissions/install-packages.js';
 import { startOneCLIBridge, stopOneCLIBridge } from './permissions/onecli-bridge.js';
 import { setReplayHook } from './permissions/approval-replay.js';
 import { setApprovalFallbackSender } from './permissions/approval-delivery.js';
@@ -132,6 +134,14 @@ async function main(): Promise<void> {
   // initial sweep + a 60s unref'd interval so cards that age out mid-run
   // also get reaped without keeping the event loop alive.
   startApprovalExpiryPoll();
+
+  // Phase 5C: register self-mod approval handlers so the click-router
+  // (Phase 4D D7) can render + dispatch install_packages / add_mcp_server
+  // approvals. 5C-03 only registers the `render` half; 5C-04 extends the
+  // registration to inject buildImage/restartGroup deps and wire
+  // applyDecision (mutate config + rebuild + restart on approve).
+  registerInstallPackagesHandler();
+  registerAddMcpServerHandler();
 
   // Phase 4C C6: OneCLI manual-approval bridge. Long-polls the gateway for
   // credentialed-action approval requests, persists them via the C2
