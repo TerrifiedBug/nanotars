@@ -9,6 +9,22 @@ Run all commands automatically. Only pause when user action is required (channel
 
 **UX Note:** When asking the user questions, prefer using the `AskUserQuestion` tool instead of just outputting text. This integrates with Claude's built-in question/answer system for a better experience.
 
+## 0a. Read onboarding selections (if present)
+
+`setup.sh` may have already collected the user's name + initial channel picks during shell-side onboarding. If `data/onboarding.json` exists, load it and use those values as defaults — don't re-ask.
+
+```bash
+if [ -f data/onboarding.json ]; then
+  cat data/onboarding.json
+fi
+```
+
+If the file exists and has `name` set: greet the user by that name on first message. Don't re-prompt for it.
+
+If the file has `channels` populated: that's the user's pre-picked channel install list. Skip the channel-discovery prompt in section 5b and proceed to install + authenticate each channel in order. After each channel is authenticated, move on to the next one. After all picked channels are done, ask the user which one to wire as the **main** channel for their first agent group.
+
+If `data/onboarding.json` is missing or empty: proceed with the normal interactive flow (sections 0+ below).
+
 ## 0. Detect Existing Setup
 
 Before doing anything, check what's already configured:
