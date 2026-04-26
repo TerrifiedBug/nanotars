@@ -1,0 +1,10 @@
+# Root package only. container/agent-runner/ is intentionally NOT a workspace
+# member — it has its own package-lock.json and is installed inside the agent
+# container by the Dockerfile's npm install step.
+packages: []
+
+onlyBuiltDependencies:
+  - better-sqlite3
+
+pnpm:
+  minimumReleaseAge: 4320
