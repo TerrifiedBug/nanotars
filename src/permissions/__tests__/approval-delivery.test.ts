@@ -26,10 +26,12 @@ import {
 } from '../approval-primitive.js';
 import {
   clearApprovalDeliverers,
+  clearApprovalFallbackSender,
   deliverApprovalCard,
   deliverApprovalCardAsText,
   getApprovalDeliverer,
   registerApprovalDeliverer,
+  setApprovalFallbackSender,
   type ApprovalCard,
 } from '../approval-delivery.js';
 import {
@@ -45,6 +47,7 @@ beforeEach(() => {
   _initTestDatabase();
   clearApprovalHandlers();
   clearApprovalDeliverers();
+  clearApprovalFallbackSender();
 });
 
 const SAMPLE_CARD: ApprovalCard = {
@@ -169,6 +172,40 @@ describe('deliverApprovalCard (dispatcher)', () => {
   it('fully fails (delivered:false) when no adapter and no fallback', async () => {
     const result = await deliverApprovalCard(SAMPLE_CARD, {});
     expect(result.delivered).toBe(false);
+  });
+
+  it('uses the module-level fallback sender when no options.fallbackSendMessage is provided', async () => {
+    const moduleSender = vi.fn(async (_channel_type: string, _platform_id: string, _text: string) => undefined);
+    setApprovalFallbackSender(moduleSender);
+
+    const result = await deliverApprovalCard(SAMPLE_CARD);
+
+    expect(result.delivered).toBe(true);
+    expect(moduleSender).toHaveBeenCalledTimes(1);
+    const [channel_type, platform_id] = moduleSender.mock.calls[0];
+    expect(channel_type).toBe('telegram');
+    expect(platform_id).toBe('tg-chat-1');
+  });
+
+  it('returns no-adapter-no-fallback when module-level fallback is cleared', async () => {
+    // clearApprovalFallbackSender was already called in beforeEach — no sender set
+    const result = await deliverApprovalCard(SAMPLE_CARD);
+    expect(result.delivered).toBe(false);
+    expect(result.error).toBe('no-sendMessage');
+  });
+
+  it('options.fallbackSendMessage takes precedence over module-level fallback', async () => {
+    const moduleSender = vi.fn(async () => undefined);
+    const perCallSender = vi.fn(async () => undefined);
+    setApprovalFallbackSender(moduleSender);
+
+    const result = await deliverApprovalCard(SAMPLE_CARD, {
+      fallbackSendMessage: perCallSender,
+    });
+
+    expect(result.delivered).toBe(true);
+    expect(perCallSender).toHaveBeenCalledTimes(1);
+    expect(moduleSender).not.toHaveBeenCalled();
   });
 
   it('persists platform_message_id from the adapter to pending_approvals', async () => {

@@ -23,6 +23,31 @@
 import { getDb } from '../db/init.js';
 import { logger } from '../logger.js';
 
+// ── Module-level fallback sender ──────────────────────────────────────────
+//
+// Mirrors the setReplayHook pattern in approval-replay.ts. Wired at startup
+// from index.ts so that deliverApprovalCard always has a plain-text path even
+// when no per-channel ApprovalCardDeliverer has been registered and no
+// per-call options.fallbackSendMessage was supplied.
+
+type FallbackSendMessage = (channel_type: string, platform_id: string, text: string) => Promise<string | undefined>;
+
+let fallbackSender: FallbackSendMessage | undefined;
+
+/**
+ * Wire the host's outbound message-send function as the plain-text
+ * fallback for approval-card delivery. Called from index.ts at startup,
+ * mirroring setReplayHook. Mostly used when no per-channel adapter has
+ * registered an ApprovalCardDeliverer.
+ */
+export function setApprovalFallbackSender(sender: FallbackSendMessage): void {
+  fallbackSender = sender;
+}
+
+export function clearApprovalFallbackSender(): void {
+  fallbackSender = undefined;
+}
+
 /**
  * Card payload — common surface every adapter must accept, even if it
  * downgrades to plain text when the channel doesn't support buttons.
@@ -173,8 +198,15 @@ export async function deliverApprovalCard(
     }
   }
 
-  // Plain-text fallback.
-  const fallback = await deliverApprovalCardAsText(card, options.fallbackSendMessage);
+  // Plain-text fallback: prefer explicit per-call option, fall back to
+  // the module-level sender wired at startup (setApprovalFallbackSender).
+  let plainTextSender = options.fallbackSendMessage;
+  if (!plainTextSender && fallbackSender) {
+    const moduleSender = fallbackSender;
+    plainTextSender = (jid, text) => moduleSender(card.channel_type, jid, text).then(() => undefined);
+  }
+
+  const fallback = await deliverApprovalCardAsText(card, plainTextSender);
   if (fallback.delivered && persist && fallback.platform_message_id) {
     persistPlatformMessageId(card.approval_id, fallback.platform_message_id);
   }

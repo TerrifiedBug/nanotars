@@ -59,12 +59,14 @@ import { logger } from './logger.js';
 import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
 import { startOneCLIBridge, stopOneCLIBridge } from './permissions/onecli-bridge.js';
 import { setReplayHook } from './permissions/approval-replay.js';
+import { setApprovalFallbackSender } from './permissions/approval-delivery.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
 import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
 import { MessageOrchestrator } from './orchestrator.js';
 import { isSenderAllowed, loadSenderAllowlist, shouldDropMessage } from './sender-allowlist.js';
 import type { ChannelPluginConfig, PluginContext } from './plugin-types.js';
+import type { Channel } from './types.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -153,6 +155,29 @@ async function main(): Promise<void> {
       replay.sender_name ?? replay.sender_handle,
       replay.message_text,
     );
+  });
+
+  // Phase 4D D7-H1: wire the host's outbound channel-send as the global
+  // plain-text fallback for approval-card delivery. Mirrors setReplayHook.
+  // options.fallbackSendMessage on individual deliverApprovalCard calls still
+  // takes precedence; this is the guaranteed baseline when no per-channel
+  // ApprovalCardDeliverer has been registered.
+  //
+  // Note: `channels` is populated after this block (channel plugins initialize
+  // later in main()). The closure captures the array reference, so cards
+  // delivered after channels are connected will find the right adapter.
+  // Cards delivered before channels are up (unlikely in normal flow) will
+  // log a warning and return platform_message_id = undefined, which is
+  // acceptable — the approval row still lands in pending_approvals.
+  const channels: Channel[] = [];
+  setApprovalFallbackSender(async (channel_type, platform_id, text) => {
+    const adapter = channels.find((ch) => ch.name === channel_type);
+    if (!adapter) {
+      logger.warn({ channel_type }, 'No channel adapter for approval-card fallback');
+      return undefined;
+    }
+    await adapter.sendMessage(platform_id, text);
+    return undefined; // platform_message_id tracking is follow-on work
   });
 
   const orchestrator = new MessageOrchestrator({
@@ -266,8 +291,8 @@ async function main(): Promise<void> {
     getRecentMessages: (jid, limit) => getRecentMessages(jid, limit ?? 50),
   };
 
-  // Initialize channel plugins
-  const channels = [];
+  // Initialize channel plugins — populate the `channels` array declared above
+  // (also shared with the setApprovalFallbackSender closure).
   for (const plugin of plugins.getChannelPlugins()) {
     const channelConfig: ChannelPluginConfig = {
       onMessage: async (chatJid, msg) => {
