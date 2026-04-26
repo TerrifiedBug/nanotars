@@ -6,6 +6,34 @@
   A personal Claude assistant built on <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a>. Multi-channel, plugin-based, container-isolated.
 </p>
 
+## Install
+
+**One-liner (macOS or Linux):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TerrifiedBug/nanotars/v1-archive/install.sh | bash
+```
+
+This clones into `$HOME/nanotars` (override with `NANOTARS_DIR`), installs Node 22 + pnpm + verifies Docker, builds the agent container, writes a launchd plist (macOS) or systemd-user unit (Linux), and starts the service.
+
+**Manual install:**
+
+```bash
+git clone -b v1-archive https://github.com/TerrifiedBug/nanotars.git
+cd nanotars
+bash setup.sh
+```
+
+**After install — manage the service:**
+
+```bash
+bash nanotars.sh status     # health check
+bash nanotars.sh logs       # tail logs
+bash nanotars.sh restart    # restart
+```
+
+**Bootstrap the first agent:** open a Claude Code session in the install directory and run `/nanoclaw-setup`.
+
 ## What This Is
 
 A heavily customized fork of [NanoClaw](https://github.com/qwibitai/nanoclaw) — a lightweight Claude assistant that runs agents in Linux containers. This fork adds a plugin architecture, multi-channel support, Docker/Linux hosting, security hardening, an admin dashboard, agent teams, and a [skills marketplace](https://github.com/TerrifiedBug/nanoclaw-skills) with 27 installable integrations. The core philosophy remains: small enough to understand, secure by OS-level isolation.
@@ -149,6 +177,21 @@ Then run `/nanoclaw-setup`. Claude handles dependencies, authentication, contain
 ## Credits
 
 Built on [NanoClaw](https://github.com/qwibitai/nanoclaw) by [qwibitai](https://github.com/qwibitai). See [docs/CHANGES.md](docs/CHANGES.md) for the full fork changelog.
+
+## Uninstall
+
+```bash
+# macOS
+launchctl unload ~/Library/LaunchAgents/com.nanotars.plist 2>/dev/null
+rm -f ~/Library/LaunchAgents/com.nanotars.plist
+rm -rf "${NANOTARS_DIR:-$HOME/nanotars}"
+
+# Linux
+systemctl --user disable --now nanotars 2>/dev/null
+rm -f ~/.config/systemd/user/nanotars.service
+systemctl --user daemon-reload
+rm -rf "${NANOTARS_DIR:-$HOME/nanotars}"
+```
 
 ## License
 
