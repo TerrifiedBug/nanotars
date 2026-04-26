@@ -25,6 +25,12 @@ import {
   buildCreateAgentPayload,
   createAgentInputSchema,
 } from './mcp-tools/create-agent.js';
+import {
+  addMcpServerInputSchema,
+  buildAddMcpServerPayload,
+  buildInstallPackagesPayload,
+  installPackagesInputSchema,
+} from './mcp-tools/self-mod.js';
 
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
@@ -577,6 +583,80 @@ Same admin re-validation rules as \`emergency_stop\` apply.`,
     const payload = buildResumeProcessingPayload(args, { groupFolder, isMain });
     writeIpcFile(TASKS_DIR, payload);
     return { content: [{ type: 'text' as const, text: 'Resume request submitted.' }] };
+  },
+);
+
+// Phase 5C: self-modification — install_packages + add_mcp_server.
+// Both are fire-and-forget; host queues an admin approval card via the 4C
+// primitive and (on approve) mutates container_config + (for install_packages)
+// rebuilds the per-group image and restarts. Decision is delivered back via
+// `notifyAgent` (5C-05).
+server.tool(
+  'install_packages',
+  `Request that the host install apt and/or npm packages into THIS agent group's
+container image. Requires admin approval. Fire-and-forget — the result is
+delivered back via a system message after the admin approves or rejects.
+
+Validation (defense-in-depth — host re-validates):
+- apt names: lowercase alphanumeric, may include . _ + -. No version specs.
+- npm names: optional @scope/, then lowercase alphanumeric with . _ -. No version specs.
+- Max ${20} packages per call (apt + npm combined).
+- At least one of apt / npm must be non-empty.
+
+After approval, the host rebuilds the per-agent-group image and restarts your
+container. You will be notified once packages are live.`,
+  installPackagesInputSchema,
+  async (args) => {
+    const result = buildInstallPackagesPayload(args, { groupFolder, isMain });
+    if (!result.ok) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+        isError: true,
+      };
+    }
+    writeIpcFile(TASKS_DIR, result.payload);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'Package install request submitted. You will be notified when admin approves or rejects.',
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  'add_mcp_server',
+  `Request that the host wire an EXISTING MCP server into your runtime config.
+Requires admin approval. Fire-and-forget.
+
+You must already know the exact command + args (e.g. \`npx -y @some/mcp\` or
+\`/usr/local/bin/my-mcp\`). Allowed commands (host-enforced): \`npx\`, \`node\`,
+\`python\`, \`python3\`, \`bash\`, or absolute paths under \`/usr/local/bin/\` or
+\`/workspace/\`.
+
+After approval the host updates \`container_config.mcpServers[name]\` and
+restarts your container so the new server is loaded on next spawn. You will be
+notified once it is live.`,
+  addMcpServerInputSchema,
+  async (args) => {
+    const result = buildAddMcpServerPayload(args, { groupFolder, isMain });
+    if (!result.ok) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+        isError: true,
+      };
+    }
+    writeIpcFile(TASKS_DIR, result.payload);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'MCP server request submitted. You will be notified when admin approves or rejects.',
+        },
+      ],
+    };
   },
 );
 
