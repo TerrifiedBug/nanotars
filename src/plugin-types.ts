@@ -73,6 +73,37 @@ export interface ChannelPluginConfig {
     setLastGroupSync(): void;
     updateChatName(jid: string, name: string): void;
   };
+  /**
+   * Cross-channel pairing-codes primitive.
+   *
+   * Channel plugins call `consumePendingCode` from their inbound handler
+   * BEFORE delivering a message to the agent — when the message text is
+   * (or contains) a 4-digit pairing code, this short-circuits the inbound
+   * path and returns `{ matched: true, intent }`. The plugin then sends
+   * a confirmation back to the chat instead of forwarding to the agent.
+   *
+   * `createPendingCode` is the operator-facing side, used by setup flows
+   * and admin slash-commands like `/pair-telegram` to allocate a code.
+   *
+   * Both fields are optional — channels that don't use pairing leave
+   * them unwired.
+   */
+  createPendingCode?: (req: {
+    channel: string;
+    intent: string | Record<string, unknown>;
+  }) => Promise<{ code: string; created_at: string; expires_at: string | null }>;
+  consumePendingCode?: (req: {
+    code: string;
+    channel: string;
+    sender?: string | null;
+    platformId: string;
+    isGroup?: boolean;
+    name?: string | null;
+    candidate?: string;
+  }) => Promise<
+    | { matched: true; intent: string | Record<string, unknown> }
+    | { matched: false; invalidated: boolean }
+  >;
 }
 
 /** API surface available to plugins */
