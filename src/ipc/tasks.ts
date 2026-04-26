@@ -139,6 +139,9 @@ export async function processTaskIpc(
     message_out_id?: string;
     // Phase 5D: emergency_stop / resume_processing optional reason
     reason?: string;
+    // Phase 5E: create_agent optional instructions (CLAUDE.md content for
+    // the new agent). `name` and `folder` reuse the existing fields above.
+    instructions?: string | null;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -377,6 +380,32 @@ export async function processTaskIpc(
       await handleResumeProcessing(
         {
           reason: typeof data.reason === 'string' ? data.reason : undefined,
+          groupFolder: sourceGroup,
+          isMain,
+        },
+        undefined,
+      );
+      break;
+    }
+
+    case 'create_agent': {
+      // Phase 5E: admin-only agent provisioning. The container-side MCP tool
+      // is registered only when NANOCLAW_IS_ADMIN=1; the host re-validates
+      // here as defense in depth. Sender threading on this IPC path is
+      // incomplete in v1-archive (same gap as lifecycle-handlers.ts), so the
+      // handler falls back to the isMain heuristic when senderUserId is
+      // undefined.
+      const { handleCreateAgent } = await import(
+        '../permissions/create-agent.js'
+      );
+      await handleCreateAgent(
+        {
+          name: typeof data.name === 'string' ? data.name : '',
+          instructions:
+            typeof (data as { instructions?: unknown }).instructions === 'string'
+              ? ((data as { instructions: string }).instructions)
+              : null,
+          folder: typeof data.folder === 'string' ? data.folder : null,
           groupFolder: sourceGroup,
           isMain,
         },
