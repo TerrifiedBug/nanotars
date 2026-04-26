@@ -244,6 +244,10 @@ async function main(): Promise<void> {
         await channel.react(jid, messageId, emoji, meta?.sender, meta?.isFromMe);
       }
     },
+    setTyping: async (jid) => {
+      const channel = orchestrator.channels.find((c) => c.ownsJid(jid) && c.isConnected());
+      if (channel?.setTyping) await channel.setTyping(jid);
+    },
     queue,
     assistantName: ASSISTANT_NAME,
     mainGroupFolder: MAIN_GROUP_FOLDER,

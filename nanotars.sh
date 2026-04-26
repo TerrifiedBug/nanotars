@@ -67,7 +67,18 @@ cmd_stop() {
     nohup)
       if [ -f "$PIDFILE" ]; then
         PID="$(cat "$PIDFILE" 2>/dev/null || echo "")"
-        [ -n "$PID" ] && kill "$PID" 2>/dev/null || true
+        if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+          kill "$PID" 2>/dev/null || true
+          # Wait for graceful shutdown — the host writes data/host.pid as an
+          # in-process pidlock and only releases it on real exit. Restarting
+          # too fast races the new node against that lock and exits with
+          # "Another NanoClaw process is already running". 30s covers
+          # container shutdown (kill containers + write final state).
+          for _ in $(seq 1 30); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 1
+          done
+        fi
         rm -f "$PIDFILE"
       fi
       ;;

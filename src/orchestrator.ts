@@ -117,6 +117,8 @@ export interface OrchestratorDeps {
 
   // Reactions
   react?: (jid: string, messageId: string, emoji: string) => Promise<void>;
+  // Typing indicator (Telegram sendChatAction, etc.) — best-effort.
+  setTyping?: (jid: string) => Promise<void>;
 
   // Events
   dbEvents: EventEmitter;
@@ -621,6 +623,17 @@ export class MessageOrchestrator {
       this.deps.react(chatJid, lastTriggerMessageId, '\u{1F440}').catch(() => {});
     }
 
+    // Typing indicator — kick off and refresh every 4s while the agent
+    // runs. Telegram's typing fades after ~5s, so a single shot is too short
+    // for any non-trivial reply. Cleared in the finally below.
+    let typingInterval: NodeJS.Timeout | undefined;
+    if (this.deps.setTyping) {
+      const fire = () => this.deps.setTyping?.(chatJid).catch(() => {});
+      fire();
+      typingInterval = setInterval(fire, 4000);
+      if (typeof typingInterval.unref === 'function') typingInterval.unref();
+    }
+
     let hadError = false;
     let outputSentToUser = false;
     let authErrorNotified = false;
@@ -667,6 +680,7 @@ export class MessageOrchestrator {
     });
 
     if (idleTimer) clearTimeout(idleTimer);
+    if (typingInterval) clearInterval(typingInterval);
 
     if (output === 'error' || hadError) {
       if (lastTriggerMessageId && this.deps.react) {

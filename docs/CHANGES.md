@@ -947,3 +947,18 @@ Host-process hooks (archetype 3) and container hooks (archetype 4) cannot be cre
 - **`src/orchestrator.ts`** — failure-state Telegram reaction `❌` (`U+274C`) replaced with `🤡` (`U+1F921`). Telegram bot accounts are restricted to a fixed allowlist of reaction emojis; `❌` was rejected with `REACTION_INVALID`.
 - **`container/skills/agent-browser/`** — removed. The skill moved to `plugins/agent-browser/container-skills/` but the legacy copy was still present, causing Docker `Duplicate mount point: /workspace/.claude/skills/agent-browser` and blocking every container spawn.
 - **`src/cli/__tests__/pair-main.test.ts`** (new) — 9 tests covering seed, idempotence, channel auto-detect, single-channel default, malformed plugin.json, and explicit `--channel` arg.
+
+---
+
+## 19. Agent Runtime Behaviour Fixes
+
+After the bootstrap path landed (section 18) the first end-to-end test surfaced four runtime behaviour bugs on the agent side. They all traced back to the same `claude-md-compose.ts` symlink dangling — the agent never saw the global instructions or personality.
+
+### What changed
+
+- **`src/claude-md-compose.ts`** — `SHARED_CLAUDE_MD_CONTAINER_PATH` re-pointed from `/app/CLAUDE.md` (a half-finished v1→v2 migration target with no Dockerfile COPY and no runtime mount) to `/workspace/global/CLAUDE.md` (the host `groups/global/CLAUDE.md` mounted into every group). The agent's `@./.claude-shared.md` import now resolves to the rich global instructions instead of a dangling link. This single change resolves identity (TARS personality), skills awareness ("What You Can Do" section), and the meta-narrative leak (the `<internal>`-tag wrapping convention is documented there too).
+- **`container/agent-runner/src/index.ts`** — identity loading now concatenates `groups/global/IDENTITY.md` + per-group IDENTITY.md instead of preferring one over the other. The global TARS persona was being shadowed by a 92-byte per-group user-name stub. Also dropped the redundant `globalClaudeMd` system-prompt injection — the workspace path now carries it via `@./.claude-shared.md` and double-loading was wasted tokens.
+- **`src/types.ts` + `src/orchestrator.ts` + `src/index.ts`** — added `Channel.setTyping?(jid)` and a 4s-interval typing refresh in the orchestrator's run path. Telegram's `sendChatAction('typing')` fades after ~5s, so a single shot was too short for any non-trivial reply. Channels without a typing indicator leave the hook undefined.
+- **`plugins/channels/telegram/index.js`** (local copy — marketplace upstream PR pending) — implements `setTyping(jid)` via Grammy's `sendChatAction(numericId, 'typing')`.
+- **`nanotars.sh`** — `cmd_stop` (nohup branch) now waits up to 30s for the killed process to actually exit before returning. Prior behaviour returned immediately, so `cmd_restart` raced the new node against the old node's still-held `data/host.pid` lock and exited with "Another NanoClaw process is already running". 30s covers container shutdown.
+- **`.gitignore` + `groups/main/CLAUDE.md`** — stopped tracking the per-group CLAUDE.md. It's a runtime artifact: `composeGroupClaudeMd` rewrites it to a 3-line includes scaffold on every spawn, clobbering whatever was on disk. The file is now created on first spawn and ignored thereafter; the rich seed content lives in `groups/global/CLAUDE.md` as the single source of truth.

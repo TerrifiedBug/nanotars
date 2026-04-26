@@ -236,6 +236,17 @@ export interface Channel {
   extractReplyContext?(rawMessage: unknown): ReplyContext | null;
   sendFile?(jid: string, buffer: Buffer, mime: string, fileName: string, caption?: string): Promise<void>;
   react?(jid: string, messageId: string, emoji: string, participant?: string, fromMe?: boolean): Promise<void>;
+  /**
+   * Optional: surface "the bot is doing something" presence to the chat,
+   * e.g. Telegram's `sendChatAction('typing')` or WhatsApp presence updates.
+   *
+   * Channels that don't natively support an activity indicator should leave
+   * this undefined — the orchestrator's call site is best-effort. The hook
+   * is single-shot; on platforms where the indicator fades on a fixed timer
+   * (Telegram: ~5s), the orchestrator may re-call to keep it alive while
+   * an agent run is in flight.
+   */
+  setTyping?(jid: string): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;

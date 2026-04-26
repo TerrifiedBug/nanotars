@@ -461,26 +461,25 @@ async function runQuery(
   let messageCount = 0;
   let resultCount = 0;
 
-  // Load identity — per-group override or global fallback
-  let identity: string | undefined;
+  // Identity — combine the global personality (TARS) with the per-group
+  // overlay (e.g. user-name section setup wrote into groups/<folder>/IDENTITY.md).
+  // Earlier code preferred group OR global as a single file, so the rich
+  // global persona was hidden whenever any per-group stub existed.
   const groupIdentityPath = '/workspace/group/IDENTITY.md';
   const globalIdentityPath = '/workspace/global/IDENTITY.md';
-  const identityPath = fs.existsSync(groupIdentityPath)
-    ? groupIdentityPath
-    : globalIdentityPath;
-  identity = fs.existsSync(identityPath)
-    ? fs.readFileSync(identityPath, 'utf-8')
-    : undefined;
+  const globalIdentity = fs.existsSync(globalIdentityPath)
+    ? fs.readFileSync(globalIdentityPath, 'utf-8')
+    : '';
+  const groupIdentity = fs.existsSync(groupIdentityPath)
+    ? fs.readFileSync(groupIdentityPath, 'utf-8')
+    : '';
+  const identity = [globalIdentity, groupIdentity].filter(Boolean).join('\n\n') || undefined;
 
-  // Load global CLAUDE.md as additional system context (non-main groups only)
-  const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
-  let globalClaudeMd: string | undefined;
-  if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
-    globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
-  }
-
-  // Combine: identity first, then global instructions
-  const systemAppend = [identity, globalClaudeMd].filter(Boolean).join('\n\n');
+  // Global CLAUDE.md is reached via the workspace path:
+  // groups/<folder>/CLAUDE.md @-imports .claude-shared.md → /workspace/global/CLAUDE.md.
+  // The SDK auto-loads workspace CLAUDE.md, so injecting it again into the
+  // system prompt would double-load. Identity-only here.
+  const systemAppend = identity ?? '';
 
   // Discover additional directories mounted at /workspace/extra/*
   // These are passed to the SDK so their CLAUDE.md files are loaded automatically

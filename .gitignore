@@ -9,13 +9,17 @@ store/
 data/
 logs/
 
-# Groups - only track base CLAUDE.md files (not personal memory/data)
+# Groups - only track the *global* templates. groups/main/CLAUDE.md was
+# previously tracked but composeGroupClaudeMd rewrites it deterministically
+# on every spawn (3-line includes scaffold), clobbering the seed and showing
+# up as noise in `git status`. The agent never read the seed anyway — the
+# global CLAUDE.md is reached via the @./.claude-shared.md symlink to
+# /workspace/global/CLAUDE.md. Per-group CLAUDE.md is now a runtime artifact.
 groups/*
 !groups/main/
 !groups/global/
 groups/main/*
 groups/global/*
-!groups/main/CLAUDE.md
 !groups/global/CLAUDE.md
 !groups/global/IDENTITY.md
 

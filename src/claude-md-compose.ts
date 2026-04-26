@@ -2,7 +2,13 @@
  * CLAUDE.md composition for v1 registered groups.
  *
  * Regenerates groups/<folder>/CLAUDE.md at every spawn from:
- *   - shared base (container/CLAUDE.md mounted RO at /app/CLAUDE.md, symlinked)
+ *   - shared base — symlinked to /workspace/global/CLAUDE.md (the host
+ *     groups/global/CLAUDE.md is mounted there for every group). Holds the
+ *     fork-wide assistant instructions ("What You Can Do", task management
+ *     rules, etc.). The earlier /app/CLAUDE.md target was a half-finished
+ *     v1→v2 migration artifact — no Dockerfile COPY, no runtime mount —
+ *     so the @./.claude-shared.md import resolved to nothing and the agent
+ *     never saw the global instructions.
  *   - per-plugin skill fragments (plugins shipping container-skills/<name>/instructions.md
  *     OR container-skills/<name>/SKILL.md as a fallback — allows gradual convention migration)
  *   - per-group writable memory (CLAUDE.local.md, agent-owned)
@@ -20,7 +26,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const SHARED_CLAUDE_MD_CONTAINER_PATH = '/app/CLAUDE.md';
+const SHARED_CLAUDE_MD_CONTAINER_PATH = '/workspace/global/CLAUDE.md';
 const COMPOSED_HEADER =
   '<!-- Composed at spawn — do not edit. Edit CLAUDE.local.md for per-group content. -->';
 
