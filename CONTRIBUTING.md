@@ -66,3 +66,21 @@ Test your contribution by running it on a fresh clone before submitting. For plu
 - The installation skill runs to completion
 - The plugin loads without errors (`plugin-loader.ts` discovers it)
 - No hardcoded secrets (use `containerEnvVars` in `plugin.json`)
+
+## Maintaining Bundled Container Skills
+
+A few skills under `container/skills/` (currently `agent-browser`, `welcome`, `self-customize`) are derived from upstream `qwibitai/nanoclaw` v2 and adapted for v1's capability surface. To check for upstream improvements:
+
+```bash
+# Diff each bundled skill against v2's current version (no changes applied)
+bash scripts/sync-container-skills-from-v2.sh
+
+# Apply updates from v2 (review the diff first; v1-specific adaptations
+# may need to be re-applied to new content)
+bash scripts/sync-container-skills-from-v2.sh --apply
+
+# Just one skill at a time
+bash scripts/sync-container-skills-from-v2.sh --skill self-customize
+```
+
+If you have a local v2 checkout, set `V2_PATH=/path/to/nanoclaw-v2` to skip the clone.
