@@ -233,30 +233,44 @@ cat <<EOF
     Errors:   $PROJECT_ROOT/logs/nanotars.error.log
 
     Manage with:
-      bash nanotars.sh status     # health snapshot
-      bash nanotars.sh logs       # tail (or show error-log if main is empty)
-      bash nanotars.sh restart    # restart
-      bash nanotars.sh stop       # stop
+      nanotars status      # health snapshot
+      nanotars logs        # tail (or show error log if main is empty)
+      nanotars restart     # restart
+      nanotars stop        # stop
+
+      (or 'bash nanotars.sh <cmd>' if ~/.local/bin isn't on PATH yet)
 
   ─── Next: bootstrap your first agent ────────────────────────────
 
-    1. Open Claude Code in this directory:
-         cd $PROJECT_ROOT && claude
+    1. Open Claude Code (in the install dir) — just type:
+         nanotars
 
-    2. Run the setup skill:
+    2. From inside Claude, run the setup skill:
          /nanoclaw-setup
-       Walks through:
-         • Pick a chat channel (Telegram, Discord, Slack, WhatsApp, ...)
-         • Install the channel plugin (/add-<channel> if needed)
-         • Wire your first agent group to that channel
+       Reads data/onboarding.json (your name + channel picks) and
+       walks through:
+         • Install the picked channel plugin(s)
+         • Authenticate each channel
+         • Wire your first agent group to one channel
          • Verify the agent responds in chat
 
-    3. (Optional) Customize personality + instructions:
+    3. (Optional) Tune personality + instructions:
          $PROJECT_ROOT/groups/main/IDENTITY.md   # personality / soul
          $PROJECT_ROOT/groups/main/CLAUDE.md     # operational guidance
 
     4. (Optional) OneCLI credential vault for safer secrets:
          from inside Claude Code → /init-onecli
+
+  ─── Plugin scope tip ────────────────────────────────────────────
+
+    Skills bundled in this repo (.claude/skills/) are only visible when
+    you're in $PROJECT_ROOT.
+
+    Skills you '/plugin install' from a marketplace land in user-global
+    (~/.claude/plugins/) and will be visible in every Claude Code
+    session — including any other repos. If you're dual-running with
+    another nanoclaw-style project, prefer keeping nanotars-specific
+    skills bundled in this repo over user-global installs.
 
 EOF
 
