@@ -3,6 +3,14 @@ import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { _initTestDatabase, getDb } from '../db/init.js';
+import {
+  createAgentGroup,
+  createMessagingGroup,
+  getMessagingGroup,
+  getWiringForMessagingGroup,
+  resolveAgentsForInbound,
+} from '../db/agent-groups.js';
 import {
   _setStorePathForTest,
   createPendingCode,
@@ -178,6 +186,141 @@ describe('consumePendingCode', () => {
     ]);
     const matches = [a, b].filter((r) => r.matched).length;
     expect(matches).toBe(1);
+  });
+});
+
+describe('consumePendingCode → entity-model registration', () => {
+  beforeEach(() => {
+    _initTestDatabase();
+  });
+
+  it("intent='main' registers the chat against the main agent group", async () => {
+    const ag = createAgentGroup({ name: 'Main', folder: 'main' });
+    const { code } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:42',
+      isGroup: false,
+      name: 'Op chat',
+    });
+    expect(result.matched).toBe(true);
+    if (result.matched) {
+      expect(result.registered).not.toBeNull();
+      expect(result.registered?.agent_group_id).toBe(ag.id);
+      expect(result.registration_error).toBeUndefined();
+
+      // Entity-model rows actually exist + the next-message routing
+      // resolver returns the new agent group for this chat.
+      const mg = getMessagingGroup('telegram', 'tg:42');
+      expect(mg).toBeDefined();
+      expect(mg!.id).toBe(result.registered!.messaging_group_id);
+      expect(mg!.is_group).toBe(0);
+      expect(mg!.name).toBe('Op chat');
+
+      const wirings = getWiringForMessagingGroup(mg!.id);
+      expect(wirings).toHaveLength(1);
+      expect(wirings[0].agent_group_id).toBe(ag.id);
+
+      const resolved = resolveAgentsForInbound('telegram', 'tg:42');
+      expect(resolved).toHaveLength(1);
+      expect(resolved[0].agentGroup.id).toBe(ag.id);
+    }
+  });
+
+  it("intent={kind:'agent_group',target:<id>} registers against that specific agent group", async () => {
+    createAgentGroup({ name: 'Main', folder: 'main' });
+    const ag2 = createAgentGroup({ name: 'Coder', folder: 'coder' });
+    const { code } = await createPendingCode({
+      channel: 'telegram',
+      intent: { kind: 'agent_group', target: ag2.id },
+    });
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:99',
+      isGroup: true,
+      name: 'Coder Group',
+    });
+    expect(result.matched).toBe(true);
+    if (result.matched) {
+      expect(result.registered?.agent_group_id).toBe(ag2.id);
+      const mg = getMessagingGroup('telegram', 'tg:99');
+      expect(mg!.is_group).toBe(1);
+      const wirings = getWiringForMessagingGroup(mg!.id);
+      expect(wirings).toHaveLength(1);
+      expect(wirings[0].agent_group_id).toBe(ag2.id);
+    }
+  });
+
+  it('match without a main agent group returns matched=true, registered=null, registration_error', async () => {
+    // No agent groups created — main lookup will fail.
+    const { code } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:1',
+    });
+    expect(result.matched).toBe(true);
+    if (result.matched) {
+      expect(result.registered).toBeNull();
+      expect(result.registration_error).toMatch(/no main agent group/i);
+    }
+    // Code is still recorded as consumed (no rollback).
+    expect(getPendingCodeStatus(code).status).toBe('consumed');
+  });
+
+  it("intent={kind:'agent_group',target:'<missing>'} surfaces a registration error", async () => {
+    const { code } = await createPendingCode({
+      channel: 'telegram',
+      intent: { kind: 'agent_group', target: 'no-such-agent-id' },
+    });
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:7',
+    });
+    expect(result.matched).toBe(true);
+    if (result.matched) {
+      expect(result.registered).toBeNull();
+      expect(result.registration_error).toMatch(/agent group not found/i);
+    }
+  });
+
+  it('idempotent: pre-existing wiring for the chat is reused (no duplicate rows)', async () => {
+    const ag = createAgentGroup({ name: 'Main', folder: 'main' });
+    // Pre-seed the messaging_group + wiring as if /chatid had registered first.
+    const mg = createMessagingGroup({
+      channel_type: 'telegram',
+      platform_id: 'tg:55',
+      name: 'Pre-registered',
+    });
+    getDb()
+      .prepare(
+        `INSERT INTO messaging_group_agents
+           (id, messaging_group_id, agent_group_id, engage_mode, engage_pattern,
+            sender_scope, ignored_message_policy, session_mode, priority, created_at)
+         VALUES ('pre-wire', ?, ?, 'pattern', NULL, 'all', 'drop', 'shared', 0, ?)`,
+      )
+      .run(mg.id, ag.id, new Date().toISOString());
+
+    const { code } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:55',
+    });
+    expect(result.matched).toBe(true);
+    if (result.matched) {
+      expect(result.registered).not.toBeNull();
+      expect(result.registered?.messaging_group_id).toBe(mg.id);
+      expect(result.registered?.agent_group_id).toBe(ag.id);
+      expect(result.registration_error).toBeUndefined();
+      // Still exactly one wiring row.
+      const wirings = getWiringForMessagingGroup(mg.id);
+      expect(wirings).toHaveLength(1);
+      expect(wirings[0].id).toBe('pre-wire');
+    }
   });
 });
 

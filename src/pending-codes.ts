@@ -23,8 +23,17 @@
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR } from './config.js';
+import { DATA_DIR, MAIN_GROUP_FOLDER } from './config.js';
+import {
+  createMessagingGroup,
+  createWiring,
+  getAgentGroupByFolder,
+  getAgentGroupById,
+  getMessagingGroup,
+  getWiring,
+} from './db/agent-groups.js';
 import { logger } from './logger.js';
+import type { AgentGroup, MessagingGroup, MessagingGroupAgent } from './types.js';
 
 export type PairingIntent = string | Record<string, unknown>;
 
@@ -78,8 +87,25 @@ export interface ConsumePendingCodeInput {
   candidate?: string;
 }
 
+export interface PairingRegistration {
+  agent_group_id: string;
+  messaging_group_id: string;
+}
+
 export type ConsumePendingCodeResult =
-  | { matched: true; intent: PairingIntent; record: PendingCodeRecord }
+  | {
+      matched: true;
+      intent: PairingIntent;
+      record: PendingCodeRecord;
+      /**
+       * Entity-model rows created (or already-present) for this pairing. Null
+       * when registration could not complete — `registration_error` carries a
+       * short human-readable explanation in that case so the channel plugin
+       * can surface it instead of the default "✓ paired" message.
+       */
+      registered: PairingRegistration | null;
+      registration_error?: string;
+    }
   | { matched: false; invalidated: boolean };
 
 export interface PendingCodeStatus {
@@ -260,8 +286,131 @@ export async function consumePendingCode(
       { code: record.code, channel: record.channel, platformId: input.platformId, intent: record.intent },
       'Pending pairing code consumed',
     );
-    return { matched: true, intent: record.intent, record };
+
+    // Register the chat in the entity model so the next inbound message
+    // routes to the agent. Registration failures do NOT invalidate the
+    // consume — we still report matched: true and surface the error so
+    // the plugin can show a clearer message to the operator. Mirrors the
+    // existing IPC `register_group` path which calls the same accessors.
+    let registered: PairingRegistration | null = null;
+    let registrationError: string | undefined;
+    try {
+      registered = registerForIntent({
+        intent: record.intent,
+        channel: record.channel,
+        platformId: input.platformId,
+        name: input.name ?? null,
+        isGroup: input.isGroup ?? false,
+      });
+    } catch (err) {
+      registrationError = err instanceof Error ? err.message : String(err);
+      logger.warn(
+        {
+          code: record.code,
+          channel: record.channel,
+          platformId: input.platformId,
+          intent: record.intent,
+          err: registrationError,
+        },
+        'Pairing matched but entity-model registration failed',
+      );
+    }
+
+    if (registered) {
+      logger.info(
+        {
+          code: record.code,
+          channel: record.channel,
+          platformId: input.platformId,
+          intent: record.intent,
+          agent_group_id: registered.agent_group_id,
+          messaging_group_id: registered.messaging_group_id,
+        },
+        'Paired chat registered in entity model',
+      );
+    }
+
+    return {
+      matched: true,
+      intent: record.intent,
+      record,
+      registered,
+      registration_error: registrationError,
+    };
   });
+}
+
+/**
+ * Resolve the target agent_group from a pairing intent and persist the
+ * `messaging_groups` row + `messaging_group_agents` wiring so the next
+ * inbound message from `platformId` routes to that agent.
+ *
+ * Intent shapes accepted:
+ *   - 'main' (string)                           → register against the agent
+ *                                                 group with folder ===
+ *                                                 MAIN_GROUP_FOLDER
+ *   - { kind: 'agent_group', target: '<id>' }   → register against that
+ *                                                 specific agent group by id
+ *
+ * Throws on no-resolvable-agent-group or unknown intent shape so the caller
+ * can surface a helpful error to the operator.
+ *
+ * Idempotent: if a (messaging_group, agent_group) wiring already exists,
+ * returns the existing row pair instead of inserting duplicates.
+ */
+function registerForIntent(args: {
+  intent: PairingIntent;
+  channel: string;
+  platformId: string;
+  name: string | null;
+  isGroup: boolean;
+}): PairingRegistration {
+  const ag = resolveAgentGroupForIntent(args.intent);
+
+  let mg: MessagingGroup | undefined = getMessagingGroup(args.channel, args.platformId);
+  if (!mg) {
+    mg = createMessagingGroup({
+      channel_type: args.channel,
+      platform_id: args.platformId,
+      name: args.name,
+      is_group: args.isGroup ? 1 : 0,
+    });
+  }
+
+  let wiring: MessagingGroupAgent | undefined = getWiring(mg.id, ag.id);
+  if (!wiring) {
+    wiring = createWiring({
+      messaging_group_id: mg.id,
+      agent_group_id: ag.id,
+    });
+  }
+
+  return { agent_group_id: ag.id, messaging_group_id: mg.id };
+}
+
+function resolveAgentGroupForIntent(intent: PairingIntent): AgentGroup {
+  if (typeof intent === 'string') {
+    if (intent === 'main') {
+      const ag = getAgentGroupByFolder(MAIN_GROUP_FOLDER);
+      if (!ag) {
+        throw new Error(`no main agent group (folder='${MAIN_GROUP_FOLDER}')`);
+      }
+      return ag;
+    }
+    throw new Error(`unsupported pairing intent: ${intent}`);
+  }
+  if (intent && typeof intent === 'object') {
+    const kind = (intent as { kind?: unknown }).kind;
+    const target = (intent as { target?: unknown }).target;
+    if (kind === 'agent_group' && typeof target === 'string' && target.length > 0) {
+      const ag = getAgentGroupById(target);
+      if (!ag) {
+        throw new Error(`agent group not found: ${target}`);
+      }
+      return ag;
+    }
+  }
+  throw new Error(`unsupported pairing intent: ${JSON.stringify(intent)}`);
 }
 
 export function getPendingCodeStatus(code: string): PendingCodeStatus {

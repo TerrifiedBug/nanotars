@@ -101,7 +101,18 @@ export interface ChannelPluginConfig {
     name?: string | null;
     candidate?: string;
   }) => Promise<
-    | { matched: true; intent: string | Record<string, unknown> }
+    | {
+        matched: true;
+        intent: string | Record<string, unknown>;
+        /**
+         * Entity-model rows the host created (or already had) on this
+         * pairing match. Null when registration could not complete —
+         * `registration_error` carries the reason in that case so the
+         * plugin can surface it instead of the default success message.
+         */
+        registered?: { agent_group_id: string; messaging_group_id: string } | null;
+        registration_error?: string;
+      }
     | { matched: false; invalidated: boolean }
   >;
 }

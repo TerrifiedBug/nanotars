@@ -350,11 +350,22 @@ async function main(): Promise<void> {
       },
       // Cross-channel pairing-codes primitive — see src/pending-codes.ts.
       // Plugins call config.consumePendingCode(...) from their inbound
-      // handler before delivering messages to the agent.
+      // handler before delivering messages to the agent. On match, the
+      // primitive now also performs entity-model registration so the next
+      // inbound message in this chat routes to the agent — `registered`
+      // carries the row IDs (or null + `registration_error` if the DB
+      // write could not complete, e.g. no main agent group).
       createPendingCode: (req) => createPendingCode(req),
       consumePendingCode: async (req) => {
         const result = await consumePendingCode(req);
-        if (result.matched) return { matched: true, intent: result.intent };
+        if (result.matched) {
+          return {
+            matched: true,
+            intent: result.intent,
+            registered: result.registered,
+            registration_error: result.registration_error,
+          };
+        }
         return { matched: false, invalidated: result.invalidated };
       },
     };

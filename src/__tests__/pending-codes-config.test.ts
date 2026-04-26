@@ -12,6 +12,8 @@ import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { _initTestDatabase } from '../db/init.js';
+import { createAgentGroup, resolveAgentsForInbound } from '../db/agent-groups.js';
 import type { ChannelPluginConfig } from '../plugin-types.js';
 import {
   _setStorePathForTest,
@@ -22,6 +24,7 @@ import {
 let tmpDir: string;
 
 beforeEach(() => {
+  _initTestDatabase();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pending-codes-config-test-'));
   _setStorePathForTest(path.join(tmpDir, 'pending-codes.json'));
 });
@@ -37,7 +40,14 @@ function buildPairingCaps(): Pick<ChannelPluginConfig, 'createPendingCode' | 'co
     createPendingCode: (req) => createPendingCode(req),
     consumePendingCode: async (req) => {
       const result = await consumePendingCode(req);
-      if (result.matched) return { matched: true, intent: result.intent };
+      if (result.matched) {
+        return {
+          matched: true,
+          intent: result.intent,
+          registered: result.registered,
+          registration_error: result.registration_error,
+        };
+      }
       return { matched: false, invalidated: result.invalidated };
     },
   };
@@ -77,5 +87,45 @@ describe('ChannelPluginConfig pending-codes caps', () => {
     // Both are present & callable.
     expect(typeof caps.createPendingCode).toBe('function');
     expect(typeof caps.consumePendingCode).toBe('function');
+  });
+
+  it('end-to-end: create → consume → next inbound resolves an agent for the chat', async () => {
+    const ag = createAgentGroup({ name: 'Main', folder: 'main' });
+    const caps = buildPairingCaps();
+    const { code } = await caps.createPendingCode!({ channel: 'telegram', intent: 'main' });
+    const result = await caps.consumePendingCode!({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:202',
+      isGroup: false,
+      name: 'OperatorChat',
+    });
+    expect(result.matched).toBe(true);
+    if (result.matched) {
+      expect(result.registered?.agent_group_id).toBe(ag.id);
+      expect(result.registration_error).toBeUndefined();
+    }
+    // Without the Step A registration this would be []. With it, the
+    // routing resolver finds the new wiring and the next inbound message
+    // will be routed to the agent group.
+    const resolved = resolveAgentsForInbound('telegram', 'tg:202');
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].agentGroup.id).toBe(ag.id);
+  });
+
+  it('match without a main agent group surfaces registration_error to the plugin', async () => {
+    // No agent groups exist — match still happens, registration fails.
+    const caps = buildPairingCaps();
+    const { code } = await caps.createPendingCode!({ channel: 'telegram', intent: 'main' });
+    const result = await caps.consumePendingCode!({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:404',
+    });
+    expect(result.matched).toBe(true);
+    if (result.matched) {
+      expect(result.registered).toBeNull();
+      expect(result.registration_error).toMatch(/no main agent group/i);
+    }
   });
 });
