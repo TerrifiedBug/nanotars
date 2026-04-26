@@ -16,10 +16,15 @@
 
 import fs from 'fs';
 import path from 'path';
-import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
+import { HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 import { SECRET_ENV_VARS, createSanitizeBashHook, createSecretPathBlockHook } from './security-hooks.js';
 import { runScript } from './task-script.js';
+// Phase 5A: route the Claude SDK call through the provider seam.
+// Importing the barrel triggers self-registration of 'claude' (and 'mock').
+import './providers/index.js';
+import { createProvider, resolveProviderNameFromEnv } from './providers/factory.js';
+import type { ClaudeProviderExtras } from './providers/claude.js';
 
 interface ContainerInput {
   prompt: string;
@@ -52,13 +57,6 @@ interface SessionEntry {
 
 interface SessionsIndex {
   entries: SessionEntry[];
-}
-
-interface SDKUserMessage {
-  type: 'user';
-  message: { role: 'user'; content: string };
-  parent_tool_use_id: null;
-  session_id: string;
 }
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
@@ -114,41 +112,8 @@ for (const key of SECRET_ENV_VARS) {
   }
 }
 
-/**
- * Push-based async iterable for streaming user messages to the SDK.
- * Keeps the iterable alive until end() is called, preventing isSingleUserTurn.
- */
-class MessageStream {
-  private queue: SDKUserMessage[] = [];
-  private waiting: (() => void) | null = null;
-  private done = false;
-
-  push(text: string): void {
-    this.queue.push({
-      type: 'user',
-      message: { role: 'user', content: text },
-      parent_tool_use_id: null,
-      session_id: '',
-    });
-    this.waiting?.();
-  }
-
-  end(): void {
-    this.done = true;
-    this.waiting?.();
-  }
-
-  async *[Symbol.asyncIterator](): AsyncGenerator<SDKUserMessage> {
-    while (true) {
-      while (this.queue.length > 0) {
-        yield this.queue.shift()!;
-      }
-      if (this.done) return;
-      await new Promise<void>(r => { this.waiting = r; });
-      this.waiting = null;
-    }
-  }
-}
+// Phase 5A: the previous MessageStream class moved into ClaudeProvider; the
+// AgentQuery returned by provider.query(...) owns the push-based stream.
 
 async function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -454,9 +419,9 @@ function discoverAgents(): Record<string, AgentDefinition> {
 
 /**
  * Run a single query and stream results via writeOutput.
- * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
- * allowing agent teams subagents to run to completion.
- * Also pipes IPC messages into the stream during the query.
+ * Phase 5A: routed through the AgentProvider seam (provider.query returns
+ * an AgentQuery handle whose push-based stream replaces the old inline
+ * MessageStream). Also pipes IPC messages into the stream during the query.
  */
 async function runQuery(
   prompt: string,
@@ -466,25 +431,26 @@ async function runQuery(
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
-  const stream = new MessageStream();
-  stream.push(prompt);
-
-  // Poll IPC for follow-up messages and _close sentinel during the query
+  // Phase 5A: the provider seam owns the message-stream internally; v1 tracks
+  // close-during-query state and forwards IPC messages via q.push(...).
   let ipcPolling = true;
   let closedDuringQuery = false;
+  // The active AgentQuery handle is set just before we begin iterating its
+  // events; the IPC poll closes over a getter so we can construct it later.
+  let activeQuery: ReturnType<ReturnType<typeof createProvider>['query']> | null = null;
   const pollIpcDuringQuery = () => {
     if (!ipcPolling) return;
     if (shouldClose()) {
       log('Close sentinel detected during query, ending stream');
       closedDuringQuery = true;
-      stream.end();
+      activeQuery?.end();
       ipcPolling = false;
       return;
     }
     const messages = drainIpcInput();
     for (const text of messages) {
       log(`Piping IPC message into active query (${text.length} chars)`);
-      stream.push(text);
+      activeQuery?.push(text);
     }
     setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
   };
@@ -568,92 +534,95 @@ async function runQuery(
     });
   }
 
-  for await (const message of query({
-    prompt: stream,
-    options: {
-      cwd: '/workspace/group',
-      ...(process.env.CLAUDE_MODEL ? { model: process.env.CLAUDE_MODEL } : {}),
-      additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
-      resume: sessionId,
-      resumeSessionAt: resumeAt,
-      systemPrompt: systemAppend
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: systemAppend }
-        : undefined,
-      allowedTools: [
-        'Bash',
-        'Read', 'Write', 'Edit', 'Glob', 'Grep',
-        'WebSearch', 'WebFetch',
-        'Task', 'TaskOutput', 'TaskStop',
-        'TeamCreate', 'TeamDelete', 'SendMessage',
-        'TodoWrite', 'ToolSearch', 'Skill',
-        'NotebookEdit',
-        'mcp__nanoclaw__*'
-      ],
-      env: sdkEnv,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      settingSources: ['project', 'user'],
-      mcpServers: {
-        nanoclaw: {
-          command: 'tsx',
-          args: [mcpServerPath],
-          env: {
-            NANOCLAW_CHAT_JID: containerInput.chatJid,
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-            NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-          },
+  // Build the Claude provider via the seam. Provider name resolves from
+  // NANOCLAW_AGENT_PROVIDER env (default 'claude'). The Claude-specific extras
+  // mirror the v1 inline SDK options block 1:1 — no behavior change for the
+  // default provider.
+  const providerName = resolveProviderNameFromEnv();
+  log(`[provider] ${providerName}`);
+  const claudeExtras: ClaudeProviderExtras = {
+    allowedTools: [
+      'Bash',
+      'Read', 'Write', 'Edit', 'Glob', 'Grep',
+      'WebSearch', 'WebFetch',
+      'Task', 'TaskOutput', 'TaskStop',
+      'TeamCreate', 'TeamDelete', 'SendMessage',
+      'TodoWrite', 'ToolSearch', 'Skill',
+      'NotebookEdit',
+      'mcp__nanoclaw__*',
+    ],
+    permissionMode: 'bypassPermissions',
+    allowDangerouslySkipPermissions: true,
+    settingSources: ['project', 'user'],
+    hooks: mergedHooks,
+    ...(Object.keys(agents).length > 0 ? { agents } : {}),
+  };
+  const provider = createProvider(providerName, {
+    additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
+    env: sdkEnv,
+    mcpServers: {
+      nanoclaw: {
+        command: 'tsx',
+        args: [mcpServerPath],
+        env: {
+          NANOCLAW_CHAT_JID: containerInput.chatJid,
+          NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
+          NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
         },
       },
-      hooks: mergedHooks,
-      ...(Object.keys(agents).length > 0 ? { agents } : {}),
-    }
-  })) {
+    },
+    ...claudeExtras,
+  });
+
+  activeQuery = provider.query({
+    prompt,
+    cwd: '/workspace/group',
+    continuation: sessionId,
+    resumeAt,
+    systemContext: systemAppend ? { instructions: systemAppend } : undefined,
+    ...(process.env.CLAUDE_MODEL ? { modelOverride: process.env.CLAUDE_MODEL } : {}),
+  });
+
+  for await (const event of activeQuery.events) {
     messageCount++;
-    const msgType = message.type === 'system' ? `system/${(message as { subtype?: string }).subtype}` : message.type;
-    log(`[msg #${messageCount}] type=${msgType}`);
+    log(`[event #${messageCount}] type=${event.type}`);
 
-    if (message.type === 'assistant' && 'uuid' in message) {
-      lastAssistantUuid = (message as { uuid: string }).uuid;
-    }
-
-    if (message.type === 'system' && message.subtype === 'init') {
-      newSessionId = message.session_id;
+    if (event.type === 'init') {
+      newSessionId = event.continuation;
       log(`Session initialized: ${newSessionId}`);
-    }
-
-    if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
-      const tn = message as { task_id: string; status: string; summary: string };
-      log(`Task notification: task=${tn.task_id} status=${tn.status} summary=${tn.summary}`);
+    } else if (event.type === 'assistant_message') {
+      lastAssistantUuid = event.uuid;
+    } else if (event.type === 'progress') {
+      log(`Progress: ${event.message}`);
       // Heartbeat: reset host idle timer so containers with background tasks don't get killed
       writeOutput({ status: 'success', result: null, newSessionId, resumeAt: lastAssistantUuid });
-    }
-
-    if (message.type === 'result') {
-      resultCount++;
-      const isError = (message as { is_error?: boolean }).is_error === true;
-      const textResult = 'result' in message ? (message as { result?: string }).result : null;
-      const errors = 'errors' in message ? (message as { errors?: string[] }).errors : undefined;
-      const errorText = errors?.length ? errors.join('; ') : null;
-      log(`Result #${resultCount}: subtype=${message.subtype} is_error=${isError}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}${errorText ? ` errors=${errorText.slice(0, 200)}` : ''}`);
-
-      // Detect stale session errors — throw to trigger fresh session retry in main()
-      // instead of writing the error to stdout (which the host would treat as final)
-      if (isError) {
-        const combinedError = [textResult, errorText].filter(Boolean).join(' ');
-        if (/No message found with message\.uuid/i.test(combinedError)) {
-          ipcPolling = false;
-          throw new Error(combinedError);
-        }
+    } else if (event.type === 'error') {
+      // Stale-session classification flows through as an explicit field; fall
+      // back to substring-match for older provider impls.
+      const stale = event.classification === 'stale_session'
+        || /No message found with message\.uuid/i.test(event.message);
+      if (stale) {
+        ipcPolling = false;
+        throw new Error(event.message);
       }
-
       writeOutput({
-        status: isError ? 'error' : 'success',
-        result: textResult || null,
-        error: errorText || undefined,
+        status: 'error',
+        result: null,
+        error: event.message,
+        newSessionId,
+        resumeAt: lastAssistantUuid,
+      });
+    } else if (event.type === 'result') {
+      resultCount++;
+      log(`Result #${resultCount}: ${event.text ? event.text.slice(0, 200) : '(empty)'}`);
+      writeOutput({
+        status: 'success',
+        result: event.text || null,
         newSessionId,
         resumeAt: lastAssistantUuid,
       });
     }
+    // 'activity' events are ignored here — the SDK heartbeat is implicit.
   }
 
   ipcPolling = false;

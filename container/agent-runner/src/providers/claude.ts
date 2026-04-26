@@ -122,6 +122,7 @@ export class ClaudeProvider implements AgentProvider {
       cwd: input.cwd,
       additionalDirectories: this.options.additionalDirectories,
       resume: input.continuation,
+      ...(input.resumeAt ? { resumeSessionAt: input.resumeAt } : {}),
       systemPrompt: instructions
         ? { type: 'preset' as const, preset: 'claude_code' as const, append: instructions }
         : undefined,
@@ -151,7 +152,9 @@ export class ClaudeProvider implements AgentProvider {
           // Heartbeat for the host idle timer.
           yield { type: 'activity' };
 
-          if (message.type === 'system' && message.subtype === 'init') {
+          if (message.type === 'assistant' && 'uuid' in message) {
+            yield { type: 'assistant_message', uuid: (message as { uuid: string }).uuid };
+          } else if (message.type === 'system' && message.subtype === 'init') {
             yield { type: 'init', continuation: (message as { session_id: string }).session_id };
           } else if (message.type === 'result') {
             const isError = (message as { is_error?: boolean }).is_error === true;

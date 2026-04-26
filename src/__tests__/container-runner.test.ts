@@ -365,6 +365,66 @@ describe('buildContainerArgs OneCLI integration', () => {
     expect(args.find((a) => typeof a === 'string' && a.startsWith('HTTPS_PROXY'))).toBeUndefined();
   });
 
+  it('Phase 5A: sets NANOCLAW_AGENT_PROVIDER=claude by default', async () => {
+    vi.doMock('@onecli-sh/sdk', () => ({
+      OneCLI: class {
+        ensureAgent = vi.fn().mockResolvedValue(undefined);
+        applyContainerConfig = vi.fn().mockResolvedValue(false);
+      },
+    }));
+    vi.doMock('../config.js', () => ({
+      CONTAINER_IMAGE: 'nanoclaw-agent:latest',
+      CONTAINER_MAX_OUTPUT_SIZE: 10485760,
+      CONTAINER_TIMEOUT: 1800000,
+      DATA_DIR: '/tmp/nanoclaw-test-data',
+      GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+      IDLE_TIMEOUT: 1800000,
+      INSTALL_SLUG: 'nanoclaw-test',
+      ONECLI_URL: 'http://127.0.0.1:10254',
+      ONECLI_API_KEY: '',
+    }));
+    vi.doMock('../logger.js', () => ({
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    }));
+    const { buildContainerArgsForTesting } = await import('../container-runner.js');
+    const args = await buildContainerArgsForTesting([], 'nc-test', undefined);
+    expect(args).toContain('NANOCLAW_AGENT_PROVIDER=claude');
+  });
+
+  it('Phase 5A: NANOCLAW_AGENT_PROVIDER reflects group.agent_provider', async () => {
+    vi.doMock('@onecli-sh/sdk', () => ({
+      OneCLI: class {
+        ensureAgent = vi.fn().mockResolvedValue(undefined);
+        applyContainerConfig = vi.fn().mockResolvedValue(false);
+      },
+    }));
+    vi.doMock('../config.js', () => ({
+      CONTAINER_IMAGE: 'nanoclaw-agent:latest',
+      CONTAINER_MAX_OUTPUT_SIZE: 10485760,
+      CONTAINER_TIMEOUT: 1800000,
+      DATA_DIR: '/tmp/nanoclaw-test-data',
+      GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+      IDLE_TIMEOUT: 1800000,
+      INSTALL_SLUG: 'nanoclaw-test',
+      ONECLI_URL: 'http://127.0.0.1:10254',
+      ONECLI_API_KEY: '',
+    }));
+    vi.doMock('../logger.js', () => ({
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    }));
+    const { buildContainerArgsForTesting } = await import('../container-runner.js');
+    const fakeGroup = {
+      id: 'g1',
+      name: 'g1',
+      folder: 'g1',
+      agent_provider: 'codex',
+      container_config: null,
+      created_at: '2026-04-26',
+    } as unknown as Parameters<typeof buildContainerArgsForTesting>[3];
+    const args = await buildContainerArgsForTesting([], 'nc-test', 'g1', fakeGroup);
+    expect(args).toContain('NANOCLAW_AGENT_PROVIDER=codex');
+  });
+
   it('skips ensureAgent when agentIdentifier is undefined but still calls applyContainerConfig', async () => {
     const ensureAgent = vi.fn().mockResolvedValue(undefined);
     const applyContainerConfig = vi.fn().mockResolvedValue(false);

@@ -27,6 +27,10 @@ import { redactSecrets } from './secret-redact.js';
 import type { AgentGroup, ContainerConfig } from './types.js';
 
 import { createOutputParser, makeMarkers, OUTPUT_START_MARKER, OUTPUT_END_MARKER } from './output-parser.js';
+import {
+  getProviderContainerConfig,
+  resolveProviderName,
+} from './providers/provider-container-registry.js';
 
 // OneCLI gateway client — module-scoped so it's initialized once per host
 // process and reused across container spawns.
@@ -80,12 +84,46 @@ async function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
   agentIdentifier?: string,
+  group?: AgentGroup,
 ): Promise<string[]> {
   const args: string[] = [
     'run', '-i', '--rm', '--name', containerName,
     '--label', `nanoclaw.install=${INSTALL_SLUG}`,
     ...containerRuntime.extraRunArgs(),
   ];
+
+  // Phase 5A: pass the agent group's provider into the container.
+  // Resolution: agent_groups.agent_provider → 'claude' fallback. Container's
+  // resolveProviderNameFromEnv() reads this at startup.
+  const providerName = resolveProviderName(group?.agent_provider);
+  args.push('-e', `NANOCLAW_AGENT_PROVIDER=${providerName}`);
+
+  // Allow non-default providers to contribute extra mounts/env (Codex,
+  // OpenCode, Ollama plugins). Default 'claude' has no contribution.
+  if (group) {
+    const contributor = getProviderContainerConfig(providerName);
+    if (contributor) {
+      try {
+        const contrib = contributor({
+          agentGroupId: group.id,
+          groupFolder: group.folder,
+          hostEnv: process.env,
+        });
+        for (const m of contrib.mounts ?? []) {
+          if (m.readonly) {
+            args.push('--mount', `type=bind,source=${m.hostPath},target=${m.containerPath},readonly`);
+          } else {
+            args.push('-v', `${m.hostPath}:${m.containerPath}`);
+          }
+        }
+        for (const [k, v] of Object.entries(contrib.env ?? {})) {
+          args.push('-e', `${k}=${v}`);
+        }
+      } catch (err) {
+        logger.warn({ provider: providerName, err }, 'Provider container-config contributor threw; ignoring');
+      }
+    }
+  }
 
   // OneCLI gateway — injects HTTPS_PROXY + CA cert mount so outbound API
   // calls from the container are routed through the agent vault for
@@ -183,7 +221,7 @@ export async function runContainerAgent(
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
   // agentIdentifier is the group folder — stable across container restarts
   // and unique per agent group, matching v1's per-group keying.
-  const containerArgs = await buildContainerArgs(mounts, containerName, group.folder);
+  const containerArgs = await buildContainerArgs(mounts, containerName, group.folder, group);
 
   logger.debug(
     {

@@ -31,6 +31,11 @@ export interface QueryInput {
   cwd: string;
   systemContext?: { instructions?: string };
   modelOverride?: string;
+  /**
+   * Phase 5A: Claude-specific resume-checkpoint (last assistant uuid). Maps
+   * to `resumeSessionAt` on the agent SDK. Other providers ignore.
+   */
+  resumeAt?: string;
 }
 
 export interface McpServerConfig {
@@ -51,4 +56,11 @@ export type ProviderEvent =
   | { type: 'result'; text: string | null }
   | { type: 'error'; message: string; retryable: boolean; classification?: string }
   | { type: 'progress'; message: string }
-  | { type: 'activity' };
+  | { type: 'activity' }
+  /**
+   * Phase 5A: Claude-specific resumeAt tracking. The agent SDK uses
+   * `message.uuid` on assistant messages as a checkpoint for `resumeSessionAt`.
+   * Other providers may never emit this; consumers should treat it as
+   * optional.
+   */
+  | { type: 'assistant_message'; uuid: string };
