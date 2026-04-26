@@ -31,6 +31,11 @@ import {
   getProviderContainerConfig,
   resolveProviderName,
 } from './providers/provider-container-registry.js';
+import {
+  isAdminOfAgentGroup,
+  isGlobalAdmin,
+  isOwner,
+} from './permissions/user-roles.js';
 
 // OneCLI gateway client — module-scoped so it's initialized once per host
 // process and reused across container spawns.
@@ -53,6 +58,14 @@ export interface ContainerInput {
   outputNonce?: string;
   taskScript?: string;
   taskId?: string;
+  /**
+   * Phase 5E: optional resolved user id for the sender that triggered this
+   * container spawn. When present, the host computes admin status against
+   * the agent group and injects `NANOCLAW_IS_ADMIN=1` so admin-only MCP
+   * tools (e.g. `create_agent`) register inside the container. Scheduled
+   * tasks omit this — they default to `NANOCLAW_IS_ADMIN=0`.
+   */
+  senderUserId?: string;
 }
 
 export interface ContainerOutput {
@@ -85,6 +98,7 @@ async function buildContainerArgs(
   containerName: string,
   agentIdentifier?: string,
   group?: AgentGroup,
+  senderUserId?: string,
 ): Promise<string[]> {
   const args: string[] = [
     'run', '-i', '--rm', '--name', containerName,
@@ -97,6 +111,21 @@ async function buildContainerArgs(
   // resolveProviderNameFromEnv() reads this at startup.
   const providerName = resolveProviderName(group?.agent_provider);
   args.push('-e', `NANOCLAW_AGENT_PROVIDER=${providerName}`);
+
+  // Phase 5E: gate admin-only container-side MCP tools (e.g. `create_agent`)
+  // on the sender's role at spawn time. Defaults to '0' for scheduled tasks
+  // and any path where senderUserId is not threaded through. The host re-
+  // validates admin status when the IPC payload arrives, so this flag only
+  // controls whether the tool is *visible* to the agent — not whether the
+  // action is *authorized*.
+  let isAdmin = false;
+  if (senderUserId && group) {
+    isAdmin =
+      isOwner(senderUserId) ||
+      isGlobalAdmin(senderUserId) ||
+      isAdminOfAgentGroup(senderUserId, group.id);
+  }
+  args.push('-e', `NANOCLAW_IS_ADMIN=${isAdmin ? '1' : '0'}`);
 
   // Allow non-default providers to contribute extra mounts/env (Codex,
   // OpenCode, Ollama plugins). Default 'claude' has no contribution.
@@ -221,7 +250,13 @@ export async function runContainerAgent(
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
   // agentIdentifier is the group folder — stable across container restarts
   // and unique per agent group, matching v1's per-group keying.
-  const containerArgs = await buildContainerArgs(mounts, containerName, group.folder, group);
+  const containerArgs = await buildContainerArgs(
+    mounts,
+    containerName,
+    group.folder,
+    group,
+    input.senderUserId,
+  );
 
   logger.debug(
     {

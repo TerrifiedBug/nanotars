@@ -92,6 +92,9 @@ export interface OrchestratorDeps {
       groupFolder: string;
       chatJid: string;
       isMain: boolean;
+      // Phase 5E: optional resolved user id for the message sender, used by
+      // the runner to gate `NANOCLAW_IS_ADMIN=1` for admin-only MCP tools.
+      senderUserId?: string;
     },
     onProcess: (proc: import('child_process').ChildProcess, containerName: string) => void,
     onOutput?: (output: ContainerOutput) => Promise<void>,
@@ -582,7 +585,7 @@ export class MessageOrchestrator {
     let authErrorNotified = false;
     let firstOutputSent = false;
 
-    const output = await this.runAgent(group, prompt, chatJid, async (result) => {
+    const output = await this.runAgent(group, prompt, chatJid, userId, async (result) => {
       if (result.status === 'error') {
         hadError = true;
 
@@ -671,6 +674,7 @@ export class MessageOrchestrator {
     group: ResolvedAgentRouting,
     prompt: string,
     chatJid: string,
+    senderUserId: string | undefined,
     onOutput?: (output: ContainerOutput) => Promise<void>,
   ): Promise<'success' | 'error'> {
     const isMain = group.folder === this.deps.mainGroupFolder;
@@ -716,6 +720,11 @@ export class MessageOrchestrator {
           groupFolder: group.folder,
           chatJid,
           isMain,
+          // Phase 5E: thread the resolved sender user id so the runner can
+          // gate admin-only MCP tools (e.g. create_agent) via
+          // NANOCLAW_IS_ADMIN. Undefined for scheduled tasks (separate
+          // call site in task-scheduler.ts) — they always get '0'.
+          senderUserId,
         },
         (proc, containerName) => this.deps.queue.registerProcess(chatJid, proc, containerName, group.folder),
         wrappedOnOutput,
