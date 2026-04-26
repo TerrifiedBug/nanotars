@@ -46,6 +46,7 @@ import {
   type ApprovalHandler,
 } from './approval-primitive.js';
 import { pickApprovalDelivery, pickApprover } from './approval-routing.js';
+import { deliverApprovalCard } from './approval-delivery.js';
 
 /** Action key for `pending_approvals.action` and the handler registry. */
 export const ONECLI_ACTION = 'onecli_credential';
@@ -198,18 +199,31 @@ export async function handleRequest(request: ApprovalRequest): Promise<Decision>
     expires_at: request.expiresAt,
   });
 
-  // TODO(C7 / D6): deliver the card to target.messagingGroup via channel
-  // adapter. v1 doesn't yet have a generic ChannelDeliveryAdapter
-  // contract — when it lands, hook it here. Until then, the row is
-  // visible in pending_approvals and click-auth flows that surface it
-  // through other paths still work.
+  // Phase 4D D6: deliver the credentialed-action card via the
+  // approval-delivery dispatcher. Best-effort — if no per-channel
+  // adapter is registered, the plain-text fallback still surfaces the
+  // request to the approver. The result.card carries the rendered
+  // title/body/options from the registered handler (handlerImpl.render
+  // above).
+  if (result.card) {
+    void deliverApprovalCard({
+      approval_id: result.approvalId,
+      channel_type: target.messagingGroup.channel_type,
+      platform_id: target.messagingGroup.platform_id,
+      title: result.card.title,
+      body: result.card.body,
+      options: result.card.options,
+    }).catch((err) =>
+      logger.warn({ err, approvalId: result.approvalId }, 'onecli-bridge: deliverApprovalCard failed'),
+    );
+  }
   logger.info(
     {
       approvalId: result.approvalId,
       target: target.userId,
       onecliRequestId: request.id,
     },
-    'OneCLI approval card persisted (delivery TODO C7)',
+    'OneCLI approval card persisted + delivery dispatched',
   );
 
   // Expiry timer fires just before the gateway's own TTL so our deny

@@ -58,6 +58,7 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
 import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
 import { startOneCLIBridge, stopOneCLIBridge } from './permissions/onecli-bridge.js';
+import { setReplayHook } from './permissions/approval-replay.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
 import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
@@ -132,10 +133,27 @@ async function main(): Promise<void> {
 
   // Phase 4C C6: OneCLI manual-approval bridge. Long-polls the gateway for
   // credentialed-action approval requests, persists them via the C2
-  // primitive, and resolves on click-auth (C4) or expiry. Idempotent —
+  // primitive, and resolves on click-auth (D4) or expiry. Idempotent —
   // safe to call even if OneCLI isn't running (the SDK's worker logs
   // and retries).
   startOneCLIBridge();
+
+  // Phase 4D D6: register the replay hook used by sender + channel
+  // approval handlers to re-inject the original message after an
+  // approve. We wire it here using insertExternalMessage so the
+  // standard message-loop picks up the replay on the next poll tick.
+  // The synthesized message id is namespaced to the approval id so
+  // duplicate replays (concurrent approves) collapse on the
+  // `INSERT OR REPLACE` PK.
+  setReplayHook(async (replay) => {
+    insertExternalMessage(
+      replay.platform_id,
+      `replay-${replay.replay_id}`,
+      replay.sender_handle,
+      replay.sender_name ?? replay.sender_handle,
+      replay.message_text,
+    );
+  });
 
   const orchestrator = new MessageOrchestrator({
     getRouterState,

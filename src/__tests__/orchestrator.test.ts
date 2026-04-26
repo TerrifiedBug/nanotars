@@ -1382,6 +1382,49 @@ describe('MessageOrchestrator', () => {
       );
     });
 
+    it('D6: original message_text flows from orchestrator → pending_channel_approvals', async () => {
+      await seedOwnerAndAgent();
+
+      const dbEvents = new EventEmitter();
+      const deps = makeDeps({
+        dbEvents,
+        pollInterval: 60000,
+        getNewMessages: vi.fn(() => ({
+          messages: [
+            makeMessage({
+              id: 'd6-1',
+              chat_jid: 'unwired-d6@g.us',
+              sender: 'stranger@s.whatsapp.net',
+              sender_name: 'Stranger',
+              is_from_me: false,
+              content: 'first ever message',
+              timestamp: '2024-01-01T00:00:02.000Z',
+            }),
+          ],
+          newTimestamp: '2024-01-01T00:00:02.000Z',
+        })),
+      });
+      const orch = new MessageOrchestrator(deps);
+      orch.channels = [mockWhatsAppChannel()];
+
+      const loopPromise = orch.startMessageLoop();
+      await new Promise((r) => setTimeout(r, 80));
+      orch.stop();
+      await loopPromise;
+
+      const { getMessagingGroup } = await import('../db/agent-groups.js');
+      const { getPendingChannelApproval } = await import('../permissions/channel-approval.js');
+      const mg = getMessagingGroup('whatsapp', 'unwired-d6@g.us');
+      expect(mg).toBeDefined();
+      const row = getPendingChannelApproval(mg!.id);
+      expect(row).toBeDefined();
+
+      // D6: original_message JSON now includes message_text so the
+      // approval handler can replay it through the registered hook.
+      const parsed = JSON.parse(row!.original_message) as { message_text?: string };
+      expect(parsed.message_text).toBe('first ever message');
+    });
+
     it('startMessageLoop: is_from_me messages do not trigger an approval card', async () => {
       await seedOwnerAndAgent();
 

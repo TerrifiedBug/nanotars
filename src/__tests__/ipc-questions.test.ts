@@ -245,4 +245,76 @@ describe('processTaskIpc: ask_question', () => {
     const row = getPendingQuestion('q-mo2');
     expect(row!.message_out_id).toBe('msg-out-explicit');
   });
+
+  // Phase 4D D6: card delivery wiring
+  it('D6: delivers the question via deps.sendMessage when platform_id is supplied', async () => {
+    const sendMessage = vi.fn(async () => undefined);
+    const deps = makeDeps({ sendMessage });
+
+    await processTaskIpc(
+      {
+        type: 'ask_question',
+        questionId: 'q-deliver',
+        title: 'Confirm deletion',
+        question: 'Delete the selected files?',
+        options: ['Yes', 'No'],
+        platform_id: 'tg-chat-1',
+        channel_type: 'telegram',
+      },
+      'main', true, deps,
+    );
+
+    // Wait for the fire-and-forget delivery to settle.
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    const [jid, text] = sendMessage.mock.calls[0];
+    expect(jid).toBe('tg-chat-1');
+    expect(text).toContain('Confirm deletion');
+    expect(text).toContain('Delete the selected files?');
+    expect(text).toContain('Reply "Yes" to Yes');
+    expect(text).toContain('Reply "No" to No');
+    expect(text).toContain('q-deliver');
+  });
+
+  it('D6: skips delivery when no platform_id is provided', async () => {
+    const sendMessage = vi.fn(async () => undefined);
+    const deps = makeDeps({ sendMessage });
+
+    await processTaskIpc(
+      {
+        type: 'ask_question',
+        questionId: 'q-no-platform',
+        title: 't',
+        question: 'q',
+        options: ['ok'],
+        // platform_id intentionally omitted
+      },
+      'main', true, deps,
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sendMessage).not.toHaveBeenCalled();
+    // Row was still persisted.
+    expect(getPendingQuestion('q-no-platform')).toBeDefined();
+  });
+
+  it('D6: duplicate questionId does not double-send the card', async () => {
+    const sendMessage = vi.fn(async () => undefined);
+    const deps = makeDeps({ sendMessage });
+
+    const payload = {
+      type: 'ask_question' as const,
+      questionId: 'q-dup-deliver',
+      title: 't',
+      question: 'q',
+      options: ['ok'],
+      platform_id: 'tg-1',
+    };
+    await processTaskIpc(payload, 'main', true, deps);
+    await processTaskIpc(payload, 'main', true, deps);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
 });

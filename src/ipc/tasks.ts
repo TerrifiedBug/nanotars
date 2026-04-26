@@ -39,6 +39,32 @@ function normaliseOptions(raw: unknown): NormalizedOption[] {
   return out;
 }
 
+/**
+ * Phase 4D D6: render an ask_question card as plain text. Used until
+ * per-adapter button rendering is wired (Telegram inline keyboard, Slack
+ * blocks, …). The numbered-list shape matches what `deliverApprovalCard`
+ * uses for approval cards so the user-facing UX is consistent.
+ */
+function formatAskQuestionAsText(args: {
+  question_id: string;
+  title: string;
+  question: string;
+  options: NormalizedOption[];
+}): string {
+  const lines: string[] = [];
+  if (args.title) lines.push(args.title);
+  if (args.title && args.question) lines.push('');
+  if (args.question) lines.push(args.question);
+  if (args.options.length > 0) {
+    lines.push('');
+    for (const o of args.options) {
+      lines.push(`- Reply "${o.value}" to ${o.label}`);
+    }
+  }
+  lines.push('', `(question: ${args.question_id})`);
+  return lines.join('\n');
+}
+
 /** Compute the next run time for a schedule. Returns null nextRun on parse error. */
 function computeNextRun(
   type: string,
@@ -386,14 +412,38 @@ export async function processTaskIpc(
         created_at: new Date().toISOString(),
       });
       if (inserted) {
+        // Phase 4D D6: deliver the question to the chat that originated
+        // the agent session. Uses the IPC's existing sendMessage path so
+        // the message goes out through the channel adapter the
+        // orchestrator picks for the JID. Best-effort — failure is
+        // logged + the row stays in pending_questions for diagnostic
+        // visibility. Adapter-side button rendering (Telegram inline
+        // keyboard, Slack blocks) is per-adapter follow-on work; the
+        // plain-text fallback here renders the question + numbered
+        // options as a single message that the user can reply to.
+        if (data.platform_id) {
+          const text = formatAskQuestionAsText({
+            question_id: data.questionId,
+            title: typeof data.title === 'string' ? data.title : '',
+            question: typeof data.question === 'string' ? data.question : '',
+            options,
+          });
+          // sendMessage might be a non-async stub in tests; wrap in
+          // Promise.resolve so .catch always exists.
+          Promise.resolve(deps.sendMessage(data.platform_id, text)).catch((err) =>
+            logger.warn(
+              { err, sourceGroup, questionId: data.questionId },
+              'ask_question card delivery failed',
+            ),
+          );
+        }
         logger.info(
           {
             sourceGroup,
             questionId: data.questionId,
             optionCount: options.length,
-            // TODO(D6): wire actual card delivery + answer round-trip.
           },
-          'ask_question received — pending_questions row persisted (D6 will deliver)',
+          'ask_question received — pending_questions row persisted + delivery dispatched',
         );
       } else {
         // Same question_id arrived twice (agent retry, IPC replay, etc.).

@@ -837,6 +837,7 @@ export class MessageOrchestrator {
                   platform_id: chatJid,
                   chat_name: lastMsg.sender_name ?? undefined,
                   sender_user_id: senderUserId,
+                  message_text: lastMsg.content,
                 }).catch((err) =>
                   this.deps.logger.warn({ err }, 'requestChannelApproval failed'),
                 );

@@ -106,6 +106,19 @@ export interface RequestApprovalResult {
   approvalId: string;
   approvers: User[];
   deliveryTarget: ApprovalDeliveryTarget | undefined;
+  /**
+   * Phase 4D D6: rendered card payload for the action's handler. Callers
+   * use this to invoke `deliverApprovalCard` themselves so the per-action
+   * 4D row can be persisted before delivery. Undefined when no handler
+   * was registered for `args.action`.
+   */
+  card:
+    | {
+        title: string;
+        body: string;
+        options: Array<{ id: string; label: string }>;
+      }
+    | undefined;
 }
 
 /**
@@ -166,9 +179,17 @@ export async function requestApproval(args: RequestApprovalArgs): Promise<Reques
       optionsJson,
     );
 
-  // TODO(C4): deliver the card to deliveryTarget via channel adapter.
-
-  return { approvalId, approvers, deliveryTarget };
+  // Card delivery itself is the caller's responsibility — they own the
+  // 4D row write that pairs with `approvalId` and need to persist that
+  // row before issuing the (potentially fast-clicking) card. They call
+  // `deliverApprovalCard` from approval-delivery.ts with the returned
+  // `card` + `deliveryTarget`.
+  return {
+    approvalId,
+    approvers,
+    deliveryTarget,
+    card: rendered ?? undefined,
+  };
 }
 
 /**

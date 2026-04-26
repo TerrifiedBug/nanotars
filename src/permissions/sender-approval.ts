@@ -36,6 +36,8 @@ import {
 } from './approval-primitive.js';
 import { addMember } from './agent-group-members.js';
 import { ensureUser } from './users.js';
+import { deliverApprovalCard } from './approval-delivery.js';
+import { replayInboundMessage } from './approval-replay.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types + accessors against the actual D1 schema
@@ -258,9 +260,36 @@ export async function applySenderApprovalDecision(args: {
       },
       'Sender approved; added to agent_group_members',
     );
-    // TODO(D6): replay row.original_message into the agent so the sender's
-    // first message isn't dropped. Today the second message (which now
-    // passes the gate) is what wakes the agent.
+    // Phase 4D D6: replay the original message via the host's registered
+    // replay hook. The membership change above means the replayed
+    // inbound now passes `canAccessAgentGroup`; the hook is best-effort
+    // (see approval-replay.ts) so a missing/broken hook does not roll
+    // back the approve. We synthesize the platform-side sender handle
+    // by stripping the `<channel>:` prefix that resolveSender added.
+    if (row.original_message) {
+      const colonIdx = row.sender_identity.indexOf(':');
+      const channel_type =
+        colonIdx > 0 ? row.sender_identity.slice(0, colonIdx) : 'unknown';
+      const sender_handle =
+        colonIdx > 0 ? row.sender_identity.slice(colonIdx + 1) : row.sender_identity;
+      // Look up messaging_group → platform_id for the chat we should
+      // replay into. Avoid a circular import on db/agent-groups by
+      // doing the lookup with the raw db handle.
+      const mg = getDb()
+        .prepare(`SELECT platform_id, channel_type FROM messaging_groups WHERE id = ?`)
+        .get(row.messaging_group_id) as { platform_id: string; channel_type: string } | undefined;
+      if (mg) {
+        await replayInboundMessage({
+          channel_type: mg.channel_type ?? channel_type,
+          platform_id: mg.platform_id,
+          sender_handle,
+          sender_name: row.sender_name,
+          message_text: row.original_message,
+          agent_group_id: row.agent_group_id,
+          replay_id: `sender-${args.approvalId}`,
+        });
+      }
+    }
   } else {
     logger.info(
       {
@@ -405,6 +434,25 @@ export async function requestSenderApproval(
       approvalId: winner?.approval_id ?? result.approvalId,
       alreadyPending: true,
     };
+  }
+
+  // Phase 4D D6: deliver the card to the approver. Best-effort — if no
+  // adapter is registered for the approver's DM channel and no fallback
+  // sender is supplied (current default), the card is still queryable
+  // via pending_approvals/admin tooling. Per-channel button rendering
+  // (Telegram inline keyboards, Slack blocks) is per-adapter follow-on
+  // work registered via `registerApprovalDeliverer`.
+  if (result.card && result.deliveryTarget) {
+    void deliverApprovalCard({
+      approval_id: result.approvalId,
+      channel_type: result.deliveryTarget.messagingGroup.channel_type,
+      platform_id: result.deliveryTarget.messagingGroup.platform_id,
+      title: result.card.title,
+      body: result.card.body,
+      options: result.card.options,
+    }).catch((err) =>
+      logger.warn({ err, approvalId: result.approvalId }, 'sender-approval: deliverApprovalCard failed'),
+    );
   }
 
   return { approvalId: result.approvalId, alreadyPending: false };

@@ -41,6 +41,8 @@ import {
   getAllAgentGroups,
 } from '../db/agent-groups.js';
 import { addMember } from './agent-group-members.js';
+import { deliverApprovalCard } from './approval-delivery.js';
+import { replayInboundMessage } from './approval-replay.js';
 import { logger } from '../logger.js';
 
 export const CHANNEL_APPROVAL_ACTION = 'channel-approval';
@@ -162,7 +164,7 @@ export function registerChannelApprovalHandler(): void {
         ],
       };
     },
-    applyDecision: ({ approvalId, payload, decision }) => {
+    applyDecision: async ({ approvalId, payload, decision }) => {
       const p = payload as ChannelApprovalPayload;
       const pending = getPendingChannelApproval(p.messaging_group_id);
 
@@ -200,6 +202,49 @@ export function registerChannelApprovalHandler(): void {
           { channel_type: p.channel_type, platform_id: p.platform_id, folder, agentGroupId: ag.id },
           'Channel registered (approved)',
         );
+
+        // Phase 4D D6: replay the message that triggered this channel
+        // registration. `pending.original_message` was JSON-stringified
+        // by requestChannelApproval — decode it and feed the text back
+        // through the host's replay hook so the freshly-wired agent
+        // sees the original prompt. Best-effort; failure is logged.
+        if (pending?.original_message) {
+          try {
+            const inbound = JSON.parse(pending.original_message) as {
+              channel_type?: string;
+              platform_id?: string;
+              chat_name?: string;
+              sender_user_id?: string;
+              message_text?: string;
+            };
+            const sender_handle = (() => {
+              const sid = inbound.sender_user_id ?? p.sender_user_id ?? '';
+              const colonIdx = sid.indexOf(':');
+              return colonIdx > 0 ? sid.slice(colonIdx + 1) : sid;
+            })();
+            // requestChannelApproval today serialises a small inbound
+            // descriptor without the message text — when that's the
+            // case, there's nothing to replay (the lack-of-text case
+            // means the orchestrator already advanced the cursor and a
+            // follow-up message will hit the new wiring naturally).
+            if (inbound.message_text) {
+              await replayInboundMessage({
+                channel_type: inbound.channel_type ?? p.channel_type,
+                platform_id: inbound.platform_id ?? p.platform_id,
+                sender_handle,
+                sender_name: inbound.chat_name ?? null,
+                message_text: inbound.message_text,
+                agent_group_id: ag.id,
+                replay_id: `channel-${approvalId}`,
+              });
+            }
+          } catch (err) {
+            logger.warn(
+              { approvalId, err },
+              'channel-approval replay: original_message JSON.parse failed',
+            );
+          }
+        }
       } else {
         // Reject (or expired) → sticky deny on messaging_groups.denied_at
         setMessagingGroupDeniedAt(p.messaging_group_id, new Date().toISOString());
@@ -208,9 +253,6 @@ export function registerChannelApprovalHandler(): void {
           'Channel registration denied (sticky)',
         );
       }
-
-      // TODO(D6): replay original message after approve so the original
-      // sender's prompt actually reaches the freshly-wired agent.
 
       // Cleanup the pending row regardless of decision.
       if (pending) {
@@ -229,6 +271,14 @@ export interface RequestChannelApprovalArgs {
   chat_name?: string;
   sender_user_id?: string;
   proposed_folder?: string;
+  /**
+   * Phase 4D D6: original inbound message text. Persisted into
+   * pending_channel_approvals.original_message so the approval handler
+   * can replay it via the registered replay hook after the wiring is
+   * created. When omitted, the approval still works — the user just
+   * has to send a follow-up message that hits the new wiring.
+   */
+  message_text?: string;
 }
 
 export interface RequestChannelApprovalResult {
@@ -344,6 +394,7 @@ export async function requestChannelApproval(
       platform_id: args.platform_id,
       chat_name: args.chat_name,
       sender_user_id: args.sender_user_id,
+      message_text: args.message_text,
     }),
     approver_user_id: result.deliveryTarget.userId,
     approval_id: result.approvalId,
@@ -352,8 +403,21 @@ export async function requestChannelApproval(
     created_at: new Date().toISOString(),
   });
 
-  // TODO(D6): actually deliver the card via the channel adapter. 4C's
-  // primitive persists the row but defers wire-up; D2/D3 inherit that.
+  // Phase 4D D6: deliver the registration card to the approver. Same
+  // contract as sender-approval — best-effort, with plain-text fallback
+  // until per-channel button rendering is wired (per-adapter follow-on).
+  if (result.card && result.deliveryTarget) {
+    void deliverApprovalCard({
+      approval_id: result.approvalId,
+      channel_type: result.deliveryTarget.messagingGroup.channel_type,
+      platform_id: result.deliveryTarget.messagingGroup.platform_id,
+      title: result.card.title,
+      body: result.card.body,
+      options: result.card.options,
+    }).catch((err) =>
+      logger.warn({ err, approvalId: result.approvalId }, 'channel-approval: deliverApprovalCard failed'),
+    );
+  }
 
   return {
     approvalId: result.approvalId,
