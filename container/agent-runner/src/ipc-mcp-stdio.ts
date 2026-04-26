@@ -21,6 +21,10 @@ import {
   emergencyStopInputSchema,
   resumeProcessingInputSchema,
 } from './mcp-tools/lifecycle.js';
+import {
+  buildCreateAgentPayload,
+  createAgentInputSchema,
+} from './mcp-tools/create-agent.js';
 
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
@@ -30,6 +34,10 @@ const TASKS_DIR = path.join(IPC_DIR, 'tasks');
 const chatJid = process.env.NANOCLAW_CHAT_JID!;
 const groupFolder = process.env.NANOCLAW_GROUP_FOLDER!;
 const isMain = process.env.NANOCLAW_IS_MAIN === '1';
+// Phase 5E: admin-only tools (e.g. create_agent) are registered only when
+// the host has injected NANOCLAW_IS_ADMIN=1 for this container spawn. The
+// host re-validates admin status; this flag is the registration gate.
+const isAdmin = process.env.NANOCLAW_IS_ADMIN === '1';
 
 function writeIpcFile(dir: string, data: object): string {
   fs.mkdirSync(dir, { recursive: true });
@@ -571,6 +579,45 @@ Same admin re-validation rules as \`emergency_stop\` apply.`,
     return { content: [{ type: 'text' as const, text: 'Resume request submitted.' }] };
   },
 );
+
+// Phase 5E: admin-only `create_agent` tool. Registered ONLY when the host
+// has set NANOCLAW_IS_ADMIN=1 for this container spawn (set in
+// container-runner.ts based on the inbound message sender's role). Non-admin
+// agent containers never see this tool. Host re-validates admin status on
+// the IPC side as defense in depth.
+if (isAdmin) {
+  server.tool(
+    'create_agent',
+    `Create a long-lived peer agent group. Admin-only. Fire-and-forget.
+
+The new agent gets its own filesystem scaffold under groups/<folder>/ with
+the optional instructions written to CLAUDE.md and a default IDENTITY.md
+copied from groups/global/IDENTITY.md when present.
+
+Wiring (attaching the new agent to a chat) is NOT performed automatically —
+after creation, the operator runs \`/wire <messaging-group> <folder>\` to
+route messages to it.
+
+The tool returns immediately. A confirmation (or failure reason) is sent
+back via the host's notifyAgent path; until that path is fully wired (it
+is currently a logger stub), check the host logs for the result.`,
+    createAgentInputSchema,
+    async (args) => {
+      const payload = buildCreateAgentPayload(args, { groupFolder, isMain });
+      writeIpcFile(TASKS_DIR, payload);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `Creating agent "${args.name}". You will be notified when it is ready. ` +
+              `Run \`/wire <messaging-group> <folder>\` after creation to route messages to it.`,
+          },
+        ],
+      };
+    },
+  );
+}
 
 // Start the stdio transport
 const transport = new StdioServerTransport();

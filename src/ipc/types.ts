@@ -62,6 +62,30 @@ export interface ResumeProcessingTask {
   timestamp: string;
 }
 
+/**
+ * Phase 5E — `create_agent` IPC payload.
+ *
+ * The container-side `create_agent` MCP tool (admin-only — registration is
+ * conditional on `NANOCLAW_IS_ADMIN=1`) writes this payload into
+ * `/workspace/ipc/<group>/tasks/`. The host's `processTaskIpc` dispatches
+ * it to `permissions/create-agent.ts:handleCreateAgent`, which re-validates
+ * the calling user's admin role, creates a new `agent_groups` row, and
+ * scaffolds `groups/<folder>/`.
+ *
+ * Wiring (messaging_group → agent_group) is intentionally NOT performed
+ * here — operator runs `/wire` afterwards. The new agent is otherwise a
+ * full peer (own filesystem, own container spawn, own sessions).
+ */
+export interface CreateAgentTask {
+  type: 'create_agent';
+  name: string;
+  instructions?: string | null;
+  folder?: string | null;
+  groupFolder: string;
+  isMain: boolean;
+  timestamp: string;
+}
+
 /** Discriminated union for IPC message commands. */
 export type IpcMessage =
   | { type: 'message'; chatJid: string; text: string; sender?: string; replyTo?: string }
@@ -92,6 +116,9 @@ export const TASK_IPC_TYPES = new Set([
   // payload here; host persists a pending_questions row. Card delivery +
   // answer round-trip wiring is deferred to D6.
   'ask_question',
+  // Phase 5E: admin-only create_agent — container-side MCP tool registers
+  // only when NANOCLAW_IS_ADMIN=1. Host re-validates sender role.
+  'create_agent',
 ]);
 
 /** Validate that raw IPC data has a known task type. */
