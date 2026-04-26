@@ -56,6 +56,7 @@ import { startIpcWatcher } from './ipc.js';
 import { formatMessages, routeOutbound, routeOutboundFile, stripInternalTags } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
+import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
 import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
@@ -123,6 +124,11 @@ async function main(): Promise<void> {
   backupDatabase();
   logger.info('Database initialized');
 
+  // Phase 4C C5: time-based expiry sweep for pending_approvals. Runs an
+  // initial sweep + a 60s unref'd interval so cards that age out mid-run
+  // also get reaped without keeping the event loop alive.
+  startApprovalExpiryPoll();
+
   const orchestrator = new MessageOrchestrator({
     getRouterState,
     setRouterState,
@@ -172,6 +178,7 @@ async function main(): Promise<void> {
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    stopApprovalExpiryPoll();
     await plugins.shutdown();
     await queue.shutdown(10000);
     for (const ch of orchestrator.channels) {
