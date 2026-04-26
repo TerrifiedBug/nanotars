@@ -29,6 +29,7 @@ const ENTITY_MODEL_DDL = `
     name                  TEXT,
     is_group              INTEGER DEFAULT 0,
     unknown_sender_policy TEXT NOT NULL DEFAULT 'public',
+    denied_at             TEXT,
     created_at            TEXT NOT NULL,
     UNIQUE(channel_type, platform_id)
   );
@@ -129,6 +130,74 @@ const APPROVALS_DDL = `
     ON pending_approvals(action, status);
 `;
 
+/**
+ * Shared DDL for the Phase 4D multi-user-flow tables. createSchema and
+ * migrations 016-018 reference these per-table constants so column-level
+ * drift between fresh-install and existing-DB paths is structurally
+ * impossible — mirrors ENTITY_MODEL_DDL / RBAC_DDL / APPROVALS_DDL.
+ *
+ * `pending_questions.session_id` intentionally lacks a foreign-key reference:
+ * v1-archive's `sessions` table is a per-group-container map (group_folder
+ * PK), not v2's per-session sessions. Same divergence as 4C's
+ * pending_approvals — see the APPROVALS_DDL comment above.
+ *
+ * Schema diverges from v2's migrations 011 / 012 in shape: v2's
+ * pending_sender_approvals keys on (messaging_group_id, sender_identity)
+ * UNIQUE and v2's pending_channel_approvals keys on messaging_group_id.
+ * v1-archive's variant adds the `title` + `options_json` columns each
+ * primitive needs to render its approval card, and the `approval_id` FK
+ * to pending_approvals so the unified card-expiry sweep covers them
+ * (per Phase 4D spec). The `denied_at` sticky-deny lives on
+ * messaging_groups (added by migration 017's idempotent ALTER) — same
+ * shape as v2 migration 012.
+ */
+const PENDING_SENDER_APPROVALS_DDL = `
+  CREATE TABLE IF NOT EXISTS pending_sender_approvals (
+    id                   TEXT PRIMARY KEY,
+    messaging_group_id   TEXT NOT NULL REFERENCES messaging_groups(id),
+    agent_group_id       TEXT NOT NULL REFERENCES agent_groups(id),
+    sender_identity      TEXT NOT NULL,
+    sender_name          TEXT,
+    original_message     TEXT NOT NULL,
+    approver_user_id     TEXT NOT NULL REFERENCES users(id),
+    approval_id          TEXT REFERENCES pending_approvals(approval_id),
+    title                TEXT NOT NULL DEFAULT '',
+    options_json         TEXT NOT NULL DEFAULT '[]',
+    created_at           TEXT NOT NULL,
+    UNIQUE(messaging_group_id, sender_identity)
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_sender_approvals_mg
+    ON pending_sender_approvals(messaging_group_id);
+`;
+const PENDING_CHANNEL_APPROVALS_DDL = `
+  CREATE TABLE IF NOT EXISTS pending_channel_approvals (
+    messaging_group_id   TEXT PRIMARY KEY REFERENCES messaging_groups(id),
+    agent_group_id       TEXT NOT NULL REFERENCES agent_groups(id),
+    original_message     TEXT NOT NULL,
+    approver_user_id     TEXT NOT NULL REFERENCES users(id),
+    approval_id          TEXT REFERENCES pending_approvals(approval_id),
+    title                TEXT NOT NULL DEFAULT '',
+    options_json         TEXT NOT NULL DEFAULT '[]',
+    created_at           TEXT NOT NULL
+  );
+`;
+const PENDING_QUESTIONS_DDL = `
+  CREATE TABLE IF NOT EXISTS pending_questions (
+    question_id    TEXT PRIMARY KEY,
+    session_id     TEXT NOT NULL,
+    message_out_id TEXT NOT NULL,
+    platform_id    TEXT,
+    channel_type   TEXT,
+    thread_id      TEXT,
+    title          TEXT NOT NULL,
+    options_json   TEXT NOT NULL,
+    approval_id    TEXT REFERENCES pending_approvals(approval_id),
+    created_at     TEXT NOT NULL
+  );
+`;
+const PHASE_4D_DDL =
+  PENDING_SENDER_APPROVALS_DDL + PENDING_CHANNEL_APPROVALS_DDL + PENDING_QUESTIONS_DDL;
+
 let db: Database.Database;
 
 export function getDb(): Database.Database {
@@ -216,6 +285,7 @@ export function createSchema(database: Database.Database): void {
   database.exec(ENTITY_MODEL_DDL);
   database.exec(RBAC_DDL);
   database.exec(APPROVALS_DDL);
+  database.exec(PHASE_4D_DDL);
 
   runMigrations(database);
 }
@@ -488,6 +558,48 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       // column-level drift between this migration and createSchema is
       // structurally impossible. IF NOT EXISTS makes re-runs a no-op.
       db.exec(APPROVALS_DDL);
+    },
+  },
+  {
+    name: '016_add_pending_sender_approvals',
+    up: (db) => {
+      // Phase 4D D1: unknown-sender approval state.
+      // Uses the shared PENDING_SENDER_APPROVALS_DDL constant so
+      // column-level drift between this migration and createSchema is
+      // structurally impossible. IF NOT EXISTS makes re-runs a no-op.
+      db.exec(PENDING_SENDER_APPROVALS_DDL);
+    },
+  },
+  {
+    name: '017_add_pending_channel_approvals',
+    up: (db) => {
+      // Phase 4D D1: unwired-channel registration approval state.
+      // Two parts mirroring v2 migration 012:
+      //   1. Idempotent guarded ALTER to add messaging_groups.denied_at.
+      //      Existing DBs that pre-date Phase 4D need the column added;
+      //      fresh-install DBs already have it from createSchema's
+      //      ENTITY_MODEL_DDL. The PRAGMA guard avoids a duplicate-column
+      //      error on the fresh-install path.
+      //   2. CREATE TABLE pending_channel_approvals via the shared DDL.
+      // hasTable guard: migration-009 and other narrow tests build a minimal
+      // pre-state that doesn't include messaging_groups. Skip the ALTER then.
+      if (hasTable(db, 'messaging_groups')) {
+        const cols = db.prepare("PRAGMA table_info('messaging_groups')").all() as Array<{ name: string }>;
+        if (!cols.some((c) => c.name === 'denied_at')) {
+          db.exec(`ALTER TABLE messaging_groups ADD COLUMN denied_at TEXT`);
+        }
+      }
+      db.exec(PENDING_CHANNEL_APPROVALS_DDL);
+    },
+  },
+  {
+    name: '018_add_pending_questions',
+    up: (db) => {
+      // Phase 4D D1: ask_user_question MCP-tool state. Uses the shared
+      // PENDING_QUESTIONS_DDL constant. session_id has no FK reference —
+      // v1-archive's `sessions` table is shaped differently from v2's;
+      // see the PHASE_4D_DDL comment for context.
+      db.exec(PENDING_QUESTIONS_DDL);
     },
   },
 ];
