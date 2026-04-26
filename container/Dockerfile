@@ -10,6 +10,7 @@ FROM node:22-slim
 ARG CLAUDE_CODE_VERSION=2.1.116
 ARG AGENT_BROWSER_VERSION=latest
 ARG TSX_VERSION=4.17.0
+ARG PNPM_VERSION=9.15.0
 
 # Install system dependencies for Chromium
 RUN apt-get update && apt-get install -y \
@@ -49,8 +50,19 @@ RUN mv /usr/lib/chromium/chrome_crashpad_handler /usr/lib/chromium/chrome_crashp
        > /usr/lib/chromium/chrome_crashpad_handler \
     && chmod +x /usr/lib/chromium/chrome_crashpad_handler
 
-# Install agent-browser and claude-code globally
-RUN npm install -g agent-browser@${AGENT_BROWSER_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+# Bootstrap pnpm via npm (the .npmrc minReleaseAge=3d gates this npm-side
+# install), then use pnpm for the rest so the supply-chain policy applies.
+RUN npm install -g pnpm@${PNPM_VERSION}
+
+# pnpm requires a global bin directory configured via PNPM_HOME for `pnpm
+# install -g` to work. Set it explicitly and put it on PATH so subsequent
+# layers (and the runtime container) can resolve globally-installed binaries.
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN mkdir -p $PNPM_HOME
+
+# Install agent-browser and claude-code globally via pnpm
+RUN pnpm install -g agent-browser@${AGENT_BROWSER_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # Create app directory
 WORKDIR /app
@@ -58,14 +70,17 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY container/agent-runner/package*.json ./
 
-# Install dependencies (devDeps pruned below; kept here for npm install compatibility)
+# agent-runner is a separate package — installed with npm (not pnpm). Its own
+# package-lock.json + the .npmrc minReleaseAge=3d at repo root provide the
+# 3-day supply-chain hold. Do not migrate this to pnpm without making
+# agent-runner a workspace member.
 RUN npm install
 
 # Source code is mounted RO at runtime (/app/src → container/agent-runner/src).
 # No COPY or tsc build needed — tsx resolves from the mount at startup.
 
 # Install tsx for fast TypeScript execution at startup
-RUN npm install -g tsx@${TSX_VERSION}
+RUN pnpm install -g tsx@${TSX_VERSION}
 
 # Remove dev dependencies from production image
 RUN npm prune --omit=dev
