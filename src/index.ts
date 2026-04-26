@@ -57,6 +57,7 @@ import { formatMessages, routeOutbound, routeOutboundFile, stripInternalTags } f
 import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
 import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
+import { startOneCLIBridge, stopOneCLIBridge } from './permissions/onecli-bridge.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
 import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
@@ -129,6 +130,13 @@ async function main(): Promise<void> {
   // also get reaped without keeping the event loop alive.
   startApprovalExpiryPoll();
 
+  // Phase 4C C6: OneCLI manual-approval bridge. Long-polls the gateway for
+  // credentialed-action approval requests, persists them via the C2
+  // primitive, and resolves on click-auth (C4) or expiry. Idempotent —
+  // safe to call even if OneCLI isn't running (the SDK's worker logs
+  // and retries).
+  startOneCLIBridge();
+
   const orchestrator = new MessageOrchestrator({
     getRouterState,
     setRouterState,
@@ -179,6 +187,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     stopApprovalExpiryPoll();
+    stopOneCLIBridge();
     await plugins.shutdown();
     await queue.shutdown(10000);
     for (const ch of orchestrator.channels) {
