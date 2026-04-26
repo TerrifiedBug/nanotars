@@ -8,37 +8,34 @@ on:
 
 jobs:
   host:
-    name: Host (Node 22, npm)
+    name: Host (Node 22, pnpm)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-      - name: Install host dependencies
-        run: npm install --no-fund
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Test
-        run: npm test
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm test
 
   agent-runner:
-    name: Container agent-runner (Node 22)
+    name: Container agent-runner (Node 22, npm)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install agent-runner dependencies
-        working-directory: container/agent-runner
+      - working-directory: container/agent-runner
         run: npm install --no-fund
-      - name: Typecheck agent-runner
-        working-directory: container/agent-runner
+      - working-directory: container/agent-runner
         run: npx tsc --noEmit
-      - name: Test agent-runner
-        working-directory: container/agent-runner
+      - working-directory: container/agent-runner
         run: npm test
 
   bash-tests:
@@ -46,11 +43,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-      - name: Install dependencies
-        run: npm install --no-fund
-      - name: Run bash tests
-        run: npm run test:bash
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:bash
