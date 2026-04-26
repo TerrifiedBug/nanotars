@@ -137,6 +137,8 @@ export async function processTaskIpc(
     channel_type?: string | null;
     thread_id?: string | null;
     message_out_id?: string;
+    // Phase 5D: emergency_stop / resume_processing optional reason
+    reason?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -351,22 +353,35 @@ export async function processTaskIpc(
       break;
 
     case 'emergency_stop': {
-      if (!isMain) {
-        logger.warn({ sourceGroup }, 'emergency_stop rejected: not main group');
-        break;
-      }
-      logger.info({ sourceGroup }, 'Emergency stop requested via IPC');
-      if (deps.emergencyStop) await deps.emergencyStop();
+      // Phase 5D: soft-pause layer — pausedGate.pause() blocks future container
+      // wakes while in-flight containers complete their current turn. The
+      // existing kill-now path (deps.emergencyStop) is intentionally NOT
+      // called from here; it remains available for graceful shutdown and
+      // future admin paths. See spec §5D and src/lifecycle-handlers.ts.
+      const { handleEmergencyStop } = await import('../lifecycle-handlers.js');
+      await handleEmergencyStop(
+        {
+          reason: typeof data.reason === 'string' ? data.reason : undefined,
+          groupFolder: sourceGroup,
+          isMain,
+        },
+        // Sender threading is incomplete in v1-archive (see lifecycle-handlers
+        // file header). Until it lands, the handler falls back to isMain.
+        undefined,
+      );
       break;
     }
 
     case 'resume_processing': {
-      if (!isMain) {
-        logger.warn({ sourceGroup }, 'resume_processing rejected: not main group');
-        break;
-      }
-      logger.info({ sourceGroup }, 'Resume requested via IPC');
-      if (deps.resumeProcessing) deps.resumeProcessing();
+      const { handleResumeProcessing } = await import('../lifecycle-handlers.js');
+      await handleResumeProcessing(
+        {
+          reason: typeof data.reason === 'string' ? data.reason : undefined,
+          groupFolder: sourceGroup,
+          isMain,
+        },
+        undefined,
+      );
       break;
     }
 
