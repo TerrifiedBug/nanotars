@@ -15,6 +15,12 @@ import {
   askQuestionInputSchema,
   buildAskQuestionPayload,
 } from './mcp-tools/ask-question.js';
+import {
+  buildEmergencyStopPayload,
+  buildResumeProcessingPayload,
+  emergencyStopInputSchema,
+  resumeProcessingInputSchema,
+} from './mcp-tools/lifecycle.js';
 
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
@@ -526,6 +532,43 @@ Phase 4D D4 status: this is currently fire-and-forget — the host persists the 
         },
       ],
     };
+  },
+);
+
+server.tool(
+  'emergency_stop',
+  `Ask the host to soft-pause processing. While paused, in-flight containers
+finish their current turn but no new wakes happen — inbound messages and
+scheduled tasks queue up until \`resume_processing\` is called.
+
+This is a privileged action: the host re-validates that the user who triggered
+your turn is an admin (owner / global admin / scoped admin of this agent
+group). Non-admin callers are rejected silently and a system message is
+delivered back to you.
+
+This is a SEPARATE layer from the existing kill-now path. v1's GroupQueue
+\`emergencyStop\` kills any active container immediately; this tool only
+suspends future wakes. Use it when you want to stop responding to new input
+without disrupting the current turn.`,
+  emergencyStopInputSchema,
+  async (args) => {
+    const payload = buildEmergencyStopPayload(args, { groupFolder, isMain });
+    writeIpcFile(TASKS_DIR, payload);
+    return { content: [{ type: 'text' as const, text: 'Pause request submitted.' }] };
+  },
+);
+
+server.tool(
+  'resume_processing',
+  `Ask the host to resume processing after an \`emergency_stop\` (or admin
+\`/pause\`). Queued inbound messages and tasks will be drained.
+
+Same admin re-validation rules as \`emergency_stop\` apply.`,
+  resumeProcessingInputSchema,
+  async (args) => {
+    const payload = buildResumeProcessingPayload(args, { groupFolder, isMain });
+    writeIpcFile(TASKS_DIR, payload);
+    return { content: [{ type: 'text' as const, text: 'Resume request submitted.' }] };
   },
 );
 

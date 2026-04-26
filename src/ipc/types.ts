@@ -34,6 +34,34 @@ export interface RegisterGroupArgs {
   ignored_message_policy: IgnoredMessagePolicy;
 }
 
+/**
+ * Phase 5D — soft-pause IPC payloads.
+ *
+ * The container-side `emergency_stop` / `resume_processing` MCP tools write
+ * these into `/workspace/ipc/<group>/tasks/`. The host's `processTaskIpc`
+ * dispatches them to `lifecycle-handlers.ts`, which re-validates the
+ * sender's admin role before flipping the process-level `pausedGate`.
+ *
+ * Note: these are layered ON TOP of v1's existing GroupQueue.emergencyStop
+ * (kill-now) — they do not replace it. Soft-pause only suspends future
+ * wakes; in-flight containers complete their current turn.
+ */
+export interface EmergencyStopTask {
+  type: 'emergency_stop';
+  reason?: string;
+  groupFolder: string;
+  isMain: boolean;
+  timestamp: string;
+}
+
+export interface ResumeProcessingTask {
+  type: 'resume_processing';
+  reason?: string;
+  groupFolder: string;
+  isMain: boolean;
+  timestamp: string;
+}
+
 /** Discriminated union for IPC message commands. */
 export type IpcMessage =
   | { type: 'message'; chatJid: string; text: string; sender?: string; replyTo?: string }
