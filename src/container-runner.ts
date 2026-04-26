@@ -2,7 +2,7 @@
  * Container Runner for NanoClaw
  * Spawns agent execution in containers and handles IPC.
  */
-import { ChildProcess } from 'child_process';
+import { ChildProcess, execSync } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -22,6 +22,8 @@ import {
 } from './config.js';
 import { buildVolumeMounts, getHomeDir, readSecrets, VolumeMount } from './container-mounts.js';
 import * as containerRuntime from './container-runtime.js';
+import { getAgentGroupById, updateAgentGroupContainerConfig } from './db/agent-groups.js';
+import { generateAgentGroupDockerfile } from './image-build.js';
 import { logger } from './logger.js';
 import { redactSecrets } from './secret-redact.js';
 import type { AgentGroup, ContainerConfig } from './types.js';
@@ -36,6 +38,16 @@ import {
   isGlobalAdmin,
   isOwner,
 } from './permissions/user-roles.js';
+
+/**
+ * Per-agent-group image tag prefix. Mirrors the install-slug naming used for
+ * the base image so multi-install hosts don't collide. Example tags:
+ *   nanoclaw-agent:<groupId>                  (default install)
+ *   nanoclaw-<slug>-agent:<groupId>           (slugged install)
+ */
+export const CONTAINER_IMAGE_BASE = INSTALL_SLUG
+  ? `nanoclaw-${INSTALL_SLUG}-agent`
+  : 'nanoclaw-agent';
 
 // OneCLI gateway client — module-scoped so it's initialized once per host
 // process and reused across container spawns.
@@ -591,3 +603,74 @@ export async function runContainerAgent(
 
 /** @internal Test-only shim for unit tests — DO NOT use in production code. */
 export const buildContainerArgsForTesting = buildContainerArgs;
+
+/**
+ * Phase 5B — build a per-agent-group image that layers apt/npm packages and
+ * Dockerfile.partials on top of `CONTAINER_IMAGE` (the shared base, which
+ * already has plugin partials baked in).
+ *
+ * IO surface (paired with the pure `generateAgentGroupDockerfile`):
+ *  1. Read the group's container_config.
+ *  2. Generate the per-group Dockerfile string.
+ *  3. Write to a temp file under DATA_DIR.
+ *  4. Spawn `<runtime> build -t nanoclaw-<slug>-agent:<groupId> -f <tmp> .`
+ *  5. Persist the resulting tag back to container_config.imageTag.
+ *
+ * Throws when the agent group has nothing to build (no apt, no npm, no
+ * partials) — callers should guard this before invoking.
+ *
+ * Build context is `process.cwd()` (the repo root) so partials referenced
+ * by relative path resolve correctly during `docker build`.
+ */
+export async function buildAgentGroupImage(agentGroupId: string): Promise<string> {
+  const ag = getAgentGroupById(agentGroupId);
+  if (!ag) throw new Error(`Agent group not found: ${agentGroupId}`);
+
+  const cfg: ContainerConfig = ag.container_config
+    ? (JSON.parse(ag.container_config) as ContainerConfig)
+    : {};
+  const apt = cfg.packages?.apt ?? [];
+  const npm = cfg.packages?.npm ?? [];
+  const partials = cfg.dockerfilePartials ?? [];
+
+  if (apt.length === 0 && npm.length === 0 && partials.length === 0) {
+    throw new Error(
+      'Nothing to build. Add apt/npm packages via install_packages, or set dockerfilePartials.',
+    );
+  }
+
+  const dockerfile = generateAgentGroupDockerfile({
+    baseImage: CONTAINER_IMAGE,
+    apt,
+    npm,
+    partials,
+    projectRoot: process.cwd(),
+  });
+
+  const imageTag = `${CONTAINER_IMAGE_BASE}:${agentGroupId}`;
+  const tmpDockerfile = path.join(DATA_DIR, `Dockerfile.${agentGroupId}`);
+
+  logger.info(
+    { agentGroupId, imageTag, apt, npm, partials },
+    'Building per-agent-group image',
+  );
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(tmpDockerfile, dockerfile);
+  try {
+    const cli = containerRuntime.cli();
+    execSync(
+      `${cli} build -t ${imageTag} --label nanoclaw.agent_group=${agentGroupId} -f ${tmpDockerfile} .`,
+      { cwd: process.cwd(), stdio: 'pipe', timeout: 300_000 },
+    );
+  } finally {
+    try {
+      fs.unlinkSync(tmpDockerfile);
+    } catch {
+      /* best-effort cleanup */
+    }
+  }
+
+  updateAgentGroupContainerConfig(agentGroupId, (c) => ({ ...c, imageTag }));
+  logger.info({ agentGroupId, imageTag }, 'Per-agent-group image built');
+  return imageTag;
+}

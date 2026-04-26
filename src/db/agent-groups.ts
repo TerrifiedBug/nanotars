@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { getDb } from './init.js';
-import type { AgentGroup, MessagingGroup, MessagingGroupAgent } from '../types.js';
+import type { AgentGroup, ContainerConfig, MessagingGroup, MessagingGroupAgent } from '../types.js';
 import { logger } from '../logger.js';
 import { isValidGroupFolder } from './state.js';
 
@@ -67,6 +67,30 @@ export function createAgentGroup(args: {
     container_config: args.container_config ?? null,
     created_at: now,
   };
+}
+
+/**
+ * Phase 5B — partial-update accessor for `agent_groups.container_config`.
+ *
+ * Reads the JSON-serialized blob, applies a caller-supplied mutator, and
+ * writes the result back. Throws when the agent group does not exist.
+ * Used by `buildAgentGroupImage` to persist `imageTag` after a successful
+ * per-group image build, and by 5C self-mod handlers to merge new
+ * `packages` / `mcpServers` entries.
+ */
+export function updateAgentGroupContainerConfig(
+  id: string,
+  mutator: (cfg: ContainerConfig) => ContainerConfig,
+): void {
+  const ag = getAgentGroupById(id);
+  if (!ag) throw new Error(`agent group not found: ${id}`);
+  const current: ContainerConfig = ag.container_config
+    ? (JSON.parse(ag.container_config) as ContainerConfig)
+    : {};
+  const next = mutator(current);
+  getDb()
+    .prepare(`UPDATE agent_groups SET container_config = ? WHERE id = ?`)
+    .run(JSON.stringify(next), id);
 }
 
 // --- Messaging groups ---
