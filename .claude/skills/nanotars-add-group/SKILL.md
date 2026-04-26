@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-add-group
+name: nanotars-add-group
 description: >
   Add a channel group to NanoClaw. Discovers installed channel plugins, guides through
   group registration (admin or regular), and handles channel-specific auth setup.

@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-groups
+name: nanotars-groups
 description: List, view, and manage NanoClaw group configurations
 triggers:
   - list groups

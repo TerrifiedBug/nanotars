@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-db-maintenance
+name: nanotars-db-maintenance
 description: Run SQLite database maintenance — vacuum, integrity check, prune old data, report statistics
 triggers:
   - db maintenance

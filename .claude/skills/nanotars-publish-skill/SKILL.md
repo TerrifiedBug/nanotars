@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-publish-skill
+name: nanotars-publish-skill
 description: Publish a local skill to the NanoClaw skills marketplace. Restructures a .claude/skills/add-* skill into Claude Code plugin format and creates a PR on TerrifiedBug/nanoclaw-skills. Triggers on "publish skill", "publish to marketplace", "nanoclaw publish".
 ---
 

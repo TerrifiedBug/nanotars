@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-add-agent
+name: nanotars-add-agent
 description: >
   Add a persistent agent definition to a group. Creates agent.json, IDENTITY.md, and CLAUDE.md
   files for a specialized subagent auto-discovered by the SDK via Agent Teams.

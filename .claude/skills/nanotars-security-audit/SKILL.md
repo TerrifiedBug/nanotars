@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-security-audit
+name: nanotars-security-audit
 description: >
   Audit a NanoClaw skill plugin for security issues before installation. Reads all files
   and analyzes against the NanoClaw threat model. Triggers on "audit skill", "scan skill",

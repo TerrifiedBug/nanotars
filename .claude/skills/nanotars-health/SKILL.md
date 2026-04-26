@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-health
+name: nanotars-health
 description: Quick system health check — shows status of all NanoClaw components at a glance
 triggers:
   - health check

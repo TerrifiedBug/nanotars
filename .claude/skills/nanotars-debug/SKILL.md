@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-debug
+name: nanotars-debug
 description: Debug container agent issues and run health checks. Use when things aren't working, container fails, authentication problems, plugin issues, or to understand how the system works. Covers logs, environment variables, mounts, plugins, and common issues.
 ---
 

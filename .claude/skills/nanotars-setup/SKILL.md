@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-setup
+name: nanotars-setup
 description: Run initial NanoClaw setup. Use when user wants to install dependencies, authenticate a channel, register their main channel, or start the background services. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-remove-plugin
+name: nanotars-remove-plugin
 description: Use when removing, uninstalling, or deleting a NanoClaw plugin. Handles runtime plugin cleanup, env var removal, database cleanup for channels, container rebuild if needed, and marketplace skill uninstall.
 ---
 

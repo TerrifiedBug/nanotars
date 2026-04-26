@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-update-skill
+name: nanotars-update-skill
 description: Sync improved local plugins to the NanoClaw skills marketplace and create a PR. Detects which plugins changed, shows a diff, and handles the git workflow. Triggers on "update skill", "sync plugin to marketplace", "publish update".
 ---
 

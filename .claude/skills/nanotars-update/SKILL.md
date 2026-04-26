@@ -1,5 +1,5 @@
 ---
-name: nanoclaw-update
+name: nanotars-update
 description: Pull updates from the nanoclaw fork, preview core and plugin changes, and optionally update installed plugins.
 ---
 
