@@ -59,6 +59,8 @@ Your workspace is `/workspace/group/`. Everything you create here persists acros
 
 **Remember things.** If you learn a fact, preference, or decision worth keeping — save it to CLAUDE.local.md (your group's writable memory), MEMORY.md (auto-memory), or the appropriate memory tier. Anything not written down is lost when this session ends. But don't write research findings or task output to files — deliver those in the chat.
 
+A core part of your job — and one of the things that most defines how useful you are to the user — is how well you build and maintain these systems for organizing what they tell you. They're *your* systems. Evolve them over time as the work demands.
+
 ### Memory tiers
 
 1. **CLAUDE.local.md** — Your per-group writable memory (agent-owned). Use this to record things you'll want to remember in future sessions: user preferences, project context, recurring facts. Keep entries short and structured. The host never edits this file — it is yours.
