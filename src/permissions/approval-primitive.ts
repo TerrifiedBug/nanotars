@@ -20,7 +20,13 @@
  */
 import crypto from 'crypto';
 
-import { getDb } from '../db/init.js';
+import {
+  getAgentGroupById,
+  getMessagingGroupById,
+  getWiringForAgentGroup,
+} from '../db/agent-groups.js';
+import { dbEvents, getDb } from '../db/init.js';
+import { insertExternalMessage } from '../db/messages.js';
 import { logger } from '../logger.js';
 import {
   pickApprover,
@@ -73,16 +79,91 @@ export function clearApprovalHandlers(): void {
 }
 
 /**
- * Send a system message to the requesting agent group. v1 has no clean
- * system-injection path yet — this is a logger.warn stub; the real wiring is
- * deferred to a later task (concern #3 in the C2 plan). Callers should treat
- * notifyAgent as best-effort.
+ * Send a system message to the requesting agent group. Phase 5C-05 wires
+ * this to v1's existing inbound-message pipeline:
+ *
+ *   1. Look up the agent group's first wiring → messaging_group → chat_jid.
+ *   2. Insert a row into `messages` (via insertExternalMessage so the path
+ *      mirrors Phase 4D D6's replay hook — same shape, same dbEvents emit).
+ *   3. The orchestrator's message loop is awoken by dbEvents.emit
+ *      ('new-message', chatJid) and picks the synthetic message up on its
+ *      next iteration via getMessagesSince.
+ *
+ * The injected row sets sender='system', sender_name='system', and the
+ * content is prefixed with `[system] ` for visual disambiguation; it is
+ * NOT marked is_bot_message so it remains visible to the agent. v1's
+ * getMessagesSince filter strips bot messages but lets system messages
+ * through. The injected row also avoids the `<assistantName>:` content
+ * prefix backstop in db/messages.ts so the filter doesn't drop it.
+ *
+ * Multi-wiring agent groups: notifyAgent picks the highest-priority wiring
+ * (`getWiringForAgentGroup` orders by priority DESC, created_at). For
+ * single-channel agents this is the only wiring; for multi-channel agents
+ * this is the same as their primary chat. Routing to a different channel
+ * is out of scope here — callers can pass the originating channel via the
+ * approval-card delivery path if they need cross-channel feedback.
+ *
+ * Best-effort: if no wiring exists yet, the call logs and returns. The
+ * approval card itself reaches the admin via a separate path (4C
+ * primitive's deliveryTarget), so the human always sees the decision —
+ * the agent's view is the only thing that goes silent here.
  */
 export function notifyAgent(agentGroupId: string | null, text: string): void {
-  // TODO(phase-4c+): wire to v1's actual system-message injection path
-  // (probably src/group-queue.ts or src/orchestrator.ts). Today the agent
-  // never sees these notifications.
-  logger.warn({ agentGroupId, text }, 'notifyAgent stub: agent not actually notified');
+  if (!agentGroupId) {
+    logger.warn({ text }, 'notifyAgent: no agent group id provided');
+    return;
+  }
+
+  const ag = getAgentGroupById(agentGroupId);
+  if (!ag) {
+    logger.warn({ agentGroupId, text }, 'notifyAgent: agent group not found');
+    return;
+  }
+
+  const wirings = getWiringForAgentGroup(agentGroupId);
+  if (wirings.length === 0) {
+    logger.warn(
+      { agentGroupId, text },
+      'notifyAgent: agent group has no wirings; cannot inject system message',
+    );
+    return;
+  }
+
+  const mg = getMessagingGroupById(wirings[0].messaging_group_id);
+  if (!mg) {
+    logger.warn(
+      { agentGroupId, messagingGroupId: wirings[0].messaging_group_id, text },
+      'notifyAgent: wiring messaging_group missing; cannot inject',
+    );
+    return;
+  }
+
+  const chatJid = mg.platform_id;
+  // Namespace the message id so concurrent notifies (e.g. apply + notifyAfter
+  // pair) don't collide. INSERT OR REPLACE on a duplicate id would silently
+  // overwrite, which is correct (idempotent retry) but namespacing keeps
+  // distinct messages distinct.
+  const messageId = `system-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  try {
+    // insertExternalMessage handles storeChatMetadata + INSERT OR REPLACE +
+    // dbEvents.emit('new-message', chatJid). Mirrors the replay hook in
+    // src/index.ts (Phase 4D D6).
+    insertExternalMessage(chatJid, messageId, 'system', 'system', `[system] ${text}`);
+    // Belt-and-suspenders dbEvents emit — insertExternalMessage already does
+    // it, but we re-emit defensively in case future refactors split the
+    // helpers and the emit is overlooked. EventEmitter.emit is cheap.
+    dbEvents.emit('new-message', chatJid);
+    logger.info(
+      { agentGroupId, chatJid, messageId, textLen: text.length },
+      'notifyAgent: system message injected',
+    );
+  } catch (err) {
+    logger.error(
+      { err, agentGroupId, chatJid, text },
+      'notifyAgent: failed to inject system message',
+    );
+  }
 }
 
 export interface RequestApprovalArgs {
