@@ -73,6 +73,16 @@ if ! node -e "require('better-sqlite3')" 2>&1 | tee -a "$PROJECT_ROOT/logs/setup
 fi
 log_info "better-sqlite3 loads OK"
 
+# --- Host build ---
+
+log_step "pnpm run build (compile host TypeScript to dist/)"
+pnpm run build 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"
+if [ ! -f "$PROJECT_ROOT/dist/index.js" ]; then
+  log_error "pnpm run build did not produce dist/index.js — check logs/setup.log"
+  exit 1
+fi
+log_info "dist/index.js produced"
+
 # --- Container build ---
 
 log_step "Building agent container image (this can take a few minutes on first run)"
