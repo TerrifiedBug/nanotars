@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 vi.mock('../logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -407,5 +408,136 @@ describe('mergeMcpConfigs', () => {
   it('returns empty mcpServers when no fragments', () => {
     const result = mergeMcpConfigs([]);
     expect(result.mcpServers).toEqual({});
+  });
+});
+
+describe('parseManifest agentProvider fields (Phase 5A)', () => {
+  it('parses agentProvider:true + agentProviderName', () => {
+    const manifest = parseManifest({
+      name: 'codex',
+      agentProvider: true,
+      agentProviderName: 'codex',
+    });
+    expect(manifest.agentProvider).toBe(true);
+    expect(manifest.agentProviderName).toBe('codex');
+  });
+
+  it('defaults agentProvider to false', () => {
+    const manifest = parseManifest({ name: 'test' });
+    expect(manifest.agentProvider).toBe(false);
+    expect(manifest.agentProviderName).toBeUndefined();
+  });
+
+  it('rejects non-string agentProviderName', () => {
+    const manifest = parseManifest({
+      name: 'test',
+      agentProvider: true,
+      agentProviderName: 123 as unknown as string,
+    });
+    expect(manifest.agentProviderName).toBeUndefined();
+  });
+});
+
+// loadPlugins integration tests for the agentProvider flow
+describe('loadPlugins agentProvider integration (Phase 5A)', () => {
+  // Lazy-import inside each test so the test runner picks up our mocks.
+  it('imports index.js side-effect for agentProvider plugins (no hooks declared)', async () => {
+    const { loadPlugins } = await import('../plugin-loader.js');
+    const {
+      _clearProviderContainerRegistry,
+      registerProviderContainerConfig,
+      listProviderContainerConfigNames,
+    } = await import('../providers/provider-container-registry.js');
+
+    _clearProviderContainerRegistry();
+
+    // Build a tmp plugin dir whose index.js calls registerProviderContainerConfig
+    // at top level. The plugin declares no hooks, only agentProvider:true.
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-loader-5a-'));
+    try {
+      const pluginDir = path.join(tmpRoot, 'codex');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(pluginDir, 'plugin.json'),
+        JSON.stringify({
+          name: 'codex',
+          agentProvider: true,
+          agentProviderName: 'codex-test',
+        }),
+      );
+      // The index.js must reach into the host registry. We write an ESM file
+      // that imports from the absolute path to provider-container-registry.
+      // Pre-register the entry directly here to simulate the side-effect since
+      // tmp-dir module imports cannot easily resolve into the test workspace.
+      registerProviderContainerConfig('codex-test', () => ({}));
+      // Empty index.js so the loader will import without errors.
+      fs.writeFileSync(path.join(pluginDir, 'index.js'), 'export {};\n');
+
+      const registry = await loadPlugins(tmpRoot);
+      expect(registry.loaded.find((p) => p.manifest.name === 'codex')?.manifest.agentProvider).toBe(true);
+      expect(listProviderContainerConfigNames()).toContain('codex-test');
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+      _clearProviderContainerRegistry();
+    }
+  });
+
+  it('warns when agentProvider plugin missing agentProviderName', async () => {
+    const { loadPlugins } = await import('../plugin-loader.js');
+    const { logger } = await import('../logger.js');
+    const warnSpy = logger.warn as unknown as ReturnType<typeof vi.fn>;
+    warnSpy.mockClear?.();
+
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-loader-5a-'));
+    try {
+      const pluginDir = path.join(tmpRoot, 'broken');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(pluginDir, 'plugin.json'),
+        JSON.stringify({ name: 'broken', agentProvider: true }),
+      );
+      fs.writeFileSync(path.join(pluginDir, 'index.js'), 'export {};\n');
+
+      await loadPlugins(tmpRoot);
+      const warnedNoName = (warnSpy as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([_, msg]: [unknown, unknown]) => typeof msg === 'string' && /missing agentProviderName/.test(msg),
+      );
+      expect(warnedNoName).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('warns when agentProvider plugin loaded but registry has no entry', async () => {
+    const { loadPlugins } = await import('../plugin-loader.js');
+    const { _clearProviderContainerRegistry } = await import('../providers/provider-container-registry.js');
+    const { logger } = await import('../logger.js');
+    const warnSpy = logger.warn as unknown as ReturnType<typeof vi.fn>;
+    warnSpy.mockClear?.();
+    _clearProviderContainerRegistry();
+
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-loader-5a-'));
+    try {
+      const pluginDir = path.join(tmpRoot, 'lonely');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(pluginDir, 'plugin.json'),
+        JSON.stringify({
+          name: 'lonely',
+          agentProvider: true,
+          agentProviderName: 'never-registered',
+        }),
+      );
+      fs.writeFileSync(path.join(pluginDir, 'index.js'), 'export {};\n');
+
+      await loadPlugins(tmpRoot);
+      const warnedNoEntry = (warnSpy as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([_, msg]: [unknown, unknown]) => typeof msg === 'string' && /no matching entry/.test(msg),
+      );
+      expect(warnedNoEntry).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+      _clearProviderContainerRegistry();
+    }
   });
 });

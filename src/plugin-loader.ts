@@ -99,6 +99,8 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
     groups: parseOptionalStringArray(raw.groups),
     version: typeof raw.version === 'string' && isValidSemver(raw.version) ? raw.version : undefined,
     minCoreVersion: typeof raw.minCoreVersion === 'string' && isValidSemver(raw.minCoreVersion) ? raw.minCoreVersion : undefined,
+    agentProvider: raw.agentProvider === true,
+    agentProviderName: typeof raw.agentProviderName === 'string' ? raw.agentProviderName : undefined,
   };
 }
 
@@ -394,26 +396,37 @@ export async function loadPlugins(pluginsDir?: string): Promise<PluginRegistry> 
 
       let hooks: PluginHooks = {};
 
-      // Load hook implementations if the plugin declares hooks
-      if (manifest.hooks && manifest.hooks.length > 0) {
+      // Determine if we need to import index.js. Two reasons:
+      //  1. Plugin declares hooks (existing behaviour) — pull named exports.
+      //  2. Phase 5A: plugin declares agentProvider:true — index.js must be
+      //     imported so its top-level registerProviderContainerConfig() side
+      //     effect fires.
+      const needsHookImport = !!manifest.hooks && manifest.hooks.length > 0;
+      const needsProviderImport = manifest.agentProvider === true;
+
+      if (needsHookImport || needsProviderImport) {
         const indexJs = path.join(pluginDir, 'index.js');
         if (fs.existsSync(indexJs)) {
           const mod = await import(indexJs);
-          hooks = {};
-          for (const hookName of manifest.hooks) {
-            if (typeof mod[hookName] === 'function') {
-              (hooks as any)[hookName] = mod[hookName];
-            } else {
-              logger.warn(
-                { plugin: manifest.name, hook: hookName },
-                'Declared hook not found in module',
-              );
+          if (needsHookImport) {
+            hooks = {};
+            for (const hookName of manifest.hooks!) {
+              if (typeof mod[hookName] === 'function') {
+                (hooks as any)[hookName] = mod[hookName];
+              } else {
+                logger.warn(
+                  { plugin: manifest.name, hook: hookName },
+                  'Declared hook not found in module',
+                );
+              }
             }
           }
         } else {
           logger.warn(
             { plugin: manifest.name, path: indexJs },
-            'Plugin declares hooks but no index.js found',
+            needsHookImport
+              ? 'Plugin declares hooks but no index.js found'
+              : 'Plugin declares agentProvider but no index.js found',
           );
         }
       }
@@ -421,6 +434,33 @@ export async function loadPlugins(pluginsDir?: string): Promise<PluginRegistry> 
       registry.add({ manifest, dir: pluginDir, hooks });
     } catch (err) {
       logger.error({ plugin: path.basename(pluginDir), err }, 'Failed to load plugin');
+    }
+  }
+
+  // Phase 5A: verify agent-provider plugins actually populated the host-side
+  // provider-container-registry. Logged-only — non-fatal, since the seam
+  // resolves missing providers as 'claude' fallback.
+  for (const plugin of registry.loaded) {
+    if (!plugin.manifest.agentProvider) continue;
+    const expectedName = plugin.manifest.agentProviderName;
+    if (!expectedName) {
+      logger.warn(
+        { plugin: plugin.manifest.name },
+        'agentProvider plugin missing agentProviderName; skipping registration check',
+      );
+      continue;
+    }
+    const { listProviderContainerConfigNames } = await import('./providers/provider-container-registry.js');
+    if (!listProviderContainerConfigNames().includes(expectedName)) {
+      logger.warn(
+        { plugin: plugin.manifest.name, expected: expectedName },
+        'agentProvider plugin loaded but container-registry has no matching entry',
+      );
+    } else {
+      logger.info(
+        { plugin: plugin.manifest.name, provider: expectedName },
+        'agent provider registered',
+      );
     }
   }
 

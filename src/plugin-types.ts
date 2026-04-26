@@ -30,6 +30,17 @@ export interface PluginManifest {
   version?: string;
   /** Minimum NanoClaw core version required (semver, e.g. "1.0.0") */
   minCoreVersion?: string;
+  /**
+   * Phase 5A: when true, this plugin contributes a non-default agent provider
+   * (Codex, OpenCode, Ollama, etc.). Plugin's index.js MUST call
+   * registerProviderContainerConfig(name, fn) at top level so the registration
+   * fires when the loader imports the module.
+   */
+  agentProvider?: boolean;
+  /**
+   * Phase 5A: provider name (e.g. 'codex'). Required when agentProvider is true.
+   */
+  agentProviderName?: string;
 }
 
 /** Message passed through onInboundMessage hooks */
