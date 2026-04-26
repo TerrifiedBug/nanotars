@@ -63,6 +63,49 @@ export interface ResumeProcessingTask {
 }
 
 /**
+ * Phase 5C — self-mod IPC payloads.
+ *
+ * The container-side `install_packages` / `add_mcp_server` MCP tools write
+ * these into `/workspace/ipc/<group>/tasks/`. The host's `processTaskIpc`
+ * dispatches them to `permissions/install-packages.ts` /
+ * `permissions/add-mcp-server.ts`, which validate the request, queue an
+ * approval card via the Phase 4C primitive, and (on approve) mutate
+ * `container_config` + rebuild the per-group image (5B) + restart.
+ *
+ * Both are fire-and-forget on the agent side — the host notifies the agent
+ * back via approval-primitive's `notifyAgent` once the decision is applied
+ * (5C-05 wires that path to a real chat injection).
+ */
+export interface InstallPackagesTask {
+  type: 'install_packages';
+  apt: string[];
+  npm: string[];
+  reason: string;
+  groupFolder: string;
+  isMain: boolean;
+  timestamp: string;
+}
+
+export interface AddMcpServerTask {
+  type: 'add_mcp_server';
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  groupFolder: string;
+  isMain: boolean;
+  timestamp: string;
+}
+
+export function isInstallPackagesTask(t: { type: string }): t is InstallPackagesTask {
+  return t.type === 'install_packages';
+}
+
+export function isAddMcpServerTask(t: { type: string }): t is AddMcpServerTask {
+  return t.type === 'add_mcp_server';
+}
+
+/**
  * Phase 5E — `create_agent` IPC payload.
  *
  * The container-side `create_agent` MCP tool (admin-only — registration is
@@ -119,6 +162,10 @@ export const TASK_IPC_TYPES = new Set([
   // Phase 5E: admin-only create_agent — container-side MCP tool registers
   // only when NANOCLAW_IS_ADMIN=1. Host re-validates sender role.
   'create_agent',
+  // Phase 5C: self-mod tasks. Host validates, queues an approval card via
+  // the 4C primitive, and on-approve mutates container_config + rebuilds.
+  'install_packages',
+  'add_mcp_server',
 ]);
 
 /** Validate that raw IPC data has a known task type. */
