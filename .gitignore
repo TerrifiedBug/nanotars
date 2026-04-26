@@ -30,6 +30,10 @@ groups/global/*
 .DS_Store
 socket:*
 
+# Runtime artifacts from setup script's WSL/nohup fallback path
+start-nanotars.sh
+nanotars.pid
+
 # IDE
 .idea/
 .vscode/
