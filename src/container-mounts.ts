@@ -195,8 +195,13 @@ export async function buildVolumeMounts(
       }
     }
 
-    // MCP server config — merge root .mcp.json with plugin mcp.json fragments
+    // MCP server config — merge root .mcp.json with plugin mcp.json fragments,
+    // then layer container_config.mcpServers on top (5C add_mcp_server entries
+    // win over plugin defaults of the same name, since approval was explicit).
     const mergedMcp = pluginRegistry.getMergedMcpConfig(mcpJsonFile, scopeChannel, scopeGroup);
+    if (containerConfig?.mcpServers) {
+      Object.assign(mergedMcp.mcpServers, containerConfig.mcpServers);
+    }
     if (Object.keys(mergedMcp.mcpServers).length > 0) {
       const mergedMcpDir = path.join(DATA_DIR, 'env', group.folder);
       await fs.promises.mkdir(mergedMcpDir, { recursive: true });

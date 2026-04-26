@@ -312,6 +312,70 @@ describe('buildVolumeMounts: plugin integration', () => {
     expect(mcpMount!.readonly).toBe(true);
   });
 
+  it('layers container_config.mcpServers on top of plugin mcp config (5C add_mcp_server)', async () => {
+    setupProjectDirs();
+    setupGroupDirs('main');
+
+    setPluginRegistry({
+      getSkillPaths: vi.fn(() => []),
+      getContainerHookPaths: vi.fn(() => []),
+      getContainerMounts: vi.fn(() => []),
+      getMergedMcpConfig: vi.fn(() => ({
+        mcpServers: { 'plugin-server': { command: 'node', args: [], env: {} } },
+      })),
+      getContainerEnvVars: vi.fn(() => []),
+    } as any);
+
+    const mounts = await buildVolumeMounts(
+      makeGroup({
+        containerConfig: {
+          mcpServers: {
+            'self-mod-server': { command: 'npx', args: ['-y', 'some-server'], env: {} },
+          },
+        },
+      }),
+      true,
+    );
+
+    const mcpMount = mounts.find(m => m.containerPath === '/workspace/.mcp.json');
+    expect(mcpMount).toBeDefined();
+    const merged = JSON.parse(fs.readFileSync(mcpMount!.hostPath, 'utf-8'));
+    expect(merged.mcpServers['plugin-server']).toEqual({ command: 'node', args: [], env: {} });
+    expect(merged.mcpServers['self-mod-server']).toEqual({
+      command: 'npx',
+      args: ['-y', 'some-server'],
+      env: {},
+    });
+  });
+
+  it('container_config.mcpServers wins over plugin server of the same name', async () => {
+    setupProjectDirs();
+    setupGroupDirs('main');
+
+    setPluginRegistry({
+      getSkillPaths: vi.fn(() => []),
+      getContainerHookPaths: vi.fn(() => []),
+      getContainerMounts: vi.fn(() => []),
+      getMergedMcpConfig: vi.fn(() => ({
+        mcpServers: { shared: { command: 'plugin-cmd', args: [], env: {} } },
+      })),
+      getContainerEnvVars: vi.fn(() => []),
+    } as any);
+
+    const mounts = await buildVolumeMounts(
+      makeGroup({
+        containerConfig: {
+          mcpServers: { shared: { command: 'self-mod-cmd', args: [], env: {} } },
+        },
+      }),
+      true,
+    );
+
+    const mcpMount = mounts.find(m => m.containerPath === '/workspace/.mcp.json');
+    const merged = JSON.parse(fs.readFileSync(mcpMount!.hostPath, 'utf-8'));
+    expect(merged.mcpServers.shared.command).toBe('self-mod-cmd');
+  });
+
   it('validates plugin container mounts against allowlist', async () => {
     setupProjectDirs();
     setupGroupDirs('main');
