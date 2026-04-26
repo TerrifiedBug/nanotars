@@ -26,6 +26,11 @@ const ADMIN_COMMANDS = new Set<string>([
   // src/rebuild-image-admin-command.ts; pairs with buildAgentGroupImage in
   // src/container-runner.ts.
   '/rebuild-image',
+  // Cross-channel pairing-codes primitive — generate a 4-digit code that
+  // the operator echoes from the chat they want to register. Handler lives
+  // in src/pair-admin-command.ts; pairs with src/pending-codes.ts and the
+  // marketplace telegram plugin's inbound interceptor.
+  '/pair-telegram',
 ]);
 
 export function isAdminCommand(text: string): boolean {
