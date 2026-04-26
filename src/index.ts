@@ -64,6 +64,7 @@ import { notifyAgent } from './permissions/approval-primitive.js';
 import { startOneCLIBridge, stopOneCLIBridge } from './permissions/onecli-bridge.js';
 import { setReplayHook } from './permissions/approval-replay.js';
 import { setApprovalFallbackSender } from './permissions/approval-delivery.js';
+import { createPendingCode, consumePendingCode } from './pending-codes.js';
 import { loadPlugins, PluginRegistry } from './plugin-loader.js';
 import { loadSecrets } from './secret-redact.js';
 import { setPluginRegistry } from './container-runner.js';
@@ -346,6 +347,15 @@ async function main(): Promise<void> {
         getLastGroupSync,
         setLastGroupSync,
         updateChatName,
+      },
+      // Cross-channel pairing-codes primitive — see src/pending-codes.ts.
+      // Plugins call config.consumePendingCode(...) from their inbound
+      // handler before delivering messages to the agent.
+      createPendingCode: (req) => createPendingCode(req),
+      consumePendingCode: async (req) => {
+        const result = await consumePendingCode(req);
+        if (result.matched) return { matched: true, intent: result.intent };
+        return { matched: false, invalidated: result.invalidated };
       },
     };
     const channel = await plugin.hooks.onChannel!(pluginCtx, channelConfig);
