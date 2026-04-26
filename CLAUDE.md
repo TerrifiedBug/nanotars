@@ -87,6 +87,20 @@ sudo systemctl stop nanoclaw
 sudo journalctl -u nanoclaw -f   # Follow logs
 ```
 
+## Supply Chain Security (pnpm)
+
+This project uses pnpm at the repo root with `minimumReleaseAge: 4320` (3 days) in `pnpm-workspace.yaml`. New package versions must exist on the npm registry for 3 days before pnpm will resolve them. The `container/agent-runner/` subpackage stays on npm and gets the same 3-day hold via `.npmrc` (`minimumReleaseAge=4320`).
+
+**Two-package layout:**
+- **Root (`/data/nanotars/`)** — pnpm. Lockfile: `pnpm-lock.yaml`. Install: `pnpm install --frozen-lockfile`.
+- **Container agent-runner (`container/agent-runner/`)** — npm. Lockfile: `package-lock.json`. Install: `npm install` (run inside the Docker build).
+
+**Rules — do not bypass without explicit human approval:**
+- **`minimumReleaseAgeExclude`**: Never add entries without human sign-off. If a package must bypass the release-age gate, the human must approve and pin the exact version (e.g. `package@1.2.3`), never a range.
+- **`onlyBuiltDependencies`**: Never add packages without human approval — build scripts execute arbitrary code during install. Current allowlist: `[better-sqlite3]`.
+- **`pnpm install --frozen-lockfile`** in CI, automation, and container builds. Never bare `pnpm install` in those contexts.
+- **Lockfile conversion**: Use `pnpm import` (not `pnpm install`) to generate `pnpm-lock.yaml` from a legacy `package-lock.json`. Fresh `pnpm install` re-resolves versions and risks native-binding clobbers.
+
 ## Container Build Cache
 
 Apple Container's buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild:
