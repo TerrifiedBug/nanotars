@@ -56,7 +56,6 @@ bash nanotars.sh stop       # stop
    /plugin marketplace add <owner>/<repo>
    /plugin install <skill-name>
    ```
-5. (Optional) Enable the OneCLI credential vault: from inside Claude, `/init-onecli`
 
 ## What This Is
 

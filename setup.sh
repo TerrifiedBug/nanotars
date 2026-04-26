@@ -236,12 +236,15 @@ else
   log_warn "  Or set ANTHROPIC_API_KEY in: $PROJECT_ROOT/.env"
 fi
 
-# --- OneCLI hint ---
+# --- OneCLI presence (silent — only logged for diagnostics, not surfaced to user) ---
+# Background: OneCLI is wired (see src/container-runner.ts) and silently
+# falls back when not reachable. It's not promoted in onboarding because for
+# single-user installs the value over plain .env + plugin-loader containerEnvVars
+# is marginal. Power users who want a credential vault can still install it via
+# /init-onecli inside Claude; the wiring stays in the code.
 
 if command -v onecli >/dev/null 2>&1; then
-  log_info "✓ OneCLI present ($(onecli version 2>/dev/null | head -1 | cut -c1-40))"
-else
-  log_info "OneCLI not detected — open Claude in the install dir and run /init-onecli to enable the credential vault later"
+  log_info "✓ OneCLI present (gateway will route container egress)"
 fi
 
 # --- Install user wrapper: ~/.local/bin/nanotars ---
@@ -452,7 +455,6 @@ ${PATH_HINT}
        walks through channel install, auth, wiring, and verification.)
 
     3. (Optional) Tune personality:  groups/main/IDENTITY.md
-       (Optional) OneCLI vault:      /init-onecli (inside Claude)
 
     Service control:  nanotars start | stop | restart | status | logs
     Logs:             $PROJECT_ROOT/logs/nanotars.log
