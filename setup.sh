@@ -88,7 +88,7 @@ log_info "dist/index.js produced"
 log_step "Building agent container image (this can take a few minutes on first run)"
 bash "$PROJECT_ROOT/container/build.sh" 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"
 
-# --- Service install ---
+# --- Service install + start ---
 
 log_step "Installing service"
 case "$PLATFORM" in
@@ -100,6 +100,38 @@ case "$PLATFORM" in
     ;;
 esac
 
+# launchd's RunAtLoad=true and systemd-user's restart line both start the
+# service automatically. The nohup branch (root, WSL, no-systemd) writes a
+# wrapper but does not run it — invoke it now so every platform ends with
+# a running service.
+if [ "$SERVICE_MANAGER" = "nohup" ]; then
+  WRAPPER="$PROJECT_ROOT/start-nanotars.sh"
+  if [ -x "$WRAPPER" ]; then
+    log_step "Starting nanotars (nohup)"
+    bash "$WRAPPER" 2>&1 | tee -a "$PROJECT_ROOT/logs/setup.log"
+  fi
+fi
+
+# Quick liveness check — give the service ~3s to boot before we banner
+# "started" and let the user run nanotars.sh logs.
+sleep 3
+SERVICE_LIVE=false
+case "$SERVICE_MANAGER" in
+  launchd)
+    launchctl list 2>/dev/null | grep -q "com.nanotars" && SERVICE_LIVE=true
+    ;;
+  systemd-user)
+    systemctl --user is-active nanotars >/dev/null 2>&1 && SERVICE_LIVE=true
+    ;;
+  nohup)
+    PIDFILE="$PROJECT_ROOT/nanotars.pid"
+    if [ -f "$PIDFILE" ]; then
+      PID="$(cat "$PIDFILE" 2>/dev/null || echo "")"
+      [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null && SERVICE_LIVE=true
+    fi
+    ;;
+esac
+
 # --- OneCLI hint ---
 
 if command -v onecli >/dev/null 2>&1; then
@@ -108,34 +140,76 @@ else
   log_info "OneCLI not detected — to enable the credential vault later, open Claude Code in this directory and run /init-onecli"
 fi
 
-# --- First-agent prompt ---
+# --- Post-install banner + onboarding ---
 
 log_step "Setup complete"
+
+if [ "$SERVICE_LIVE" = "true" ]; then
+  SERVICE_LINE="Service:  $SERVICE_MANAGER (running)"
+else
+  SERVICE_LINE="Service:  $SERVICE_MANAGER (NOT running — see logs/nanotars.error.log)"
+fi
+
 cat <<EOF
 
-  nanotars is installed and the service is running.
+  ================================================================
+    nanotars setup complete
+  ================================================================
 
-  Manage it with:
-    bash nanotars.sh status
-    bash nanotars.sh logs
-    bash nanotars.sh restart
+    Install:  $PROJECT_ROOT
+    $SERVICE_LINE
+    Logs:     $PROJECT_ROOT/logs/nanotars.log
+    Errors:   $PROJECT_ROOT/logs/nanotars.error.log
 
-  Logs: $PROJECT_ROOT/logs/nanotars.log
+    Manage with:
+      bash nanotars.sh status     # health snapshot
+      bash nanotars.sh logs       # tail (or show error-log if main is empty)
+      bash nanotars.sh restart    # restart
+      bash nanotars.sh stop       # stop
+
+  ─── Next: bootstrap your first agent ────────────────────────────
+
+    1. Open Claude Code in this directory:
+         cd $PROJECT_ROOT && claude
+
+    2. Run the setup skill:
+         /nanoclaw-setup
+       Walks through:
+         • Pick a chat channel (Telegram, Discord, Slack, WhatsApp, ...)
+         • Install the channel plugin (/add-<channel> if needed)
+         • Wire your first agent group to that channel
+         • Verify the agent responds in chat
+
+    3. (Optional) Customize personality + instructions:
+         $PROJECT_ROOT/groups/main/IDENTITY.md   # personality / soul
+         $PROJECT_ROOT/groups/main/CLAUDE.md     # operational guidance
+
+    4. (Optional) OneCLI credential vault for safer secrets:
+         from inside Claude Code → /init-onecli
 
 EOF
 
-FIRST_AGENT_HINT='  Bootstrap the first agent: open a Claude Code session in this directory and run:
+# --- Skill marketplace prompt ---
 
-      /nanoclaw-setup
-
-  This walks through channel auth, main-channel selection, and verifies the agent.
-'
-
-if [ "${NANOTARS_SKIP_FIRST_AGENT_PROMPT:-}" = "true" ] || [ ! -t 0 ]; then
-  printf '\n%s\n' "$FIRST_AGENT_HINT"
+if [ "${NANOTARS_SKIP_MARKETPLACE_PROMPT:-}" != "true" ] && [ -t 0 ]; then
+  read -r -p "  Register a Claude Code skill marketplace now? (y/N) " ANS </dev/tty
+  case "${ANS:-}" in
+    y|Y|yes|YES)
+      DEFAULT_MARKETPLACE="TerrifiedBug/nanoclaw-skills"
+      read -r -p "    Marketplace repo [${DEFAULT_MARKETPLACE}]: " REPO </dev/tty
+      REPO="${REPO:-$DEFAULT_MARKETPLACE}"
+      printf '\n  To register, run from inside Claude Code:\n'
+      printf '    /plugin marketplace add %s\n\n' "$REPO"
+      printf '  Then: /plugin install <skill-name>\n\n'
+      ;;
+    *)
+      printf '\n  Skipping. To register later, from inside Claude Code:\n'
+      printf '    /plugin marketplace add <owner>/<repo>\n\n'
+      ;;
+  esac
 else
-  read -r -p "  Bootstrap your first agent now? (y/N) " ANS </dev/tty
-  printf '\n%s\n' "$FIRST_AGENT_HINT"
+  printf '\n  To register a skill marketplace later, from inside Claude Code:\n'
+  printf '    /plugin marketplace add <owner>/<repo>\n\n'
 fi
 
 log_info "setup.sh finished cleanly"
