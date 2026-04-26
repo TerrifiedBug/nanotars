@@ -22,6 +22,10 @@ const ADMIN_COMMANDS = new Set<string>([
   // src/lifecycle-handlers.ts.
   '/pause',
   '/resume',
+  // Phase 5B: force-rebuild a per-agent-group image. Handler lives in
+  // src/rebuild-image-admin-command.ts; pairs with buildAgentGroupImage in
+  // src/container-runner.ts.
+  '/rebuild-image',
 ]);
 
 export function isAdminCommand(text: string): boolean {
