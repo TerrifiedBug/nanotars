@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { _initTestDatabase } from '../../db/init.js';
+import { _initTestDatabase, getDb } from '../../db/init.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
 import { ensureUser } from '../users.js';
 import { grantRole } from '../user-roles.js';
@@ -14,6 +14,7 @@ import {
   type ApprovalHandler,
 } from '../approval-primitive.js';
 import { isAuthorizedClicker, handleApprovalClick } from '../approval-click-auth.js';
+import { editApprovalCardOnDecision, registerApprovalEditor, clearApprovalEditors } from '../approval-delivery.js';
 
 beforeEach(() => {
   _initTestDatabase();
@@ -384,5 +385,80 @@ describe('handleApprovalClick', () => {
     expect(result.success).toBe(true);
     expect(result.reason).toBe('scoped-admin-override');
     expect(getPendingApproval(approvalId)!.status).toBe('approved');
+  });
+});
+
+// ── handleApprovalClick — edit-on-decision hook ────────────────────────────
+
+describe('handleApprovalClick — edit-on-decision hook', () => {
+  let editorSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    _initTestDatabase();
+    clearApprovalHandlers();
+    clearApprovalEditors();
+    editorSpy = vi.fn(async () => ({ ok: true as const }));
+    registerApprovalEditor('telegram', editorSpy);
+  });
+
+  it('invokes editor after applyDecision succeeds', async () => {
+    ensureUser({ id: 'telegram:owner', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:owner', role: 'owner' });
+    await ensureUserDm({ user_id: 'telegram:owner', channel_type: 'telegram' });
+    const ag = createAgentGroup({ name: 'g', folder: 'g' });
+
+    const applySpy = vi.fn(async () => undefined);
+    registerApprovalHandler('test_action', {
+      render: () => ({ title: 'T', body: 'B', options: [{ id: 'approve', label: 'Approve' }] }),
+      applyDecision: applySpy,
+    });
+    const result = await requestApproval({
+      action: 'test_action',
+      agentGroupId: ag.id,
+      payload: {},
+      originatingChannel: 'telegram',
+      skipDelivery: true,
+    });
+    getDb()
+      .prepare(`UPDATE pending_approvals SET platform_message_id = 'mid-1' WHERE approval_id = ?`)
+      .run(result.approvalId);
+
+    await handleApprovalClick({
+      approval_id: result.approvalId,
+      clicker_user_id: 'telegram:owner',
+      decision: 'approved',
+    });
+
+    expect(applySpy).toHaveBeenCalledOnce();
+    expect(editorSpy).toHaveBeenCalledOnce();
+  });
+
+  it('does not invoke editor when applyDecision throws', async () => {
+    ensureUser({ id: 'telegram:owner', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:owner', role: 'owner' });
+    await ensureUserDm({ user_id: 'telegram:owner', channel_type: 'telegram' });
+    const ag = createAgentGroup({ name: 'g', folder: 'g' });
+
+    registerApprovalHandler('test_action', {
+      render: () => ({ title: 'T', body: 'B', options: [{ id: 'approve', label: 'Approve' }] }),
+      applyDecision: async () => {
+        throw new Error('apply failed');
+      },
+    });
+    const result = await requestApproval({
+      action: 'test_action',
+      agentGroupId: ag.id,
+      payload: {},
+      originatingChannel: 'telegram',
+      skipDelivery: true,
+    });
+
+    await handleApprovalClick({
+      approval_id: result.approvalId,
+      clicker_user_id: 'telegram:owner',
+      decision: 'approved',
+    });
+
+    expect(editorSpy).not.toHaveBeenCalled();
   });
 });

@@ -25,6 +25,7 @@ import {
 } from './approval-primitive.js';
 import { isOwner, isGlobalAdmin, isAdminOfAgentGroup } from './user-roles.js';
 import { logger } from '../logger.js';
+import { editApprovalCardOnDecision } from './approval-delivery.js';
 
 export interface ClickAuthDecision {
   authorized: boolean;
@@ -166,6 +167,11 @@ export async function handleApprovalClick(
         payload,
         decision: args.decision,
       });
+      // Slice 7: edit the original card to show the decision
+      // (✅ Approved / ❌ Rejected). Best-effort — failure already
+      // swallowed inside editApprovalCardOnDecision; we just await to
+      // surface logs.
+      await editApprovalCardOnDecision(args.approval_id);
     } catch (err) {
       logger.error(
         { approval_id: args.approval_id, decision: args.decision, err },
