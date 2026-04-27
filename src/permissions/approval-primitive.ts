@@ -239,6 +239,21 @@ export async function requestApproval(args: RequestApprovalArgs): Promise<Reques
   const rendered = handler
     ? handler.render({ approvalId, payload: args.payload })
     : null;
+  // Slice 7: option_id length warning. Telegram's callback_data is capped at
+  // 64 bytes; format is `approval:<uuid>:<opt.id>` = 46 + len(opt.id). Anything
+  // > 18 chars would overflow and the deliverer falls back to text. Warn
+  // loudly so handler authors notice. Defense in depth — the Telegram plugin
+  // also checks before sending.
+  if (rendered) {
+    for (const opt of rendered.options ?? []) {
+      if (opt.id.length > 18) {
+        logger.warn(
+          { action: args.action, optionId: opt.id, length: opt.id.length },
+          'requestApproval: option id length > 18; will overflow Telegram callback_data and fall back to text',
+        );
+      }
+    }
+  }
   const title = rendered?.title ?? args.action;
   const optionsJson = JSON.stringify(rendered?.options ?? []);
 
