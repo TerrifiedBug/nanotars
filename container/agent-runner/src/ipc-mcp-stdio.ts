@@ -28,7 +28,9 @@ import {
 import {
   addMcpServerInputSchema,
   buildAddMcpServerPayload,
+  buildCreateSkillPluginPayload,
   buildInstallPackagesPayload,
+  createSkillPluginInputSchema,
   installPackagesInputSchema,
 } from './mcp-tools/self-mod.js';
 
@@ -654,6 +656,44 @@ notified once it is live.`,
         {
           type: 'text' as const,
           text: 'MCP server request submitted. You will be notified when admin approves or rejects.',
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  'create_skill_plugin',
+  `Request that the host install a new skill plugin into THIS agent group's
+runtime. Requires admin approval. Fire-and-forget — result is delivered back
+via system message after the admin approves or rejects.
+
+Use this tool ONLY for skill-only and MCP archetypes:
+- skill-only: agent calls a public API with curl/Bash, no credentials or background processes
+- mcp: connects to an MCP server with optional env-var credentials
+
+For host-process hooks (HTTP servers, polling loops) or container hooks (SDK
+observers), tell the user to run \`/create-skill-plugin\` on the host instead —
+those install paths require host-side review.
+
+After approval the host writes plugins/{name}/ + .claude/skills/add-skill-{name}/,
+optionally appends env var values to the appropriate .env, and restarts your
+container so the new plugin is loaded on next spawn.`,
+  createSkillPluginInputSchema,
+  async (args) => {
+    const result = buildCreateSkillPluginPayload(args, { groupFolder, isMain });
+    if (!result.ok) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
+        isError: true,
+      };
+    }
+    writeIpcFile(TASKS_DIR, result.payload);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'Skill plugin install request submitted. You will be notified when admin approves or rejects.',
         },
       ],
     };
