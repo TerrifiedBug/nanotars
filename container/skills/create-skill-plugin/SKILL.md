@@ -169,6 +169,8 @@ Tips:
 }
 ```
 
+The `command` defaults to `npx` for published packages. If the user has a local script, you can also use `node`, `python`, `python3`, `bash`, or an absolute path under `/usr/local/bin/` or `/workspace/`. Example: `"command": "node", "args": ["/workspace/my-mcp.js"]`.
+
 `containerSkillMd`:
 
 ```markdown
