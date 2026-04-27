@@ -41,8 +41,8 @@ describe('isAdminCommand', () => {
     expect(isAdminCommand('/restart')).toBe(true);
   });
 
-  it('classifies /help as not admin', () => {
-    expect(isAdminCommand('/help')).toBe(false);
+  it('classifies /help as admin', () => {
+    expect(isAdminCommand('/help')).toBe(true);
   });
 
   it('classifies /start as not admin', () => {
@@ -145,5 +145,37 @@ describe('checkCommandPermission', () => {
     // that's isAdminCommand's job. This just checks if the user has admin rights.
     const result = checkCommandPermission('telegram:owner2', '/help', ag.id);
     expect(result.allowed).toBe(true);
+  });
+});
+
+// --- metadata accessors ---
+
+import { getAdminCommandMeta, listAdminCommands, type AdminCommandMeta } from '../command-gate.js';
+
+describe('command-gate: metadata accessors', () => {
+  it('returns metadata for known command', () => {
+    const meta = getAdminCommandMeta('/grant');
+    expect(meta).toBeDefined();
+    expect(meta?.name).toBe('/grant');
+    expect(meta?.description).toMatch(/grant/i);
+  });
+
+  it('returns undefined for unknown command', () => {
+    expect(getAdminCommandMeta('/nope')).toBeUndefined();
+  });
+
+  it('listAdminCommands returns every entry sorted by name', () => {
+    const list = listAdminCommands();
+    const names = list.map((m) => m.name);
+    expect(names).toEqual([...names].sort());
+    expect(names).toContain('/grant');
+    expect(names).toContain('/help');
+    expect(names).toContain('/pair-telegram');
+  });
+
+  it('every entry has non-empty description', () => {
+    for (const meta of listAdminCommands()) {
+      expect(meta.description.length).toBeGreaterThan(0);
+    }
   });
 });

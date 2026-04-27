@@ -1,37 +1,65 @@
 import { isOwner, isGlobalAdmin, isAdminOfAgentGroup } from './permissions/user-roles.js';
 
 /**
+ * Metadata for a slash-command that requires admin privileges.
+ *
+ * The ADMIN_COMMANDS map in this file is the source of truth for the
+ * admin-command universe. Per-command description and usage are declared
+ * here to be consumed by /help rendering and channel-plugin autocomplete.
+ */
+export interface AdminCommandMeta {
+  /** The slash-prefixed command name, e.g. '/grant'. */
+  name: string;
+  /** One-line description for /help and channel-plugin autocomplete. */
+  description: string;
+  /** Argument usage hint, e.g. '<user_id> <role>'. Empty string if no args. */
+  usage: string;
+}
+
+/**
  * Slash-commands that require admin privileges.
  *
  * Phase 4B introduces this gate to replace v1's implicit "main group only"
  * convention. Commands sent from non-admin users are refused with a
  * clear "admin-only" message instead of silently working in the main group.
  *
- * Extend this set as new admin commands are added.
+ * Slice 5: converted from Set<string> to Map<name, AdminCommandMeta> so
+ * per-command metadata (description, usage) is declared in a single source
+ * of truth. Map.has(name) still works for the existing isAdminCommand gate.
  */
-const ADMIN_COMMANDS = new Set<string>([
-  '/grant',
-  '/revoke',
-  '/list-users',
-  '/list-roles',
-  '/register-group',
-  '/delete-group',
-  '/restart',
+const ADMIN_COMMANDS = new Map<string, AdminCommandMeta>([
+  ['/grant',          { name: '/grant',          description: 'Grant a role to a user.',                              usage: '<user_id> <role>' }],
+  ['/revoke',         { name: '/revoke',         description: 'Revoke a role from a user.',                           usage: '<user_id> <role>' }],
+  ['/list-users',     { name: '/list-users',     description: 'List all known users with their roles.',               usage: '' }],
+  ['/list-roles',     { name: '/list-roles',     description: 'List role definitions.',                               usage: '' }],
+  ['/register-group', { name: '/register-group', description: 'Register the current chat as a group.',                usage: '<folder>' }],
+  ['/delete-group',   { name: '/delete-group',   description: 'Delete a registered group.',                           usage: '<folder>' }],
+  ['/restart',        { name: '/restart',        description: 'Restart all agent containers.',                        usage: '' }],
   // Phase 5D: soft-pause / resume the host. Layered on top of the existing
   // GroupQueue.emergencyStop kill-now path — see src/lifecycle.ts and
   // src/lifecycle-handlers.ts.
-  '/pause',
-  '/resume',
+  ['/pause',          { name: '/pause',          description: 'Soft-pause host inbound processing for an agent group.', usage: '[reason]' }],
+  ['/resume',         { name: '/resume',         description: 'Resume host inbound processing for an agent group.',     usage: '[reason]' }],
   // Phase 5B: force-rebuild a per-agent-group image. Handler lives in
   // src/rebuild-image-admin-command.ts; pairs with buildAgentGroupImage in
   // src/container-runner.ts.
-  '/rebuild-image',
+  ['/rebuild-image',  { name: '/rebuild-image',  description: 'Force-rebuild a per-agent-group container image.',     usage: '<agent_group_id>' }],
   // Cross-channel pairing-codes primitive — generate a 4-digit code that
   // the operator echoes from the chat they want to register. Handler lives
   // in src/pair-admin-command.ts; pairs with src/pending-codes.ts and the
   // marketplace telegram plugin's inbound interceptor.
-  '/pair-telegram',
+  ['/pair-telegram',  { name: '/pair-telegram',  description: 'Generate a 4-digit pairing code to register a chat.',  usage: '' }],
+  // Slice 5: /help renders the admin-command list. Handler in help-command.ts.
+  ['/help',           { name: '/help',           description: 'List all admin commands with descriptions.',           usage: '' }],
 ]);
+
+export function getAdminCommandMeta(name: string): AdminCommandMeta | undefined {
+  return ADMIN_COMMANDS.get(name);
+}
+
+export function listAdminCommands(): AdminCommandMeta[] {
+  return [...ADMIN_COMMANDS.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function isAdminCommand(text: string): boolean {
   if (!text) return false;
