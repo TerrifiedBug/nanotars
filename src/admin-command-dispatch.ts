@@ -23,6 +23,7 @@ import { tryHandleHealthAdminCommand } from './health-admin-command.js';
 import { tryHandleRoleAdminCommand } from './role-admin-commands.js';
 import { tryHandleRestartAdminCommand } from './restart-admin-command.js';
 import { tryHandleRegisterGroupAdminCommand } from './register-group-admin-command.js';
+import { normalizeCommand } from './command-gate.js';
 
 export interface AdminCommandArgs {
   /** First whitespace-delimited token from the user's message (e.g. "/help"). */
@@ -51,9 +52,15 @@ export interface AdminCommandResult {
 export async function dispatchAdminCommand(
   args: AdminCommandArgs,
 ): Promise<AdminCommandResult> {
+  // Slice 8: normalize once here so handlers can do exact-match against
+  // canonical hyphenated names. Telegram autocomplete sends the underscore
+  // form (`/list_groups`) and may also append `@<botname>`; this fold gives
+  // every handler the canonical form (`/list-groups`).
+  const command = normalizeCommand(args.command);
+
   // /help — sync, cheapest first.
   const helpResult = tryHandleHelpCommand({
-    command: args.command,
+    command,
     userId: args.userId,
     agentGroupId: args.agentGroupId,
   });
@@ -61,7 +68,7 @@ export async function dispatchAdminCommand(
 
   // /pause, /resume — sync.
   const lifecycleResult = tryHandleLifecycleAdminCommand({
-    command: args.command,
+    command,
     reason: args.rest,
     userId: args.userId,
     agentGroupId: args.agentGroupId,
@@ -71,7 +78,7 @@ export async function dispatchAdminCommand(
 
   // Slice 8: read-only listers (sync).
   const listResult = tryHandleListAdminCommand({
-    command: args.command,
+    command,
     userId: args.userId,
     agentGroupId: args.agentGroupId,
   });
@@ -79,7 +86,7 @@ export async function dispatchAdminCommand(
 
   // Slice 8: /health (sync).
   const healthResult = tryHandleHealthAdminCommand({
-    command: args.command,
+    command,
     userId: args.userId,
     agentGroupId: args.agentGroupId,
   });
@@ -87,7 +94,7 @@ export async function dispatchAdminCommand(
 
   // Slice 8: /grant, /revoke (sync — DB mutations).
   const roleResult = tryHandleRoleAdminCommand({
-    command: args.command,
+    command,
     args: args.args,
     userId: args.userId,
     agentGroupId: args.agentGroupId,
@@ -96,7 +103,7 @@ export async function dispatchAdminCommand(
 
   // Slice 8: /restart — async (kicks per-group restarts).
   const restartResult = await tryHandleRestartAdminCommand({
-    command: args.command,
+    command,
     userId: args.userId,
     agentGroupId: args.agentGroupId,
   });
@@ -104,7 +111,7 @@ export async function dispatchAdminCommand(
 
   // /rebuild-image — async (image build).
   const rebuildResult = await tryHandleRebuildImageAdminCommand({
-    command: args.command,
+    command,
     args: args.args,
     userId: args.userId ?? '',
     agentGroupId: args.agentGroupId,
@@ -114,7 +121,7 @@ export async function dispatchAdminCommand(
   // Slice 8: /register-group + /pair-telegram alias — async (pairing-code
   // allocation + optional agent_group create).
   const registerResult = await tryHandleRegisterGroupAdminCommand({
-    command: args.command,
+    command,
     args: args.args,
     userId: args.userId,
     agentGroupId: args.agentGroupId,

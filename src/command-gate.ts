@@ -66,8 +66,12 @@ const ADMIN_COMMANDS = new Map<string, AdminCommandMeta>([
  * form Telegram requires for setMyCommands (e.g. `/list_users` after a
  * dropdown tap). Also strips the optional `@<botname>` suffix Telegram
  * appends in group chats.
+ *
+ * Exported so dispatchAdminCommand can apply the same normalization to
+ * `args.command` before passing to handlers — handlers compare against
+ * the canonical hyphenated names in their hardcoded sets.
  */
-function normalizeCommand(token: string): string {
+export function normalizeCommand(token: string): string {
   // Strip @<botname> suffix (Telegram convention in group chats).
   const noBot = token.split('@')[0];
   // Convert underscores → hyphens so /list_users matches the canonical
