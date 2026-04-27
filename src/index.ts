@@ -72,6 +72,7 @@ import { MessageOrchestrator } from './orchestrator.js';
 import { isSenderAllowed, loadSenderAllowlist, shouldDropMessage } from './sender-allowlist.js';
 import type { ChannelPluginConfig, PluginContext } from './plugin-types.js';
 import type { Channel } from './types.js';
+import { writeAdminCommandsJson } from './admin-commands-export.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -132,6 +133,11 @@ async function main(): Promise<void> {
   runStartupTasks();
   backupDatabase();
   logger.info('Database initialized');
+
+  // Slice 5: write data/admin-commands.json so channel plugins can
+  // populate their command-autocomplete surfaces on connect.
+  writeAdminCommandsJson(DATA_DIR);
+  logger.info({ dataDir: DATA_DIR }, 'admin-commands.json written');
 
   // Phase 4C C5: time-based expiry sweep for pending_approvals. Runs an
   // initial sweep + a 60s unref'd interval so cards that age out mid-run
