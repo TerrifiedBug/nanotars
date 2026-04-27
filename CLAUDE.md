@@ -44,6 +44,8 @@ NanoClaw's plugin system is designed so that all capabilities are added through 
 
 All capabilities must be achieved through the plugin interface: `plugin.json`, `index.js` hooks, `container-skills/`, `mcp.json`, `containerHooks`, and `Dockerfile.partial`. If a plugin idea genuinely requires core code changes, say so clearly and stop — do not attempt workarounds.
 
+**Skills MUST NOT query the SQLite database directly via `sqlite3` (or any other SQLite client).** Schema changes in core (e.g. the entity-model migration of 2026-04 that dropped `registered_groups` in favour of `agent_groups` / `messaging_groups` / `messaging_group_agents`) silently break every skill that inlines raw SQL — operator runs the skill, query fails mid-conversation, agent returns a confusing error. Use the existing IPC actions (`register_group`, `refresh_groups`, `emergency_stop`, etc.) or `nanotars` CLI subcommands for any DB read/write. If an operator-facing skill needs visibility that no IPC/CLI surface provides, propose adding the missing surface to core rather than reaching into the schema.
+
 ## Skills
 
 | Skill | When to Use |

@@ -59,9 +59,15 @@ Per the triage doc, this is the only fully-optional block. Per-session container
 nanotars's plugin model lives across two repos: this fork (`TerrifiedBug/nanotars`) ships only core + a few baseline skills; everything else (channels, integrations) lives in the marketplace at `TerrifiedBug/nanotars-skills` and is installed via the Claude Code plugin marketplace. Catch-up work that touches the entity-model schema, the channel plugin interface, or the plugin boundary rules has marketplace-side consequences that the triage doc didn't track.
 
 **Marketplace schema-staleness sweep (mirrors the local skills sweep):**
-- [ ] Grep `TerrifiedBug/nanotars-skills` for `registered_groups` references across all `plugins/*/skills/**` and `plugins/*/files/container-skills/**`. ~25-30 plugins to scan.
-- [ ] Per stale plugin, file a PR with the same `agent_groups ⋈ messaging_group_agents ⋈ messaging_groups` rewrite the local sweep uses. Reuse the rewritten `nanotars-groups` SKILL.md as the reference template.
-- [ ] Decide on a min-nanotars-version contract for marketplace plugins. Currently nothing in `plugin.json` declares "this plugin requires nanotars ≥ migration 018." Without it, an old marketplace plugin installed on a current nanotars (or a current marketplace plugin installed on a stale nanotars) silently breaks. Either a `compatibleNanotarsVersion` field on `plugin.json` checked at install time, or a CI bot in `nanotars-skills` that flags `registered_groups` references on PRs.
+
+Inventory done 2026-04-27: only 5 channel-plugin installer skills have raw SQL touching `registered_groups` (discord, slack, telegram, webhook, whatsapp). Container skills and non-channel plugin installers don't touch the DB at all. Total: 10 stale refs, much smaller than initially feared.
+
+- [~] Patch the 5 channel-plugin SKILL.md files to use entity-model SQL (same patterns as slice 3a-2). One PR per plugin or one rolling PR. Slice 3b in flight 2026-04-27.
+- [x] **Decision: dropped the `compatibleNanotarsVersion` / CI-bot ideas.** Versioning infrastructure is over-engineered for a single-user installation, and the breakage was a one-time hit from the entity-model migration rather than a recurring drift problem. The right fix is enforcing the plugin boundary so skills don't reach into core schema in the first place — see the new "Skills MUST NOT query the SQLite database directly" rule in `CLAUDE.md` (added 2026-04-27).
+
+**Deferred — `nanotars` CLI subcommands abstracting operator DB ops** (e.g. `nanotars groups list/view/status/update`, `nanotars debug groups`):
+
+Would let core skills become 1-line CLI wrappers instead of inlining SQL, surviving any future schema migration without skill-side changes. Estimated 2-3 days to build (subcommand surface design + Node entry points + skill rewrites). Deferred until either (a) a future architecture change actually causes pain again, or (b) the in-container skill-creation flow needs a stable read API for agents in the container. The CLAUDE.md boundary rule + slice 3a/b sweep is the cheap fix that closes the current breakage; this CLI is the durable-but-not-yet-justified follow-up.
 
 **In-container skill-creation flow correctness:**
 - [ ] When a user in a Telegram chat asks TARS to build a skill, in-container TARS has no `/create-skill-plugin` skill and no formal plugin-boundary rulebook — those are host-side artifacts (`.claude/skills/create-skill-plugin/`, `.claude/skills/nanotars-publish-skill/`, the `Plugin Boundary` section of `CLAUDE.md`). Build a container-side equivalent so in-chat skill creation produces marketplace-compliant output instead of improvising from filesystem inspection.
