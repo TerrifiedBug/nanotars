@@ -233,6 +233,125 @@ describe('deliverApprovalCard (dispatcher)', () => {
   });
 });
 
+// ── Slice 7: editor registry + editApprovalCardOnDecision ────────────────
+
+import {
+  registerApprovalEditor,
+  getApprovalEditor,
+  clearApprovalEditors,
+  editApprovalCardOnDecision,
+  type ApprovalEditTarget,
+} from '../approval-delivery.js';
+import { registerApprovalHandler, requestApproval } from '../approval-primitive.js';
+import { createAgentGroup } from '../../db/agent-groups.js';
+
+describe('registerApprovalEditor', () => {
+  beforeEach(() => {
+    clearApprovalEditors();
+  });
+
+  it('registers an editor for a channel', () => {
+    const fn = async () => ({ ok: true as const });
+    registerApprovalEditor('telegram', fn);
+    expect(getApprovalEditor('telegram')).toBe(fn);
+  });
+
+  it('clearApprovalEditors removes all', () => {
+    registerApprovalEditor('telegram', async () => ({ ok: true as const }));
+    clearApprovalEditors();
+    expect(getApprovalEditor('telegram')).toBeUndefined();
+  });
+
+  it('overwrite warns but accepts', () => {
+    const a = async () => ({ ok: true as const });
+    const b = async () => ({ ok: true as const });
+    registerApprovalEditor('telegram', a);
+    registerApprovalEditor('telegram', b);
+    expect(getApprovalEditor('telegram')).toBe(b);
+  });
+});
+
+describe('editApprovalCardOnDecision', () => {
+  let editorSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    _initTestDatabase();
+    clearApprovalHandlers();
+    clearApprovalEditors();
+    editorSpy = vi.fn(async () => ({ ok: true as const }));
+    registerApprovalEditor('telegram', editorSpy);
+
+    ensureUser({ id: 'telegram:owner', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:owner', role: 'owner' });
+    await ensureUserDm({ user_id: 'telegram:owner', channel_type: 'telegram' });
+  });
+
+  async function queueAndApprove(): Promise<string> {
+    const ag = createAgentGroup({ name: 'g', folder: 'g' });
+    registerApprovalHandler('test_action', {
+      render: ({ payload }) => ({
+        title: 'TitleX',
+        body: `BodyForName=${(payload as { name?: string }).name}`,
+        options: [{ id: 'approve', label: 'Approve' }],
+      }),
+      applyDecision: async () => undefined,
+    });
+    const result = await requestApproval({
+      action: 'test_action',
+      agentGroupId: ag.id,
+      payload: { name: 'weather' },
+      originatingChannel: 'telegram',
+      skipDelivery: true,
+    });
+    // pending_approvals has no approver_user_id column; the approver is
+    // embedded in the payload as _picked_approver_user_id by requestApproval.
+    getDb()
+      .prepare(`UPDATE pending_approvals SET platform_message_id = 'mid-1', status = 'approved' WHERE approval_id = ?`)
+      .run(result.approvalId);
+    return result.approvalId;
+  }
+
+  it('invokes the editor adapter with the right shape', async () => {
+    const approvalId = await queueAndApprove();
+    await editApprovalCardOnDecision(approvalId);
+
+    expect(editorSpy).toHaveBeenCalledOnce();
+    const target = editorSpy.mock.calls[0][0] as ApprovalEditTarget;
+    expect(target.channel_type).toBe('telegram');
+    expect(target.platform_message_id).toBe('mid-1');
+    expect(target.decision).toBe('approved');
+    expect(target.decided_by_user_id).toBe('telegram:owner');
+    expect(target.original.title).toBe('TitleX');
+    expect(target.original.body).toBe('BodyForName=weather');
+  });
+
+  it('no-ops when no editor registered for channel', async () => {
+    clearApprovalEditors();
+    const approvalId = await queueAndApprove();
+    await expect(editApprovalCardOnDecision(approvalId)).resolves.toBeUndefined();
+  });
+
+  it('no-ops when row has no platform_message_id', async () => {
+    const approvalId = await queueAndApprove();
+    getDb()
+      .prepare(`UPDATE pending_approvals SET platform_message_id = NULL WHERE approval_id = ?`)
+      .run(approvalId);
+    await editApprovalCardOnDecision(approvalId);
+    expect(editorSpy).not.toHaveBeenCalled();
+  });
+
+  it('no-ops when row not found', async () => {
+    await editApprovalCardOnDecision('nonexistent-id');
+    expect(editorSpy).not.toHaveBeenCalled();
+  });
+
+  it('logs but does not throw when editor throws', async () => {
+    const approvalId = await queueAndApprove();
+    editorSpy.mockRejectedValueOnce(new Error('chat unreachable'));
+    await expect(editApprovalCardOnDecision(approvalId)).resolves.toBeUndefined();
+  });
+});
+
 // ── End-to-end wiring through the four card-issuing paths ────────────────
 
 describe('end-to-end card delivery from request flows', () => {

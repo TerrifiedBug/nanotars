@@ -22,6 +22,7 @@
  */
 import { getDb } from '../db/init.js';
 import { logger } from '../logger.js';
+import { getPendingApproval, getApprovalHandler } from './approval-primitive.js';
 
 // ── Module-level fallback sender ──────────────────────────────────────────
 //
@@ -109,6 +110,106 @@ export function getApprovalDeliverer(channel: string): ApprovalCardDeliverer | u
 
 export function clearApprovalDeliverers(): void {
   deliverers.clear();
+}
+
+// ── Slice 7: editor registry ──────────────────────────────────────────────
+//
+// Parallel to the deliverer registry. Channel adapters register an editor
+// that takes the resolved row + decision and updates the original card
+// message in place ("✅ Approved by @user at HH:MM", remove buttons).
+// Best-effort — failure logged, doesn't throw.
+
+export interface ApprovalEditTarget {
+  channel_type: string;
+  platform_id: string;
+  platform_message_id: string;
+  decision: 'approved' | 'rejected' | 'expired';
+  decided_by_user_id: string | null;
+  /** Original card content, re-rendered from the registered handler so the
+   * edited message preserves the title + body the admin originally saw. */
+  original: { title: string; body: string };
+}
+
+export type ApprovalEditor = (target: ApprovalEditTarget) => Promise<{ ok: boolean; error?: string }>;
+
+const editors = new Map<string, ApprovalEditor>();
+
+/**
+ * Register a per-channel edit adapter. A second call for the same channel
+ * overwrites the previous with a warning (mirroring registerApprovalDeliverer).
+ */
+export function registerApprovalEditor(channel: string, fn: ApprovalEditor): void {
+  if (editors.has(channel)) {
+    logger.warn({ channel }, 'registerApprovalEditor: channel already registered, overwriting');
+  }
+  editors.set(channel, fn);
+}
+
+export function getApprovalEditor(channel: string): ApprovalEditor | undefined {
+  return editors.get(channel);
+}
+
+export function clearApprovalEditors(): void {
+  editors.clear();
+}
+
+/**
+ * Edit the original card message after a decision. Best-effort — failure
+ * logged but doesn't throw. Reads the row to get platform_message_id +
+ * channel_type, re-renders the body via the registered handler so the
+ * edited message preserves what the admin originally saw.
+ */
+export async function editApprovalCardOnDecision(approval_id: string): Promise<void> {
+  const row = getPendingApproval(approval_id) as
+    | (Record<string, unknown> & {
+        action?: string;
+        channel_type?: string;
+        platform_id?: string;
+        platform_message_id?: string | null;
+        title?: string;
+        payload?: string;
+        status?: string;
+      })
+    | undefined;
+  if (!row) return;
+  if (typeof row.platform_message_id !== 'string' || !row.platform_message_id) return;
+  const channel = String(row.channel_type ?? '');
+  const editor = editors.get(channel);
+  if (!editor) return;
+  const decision = String(row.status ?? 'pending');
+  if (decision !== 'approved' && decision !== 'rejected' && decision !== 'expired') return;
+
+  // Parse payload once: used both to extract _picked_approver_user_id and
+  // to re-render the card body via the handler.
+  // pending_approvals has no approver_user_id column — the approver is
+  // embedded in the payload as _picked_approver_user_id by requestApproval.
+  const action = String(row.action ?? '');
+  const handler = getApprovalHandler(action);
+  let renderedBody = '';
+  let decidedByUserId: string | null = null;
+  try {
+    const payload = JSON.parse(String(row.payload ?? '{}'));
+    if (typeof payload._picked_approver_user_id === 'string') {
+      decidedByUserId = payload._picked_approver_user_id;
+    }
+    const rendered = handler?.render({ approvalId: approval_id, payload });
+    renderedBody = rendered?.body ?? '';
+  } catch (err) {
+    logger.warn({ err, approval_id }, 'editApprovalCardOnDecision: re-render failed');
+  }
+
+  try {
+    await editor({
+      channel_type: channel,
+      platform_id: String(row.platform_id ?? ''),
+      platform_message_id: row.platform_message_id,
+      decision: decision as 'approved' | 'rejected' | 'expired',
+      decided_by_user_id: decidedByUserId,
+      original: { title: String(row.title ?? ''), body: renderedBody },
+    });
+  } catch (err) {
+    logger.warn({ err, approval_id, channel }, 'editApprovalCardOnDecision: editor threw');
+  }
 }
 
 /**
