@@ -40,7 +40,7 @@ sqlite3 -header -column store/messages.db "
   FROM agent_groups ag
   LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
   LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  ORDER BY mg.channel_type, ag.folder;
+  ORDER BY COALESCE(mg.channel_type, 'zz-unwired'), ag.folder;
 "
 ```
 
@@ -149,7 +149,7 @@ sqlite3 -header -column store/messages.db "
     ag.folder,
     ag.name AS agent_name,
     COALESCE(mg.channel_type, '(unwired)') AS channel,
-    COUNT(m.id) AS messages,
+    COUNT(DISTINCT m.id) AS messages,
     MAX(m.timestamp) AS last_activity,
     (SELECT COUNT(*) FROM scheduled_tasks t
        WHERE t.group_folder = ag.folder AND t.status = 'active') AS tasks
