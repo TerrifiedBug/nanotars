@@ -49,6 +49,8 @@ import {
   registerChannelApprovalHandler,
   requestChannelApproval,
 } from './permissions/channel-approval.js';
+import { isAdminCommand } from './command-gate.js';
+import { dispatchAdminCommand } from './admin-command-dispatch.js';
 
 // TODO(phase-4d-D6): wire chat-sdk button-click events into
 // `handleApprovalClick` from './permissions/approval-click-auth.js'. v1
@@ -547,6 +549,45 @@ export class MessageOrchestrator {
         m.reply_context?.sender_name === this.deps.assistantName,
       );
       if (!hasTrigger && !hasReplyToBot) return true;
+    }
+
+    // Slice 5: admin-command dispatch. If the trigger message is an admin
+    // slash-command and this is a single-message batch, run the host-side
+    // handler chain. Multi-message batches (rare in practice) still go to
+    // the agent — splitting them adds complexity without operator value.
+    if (missedMessages.length === 1 && agentGroupRow) {
+      const trigger = missedMessages[0];
+      const tokens = trigger.content.trim().split(/\s+/);
+      const command = tokens[0];
+      if (isAdminCommand(command)) {
+        const result = await dispatchAdminCommand({
+          command,
+          args: tokens.slice(1),
+          rest: trigger.content.slice(command.length).trim() || undefined,
+          userId,
+          agentGroupId: agentGroupRow.id,
+          userHandle: trigger.sender_name ?? trigger.sender,
+        });
+        if (result.handled) {
+          if (result.reply && channel?.sendMessage) {
+            try {
+              await channel.sendMessage(chatJid, result.reply);
+            } catch (err) {
+              this.deps.logger.warn(
+                { err, chatJid, command },
+                'Admin command reply send failed',
+              );
+            }
+          }
+          // Mark trigger as processed so we don't redispatch on the next sweep.
+          this.lastAgentTimestamp[chatJid] = trigger.timestamp;
+          this.deps.logger.info(
+            { chatJid, command, permissionReason: result.permissionReason },
+            'Admin command handled host-side',
+          );
+          return true;
+        }
+      }
     }
 
     const prompt = this.deps.formatMessages(missedMessages);
