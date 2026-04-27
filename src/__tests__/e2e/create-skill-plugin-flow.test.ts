@@ -10,7 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-import { _initTestDatabase } from '../../db/init.js';
+import { _initTestDatabase, getDb } from '../../db/init.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
 import { ensureUser } from '../../permissions/users.js';
 import { grantRole } from '../../permissions/user-roles.js';
@@ -18,6 +18,11 @@ import { ensureUserDm } from '../../permissions/user-dms.js';
 import {
   clearApprovalHandlers,
 } from '../../permissions/approval-primitive.js';
+import {
+  registerApprovalEditor,
+  clearApprovalEditors,
+  editApprovalCardOnDecision,
+} from '../../permissions/approval-delivery.js';
 import {
   registerCreateSkillPluginHandler,
   applyDecisionForTest,
@@ -27,11 +32,15 @@ import {
 let tmpProjectRoot: string;
 let originalCwd: string;
 let restartGroupSpy: ReturnType<typeof vi.fn>;
+let editorSpy: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
   _initTestDatabase();
   clearApprovalHandlers();
+  clearApprovalEditors();
   restartGroupSpy = vi.fn().mockResolvedValue(undefined);
+  editorSpy = vi.fn(async () => ({ ok: true as const }));
+  registerApprovalEditor('telegram', editorSpy);
   registerCreateSkillPluginHandler({ restartGroup: restartGroupSpy });
   tmpProjectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'csp-e2e-'));
   fs.mkdirSync(path.join(tmpProjectRoot, 'plugins'), { recursive: true });
@@ -73,6 +82,22 @@ describe('e2e: create_skill_plugin (skill-only, no creds)', () => {
     expect(approvalId).toBeTruthy();
 
     await applyDecisionForTest(approvalId!, 'approved');
+
+    // Stamp platform_message_id + status on the row so editApprovalCardOnDecision
+    // can find a target (applyDecisionForTest bypasses the click router which
+    // normally does both).
+    getDb()
+      .prepare(
+        `UPDATE pending_approvals
+            SET platform_message_id = 'mid-1', status = 'approved'
+          WHERE approval_id = ?`,
+      )
+      .run(approvalId!);
+    await editApprovalCardOnDecision(approvalId!);
+
+    expect(editorSpy).toHaveBeenCalled();
+    const editCall = editorSpy.mock.calls[editorSpy.mock.calls.length - 1][0];
+    expect(editCall.decision).toBe('approved');
 
     expect(fs.existsSync(path.join(tmpProjectRoot, 'plugins', 'weather', 'plugin.json'))).toBe(true);
     expect(

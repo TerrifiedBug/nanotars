@@ -962,3 +962,24 @@ After the bootstrap path landed (section 18) the first end-to-end test surfaced 
 - **`plugins/channels/telegram/index.js`** (local copy — marketplace upstream PR pending) — implements `setTyping(jid)` via Grammy's `sendChatAction(numericId, 'typing')`.
 - **`nanotars.sh`** — `cmd_stop` (nohup branch) now waits up to 30s for the killed process to actually exit before returning. Prior behaviour returned immediately, so `cmd_restart` raced the new node against the old node's still-held `data/host.pid` lock and exited with "Another NanoClaw process is already running". 30s covers container shutdown.
 - **`.gitignore` + `groups/main/CLAUDE.md`** — stopped tracking the per-group CLAUDE.md. It's a runtime artifact: `composeGroupClaudeMd` rewrites it to a 3-line includes scaffold on every spawn, clobbering whatever was on disk. The file is now created on first spawn and ignored thereafter; the rich seed content lives in `groups/global/CLAUDE.md` as the single source of truth.
+
+---
+
+## 20. Approval-Card Delivery
+
+Slice 6's manual smoke test surfaced that approval cards never actually
+reached admin chats — three independent v1 gaps. Slice 7 fixes all
+three host-side, plus native Telegram inline buttons via marketplace PR.
+
+### What was built
+
+- **Hoist `deliverApprovalCard` into `requestApproval`** — `src/permissions/approval-primitive.ts`. Self-mod handlers (`add_mcp_server`, `install_packages`, `create_skill_plugin`, `create_agent`) stop forgetting delivery. Custom-flow callers (`sender-approval`, `channel-approval`, `onecli-bridge`) opt out via `skipDelivery: true`.
+- **`registerApprovalEditor` registry + `editApprovalCardOnDecision`** — `src/permissions/approval-delivery.ts`. Parallel to the deliverer registry. Channel adapters register an editor that updates the original card after a decision. Body re-rendered via the registered handler so the edited message preserves what the admin originally saw — no schema change needed.
+- **Click-auth edit hook** — `src/permissions/approval-click-auth.ts`. After `applyDecision` succeeds, `editApprovalCardOnDecision(approval_id)` runs (best-effort, failure logged).
+- **Universal text-reply middleware** — new `src/permissions/approval-text-reply.ts`. Strict `^approve|reject$` (case-insensitive) match; sender resolution; pending-row lookup; `routeApprovalClick` dispatch; silent fall-through on auth fail (no leak of approval existence).
+- **Orchestrator integration** — `src/orchestrator.ts`. Calls `tryHandleApprovalTextReply` between admin-command dispatch and `runAgent`; on match, suppresses the agent turn.
+- **Telegram plugin: inline buttons + callback + editor** — `plugins/channels/telegram/index.js` + marketplace `TerrifiedBug/nanotars-skills` PR #13. Native `reply_markup.inline_keyboard`; `bot.on('callback_query:data')`; `editMessageText` with empty markup on decision.
+
+### Net behavior
+
+In a Telegram chat, ask TARS to create a skill. The approval card lands in the admin DM with **Approve** / **Reject** buttons. Tap Approve. The card edits to "✅ Approved by @user at HH:MM UTC", buttons disappear, container restarts, TARS confirms the install. For channels without inline-button rendering, plain-text "reply approve" works — the host parses the reply natively.
