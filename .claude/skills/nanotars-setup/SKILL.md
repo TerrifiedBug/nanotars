@@ -40,7 +40,7 @@ ls plugins/channels/*/plugin.json 2>/dev/null | head -1 | xargs -I{} sh -c '
   NAME=$(basename "$DIR")
   [ -f "data/channels/$NAME/auth/creds.json" ] || [ -f "data/channels/$NAME/auth-status.txt" ] && echo "CHANNEL_AUTH: $NAME" || echo "CHANNEL_AUTH: none"
 ' 2>/dev/null || echo "CHANNEL_AUTH: no_channels"
-sqlite3 store/messages.db "SELECT COUNT(*) FROM registered_groups WHERE folder = 'main'" 2>/dev/null | grep -q "^[1-9]" && echo "MAIN_GROUP: registered" || echo "MAIN_GROUP: not_registered"
+sqlite3 store/messages.db "SELECT COUNT(*) FROM agent_groups WHERE folder = 'main'" 2>/dev/null | grep -q "^[1-9]" && echo "MAIN_GROUP: registered" || echo "MAIN_GROUP: not_registered"
 grep -q "^TZ=" .env 2>/dev/null && echo "TIMEZONE: configured" || echo "TIMEZONE: not_set"
 [ -f ~/.config/nanoclaw/mount-allowlist.json ] && echo "MOUNT_ALLOWLIST: configured" || echo "MOUNT_ALLOWLIST: missing"
 which ffmpeg >/dev/null 2>&1 && echo "FFMPEG: installed" || echo "FFMPEG: not_installed (optional)"
@@ -421,7 +421,7 @@ grep -q "^ASSISTANT_NAME=" .env 2>/dev/null && sed -i "s/^ASSISTANT_NAME=.*/ASSI
 
 Replace `CHOSEN_NAME` with the trigger word the user chose above (without the `@` prefix).
 
-> This sets the global assistant name used for bot message detection, log messages, and the default trigger pattern. The per-group trigger in `registered_groups` takes precedence for individual chats.
+> This sets the global assistant name used for bot message detection, log messages, and the default trigger pattern. The per-group trigger in `messaging_group_agents.engage_pattern` takes precedence for individual chat wirings.
 
 ### 6b. Explain security model and ask about main channel type
 
@@ -537,11 +537,13 @@ echo "TZ=THEIR_CHOICE" >> .env
 
 Once you have the JID, configure it. Use the assistant name from step 6a and the channel name from step 5.
 
-Register the group directly in the database:
+Register the main chat by issuing a pairing code from the host:
 
 ```bash
-sqlite3 store/messages.db "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger, channel) VALUES ('<JID>', '<GROUP_NAME>', '<FOLDER>', '<TRIGGER>', datetime('now'), 1, '<CHANNEL>')"
+nanotars pair-main
 ```
+
+The CLI prints a 4-digit pairing code. Send that code as a message from the chat you want to register; the channel plugin's inbound interceptor consumes the code and creates the entity-model rows (`agent_groups` + `messaging_groups` + `messaging_group_agents`) atomically through `src/db/agent-groups.ts` helpers — no manual SQL needed.
 
 - For DMs or main groups, set `requires_trigger` to `0` (responds to all messages)
 - For group chats, keep `requires_trigger` as `1` (default, needs @mention)
@@ -654,7 +656,7 @@ Tell the user:
 >
 > To grant a group access to an external directory, update its config in the database:
 > ```bash
-> sqlite3 store/messages.db "UPDATE registered_groups SET container_config = json('{\"additionalMounts\": [{\"hostPath\": \"~/projects/my-app\"}]}') WHERE jid = '<JID>'"
+> sqlite3 store/messages.db "UPDATE agent_groups SET container_config = json('{\"additionalMounts\": [{\"hostPath\": \"~/projects/my-app\"}]}') WHERE folder = '<FOLDER>'"
 > ```
 > The folder appears inside the container at `/workspace/extra/<folder-name>` (derived from the last segment of the path). Add `"readonly": false` for write access, or `"containerPath": "custom-name"` to override the default name.
 
@@ -813,7 +815,7 @@ The user should receive a response in their registered channel.
 - Verify the trigger pattern matches (e.g., `@AssistantName` at start of message)
 - Main channel doesn't require a prefix — all messages are processed
 - Personal/solo chats with `requiresTrigger: false` also don't need a prefix
-- Check that the chat JID is in the database: `sqlite3 store/messages.db "SELECT * FROM registered_groups"`
+- Check that the chat JID is in the database: `sqlite3 store/messages.db "SELECT mg.platform_id, mg.channel_type, ag.folder, ag.name FROM agent_groups ag LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id"`
 - Check `logs/nanoclaw.log` for errors
 
 **Unload service**:
@@ -854,4 +856,4 @@ journalctl -u nanoclaw -f
 For channel-specific troubleshooting, check the channel plugin's documentation or `auth.js` script. Common issues:
 - **Token expired**: Re-run the channel's auth flow or update the token in `.env`
 - **Bot not receiving messages**: Verify the bot has the right permissions in the platform
-- **Chat not registered**: Check `sqlite3 store/messages.db "SELECT * FROM registered_groups WHERE channel = 'CHANNEL_NAME'"`
+- **Chat not registered**: Check `sqlite3 store/messages.db "SELECT mg.platform_id, ag.folder, mga.engage_mode FROM messaging_groups mg JOIN messaging_group_agents mga ON mga.messaging_group_id = mg.id JOIN agent_groups ag ON ag.id = mga.agent_group_id WHERE mg.channel_type = 'CHANNEL_NAME'"`
