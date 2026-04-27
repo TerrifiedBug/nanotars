@@ -85,18 +85,47 @@ Currently `src/command-gate.ts` has a hardcoded admin-only command Set (`/grant`
 
 ## Side debt — schema-stale skills sweep (local)
 
-Skills still query the dropped `registered_groups` schema (migration 009). `nanotars-groups` was rewritten 2026-04-26. Remaining:
+Skills still query the dropped `registered_groups` schema (migration 009). 7 skills affected, 21 stale references total (verified 2026-04-27 — earlier note that `nanotars-groups` had been rewritten was wrong; the file still uses the legacy schema):
 
-- [ ] `.claude/skills/nanotars-add-agent/SKILL.md`
-- [ ] `.claude/skills/nanotars-debug/SKILL.md`
-- [ ] `.claude/skills/create-channel-plugin/SKILL.md`
-- [ ] `.claude/skills/nanotars-remove-plugin/SKILL.md`
-- [ ] `.claude/skills/nanotars-setup/SKILL.md`
-- [ ] `.claude/skills/nanotars-add-group/SKILL.md`
+- [x] `.claude/skills/nanotars-groups/SKILL.md` — 4 refs, 104 lines. Rewrite first as the canonical template for the others. — Done 2026-04-27 (slice 3a-1, canonical template).
+- [ ] `.claude/skills/nanotars-add-agent/SKILL.md` — 1 ref, 248 lines.
+- [ ] `.claude/skills/nanotars-add-group/SKILL.md` — 7 refs, 282 lines.
+- [ ] `.claude/skills/nanotars-debug/SKILL.md` — 2 refs, 528 lines.
+- [ ] `.claude/skills/nanotars-remove-plugin/SKILL.md` — 2 refs, 147 lines.
+- [ ] `.claude/skills/create-channel-plugin/SKILL.md` — 3 refs, 585 lines.
+- [ ] `.claude/skills/nanotars-setup/SKILL.md` — 6 refs, 857 lines.
 
 Each should switch to the three-table join (`agent_groups` ⋈ `messaging_group_agents` ⋈ `messaging_groups`) and target modern wiring fields (`engage_mode` / `engage_pattern` / `sender_scope` / `ignored_message_policy`) instead of `requires_trigger`.
 
 (See "Plugin & marketplace ecosystem" above for the marketplace-side mirror of this sweep.)
+
+## Comprehensive skill audit — every skill, every kind of staleness
+
+Broader than the schema-stale sweep above. The schema sweep targets one known issue (`registered_groups` references); this audit catches everything else: outdated CLI commands, removed env vars, branding drift (`nanoclaw` vs `nanotars`), obsolete file paths, dropped MCP tools, wrong plugin manifest fields, references to skills/commands that no longer exist, incorrect trigger keywords, old onboarding flows, deprecated container mount paths, etc.
+
+Run this AFTER the schema-stale sweep lands so the entity-model rewrites don't get re-audited.
+
+**Scope:**
+- Every `.claude/skills/*/SKILL.md` in this repo (~18 bundled skills today, count + names verified at audit time).
+- Every `plugins/*/skills/**/SKILL.md` and `plugins/*/files/container-skills/SKILL.md` in `TerrifiedBug/nanotars-skills` (~25-30 marketplace plugins).
+
+**Per-skill audit checklist:**
+- [ ] Does the skill reference any dropped database tables or columns? (Beyond `registered_groups` — also check for old column names, removed migration artefacts.)
+- [ ] Are referenced CLI commands still valid? (`nanotars` wrapper subcommands, slash-commands like `/pair-telegram`, `/pause`, `/grant`.)
+- [ ] Are env var names still current? (`ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `NANOCLAW_AGENT_PROVIDER` — especially anything renamed `NANOCLAW_*` ↔ `NANOTARS_*`.)
+- [ ] Is the branding consistent? (No `nanoclaw` references in user-facing prose where `nanotars` is the user-visible name.)
+- [ ] Are file paths still valid? (`store/messages.db`, `plugins/`, `groups/`, `data/`, `~/.claude/`, container-side `/workspace/...`.)
+- [ ] Are referenced MCP tools still registered? (`install_packages`, `add_mcp_server`, `ask_question`, `create_agent` — confirm each is in `container/agent-runner/src/mcp-tools/`.)
+- [ ] Does the skill reference other skills correctly? (Slash-command names match installed skills; no references to removed skills like the dropped slack-formatting variant.)
+- [ ] Are `plugin.json` schema fields current? (`channels`, `groups`, `containerEnvVars`, `containerHooks`, `containerMounts`, `publicEnvVars`, `dockerfilePartials`, `dependencies`, `agentProvider`/`providerName` — match `src/plugin-types.ts`.)
+- [ ] Are trigger keywords / `description` triggers in the YAML frontmatter accurate against current usage?
+- [ ] Does the skill assume an old onboarding flow? (Now `setup.sh` + `nanotars` wrapper + `data/onboarding.json`.)
+
+**Output:** per-skill verdict (clean / minor-fix / rewrite-needed), captured as a tracker doc (suggested location: `docs/skill-audit-2026-MM-DD.md`). The audit doc is the input to fix-PRs landed across both repos.
+
+- [ ] Run the audit (probably ~1-2d depending on skill count and whether subagents per-skill or one batched).
+- [ ] Land fixes in waves grouped by issue class (one PR per issue class is easier to review than per-skill).
+- [ ] Wire a CI check into `nanotars-skills` after the first audit so future PRs flag the same staleness classes automatically (compatible with the `compatibleNanotarsVersion` decision in the marketplace section).
 
 ## CONTRIBUTE upstream — opt-in goodwill PRs
 
