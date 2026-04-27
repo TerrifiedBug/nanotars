@@ -75,10 +75,13 @@ For channel plugins, clean up database entries before removing the directory:
 
 ```bash
 # Cancel scheduled tasks targeting groups on this channel
-sqlite3 store/messages.db "UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (SELECT jid FROM registered_groups WHERE channel = '{name}');"
+sqlite3 store/messages.db "UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (SELECT platform_id FROM messaging_groups WHERE channel_type = '{name}');"
 
-# Remove group registrations for this channel
-sqlite3 store/messages.db "DELETE FROM registered_groups WHERE channel = '{name}';"
+# Remove wirings for any chat on this channel:
+sqlite3 store/messages.db "DELETE FROM messaging_group_agents WHERE messaging_group_id IN (SELECT id FROM messaging_groups WHERE channel_type = '{name}');"
+
+# Remove the channel's chats (agent_groups rows are intentionally left alone — they may be wired to other channels):
+sqlite3 store/messages.db "DELETE FROM messaging_groups WHERE channel_type = '{name}';"
 ```
 
 Note: Group folders in `groups/` are preserved. Tell the user they can delete them manually if not needed.
