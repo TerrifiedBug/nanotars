@@ -182,13 +182,15 @@ This emits a 4-digit pairing code. The operator sends the code from the chat the
 
 **Subsequent groups (any non-main folder, on a channel already wired):**
 
-Send the channel-specific pairing-code admin slash-command from a chat that already has admin privileges. For Telegram:
+Send the canonical pairing-code admin slash-command from a chat that already has admin privileges:
 
 ```
-/pair-telegram
+/register-group <folder>
 ```
 
-The operator then sends the printed code from the new chat to register it.
+For example: `/register-group work`. The host emits a 4-digit code. The operator then sends the printed code from the new chat to claim it for `<folder>` — works on any channel (Telegram / WhatsApp / Discord / Slack / webhook) where the bot is present, since pairing codes are channel-agnostic.
+
+`/pair-telegram` is kept as a legacy alias for `/register-group main` (zero-arg, hard-coded to the bootstrap folder).
 
 Both paths are idempotent and route through the same database accessors as the IPC `register_group` action — no manual SQL needed.
 

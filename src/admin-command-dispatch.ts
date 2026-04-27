@@ -18,7 +18,11 @@
 import { tryHandleHelpCommand } from './help-command.js';
 import { tryHandleLifecycleAdminCommand } from './lifecycle-admin-commands.js';
 import { tryHandleRebuildImageAdminCommand } from './rebuild-image-admin-command.js';
-import { tryHandlePairAdminCommand } from './pair-admin-command.js';
+import { tryHandleListAdminCommand } from './list-admin-commands.js';
+import { tryHandleHealthAdminCommand } from './health-admin-command.js';
+import { tryHandleRoleAdminCommand } from './role-admin-commands.js';
+import { tryHandleRestartAdminCommand } from './restart-admin-command.js';
+import { tryHandleRegisterGroupAdminCommand } from './register-group-admin-command.js';
 
 export interface AdminCommandArgs {
   /** First whitespace-delimited token from the user's message (e.g. "/help"). */
@@ -65,6 +69,39 @@ export async function dispatchAdminCommand(
   });
   if (lifecycleResult.handled) return lifecycleResult;
 
+  // Slice 8: read-only listers (sync).
+  const listResult = tryHandleListAdminCommand({
+    command: args.command,
+    userId: args.userId,
+    agentGroupId: args.agentGroupId,
+  });
+  if (listResult.handled) return listResult;
+
+  // Slice 8: /health (sync).
+  const healthResult = tryHandleHealthAdminCommand({
+    command: args.command,
+    userId: args.userId,
+    agentGroupId: args.agentGroupId,
+  });
+  if (healthResult.handled) return healthResult;
+
+  // Slice 8: /grant, /revoke (sync — DB mutations).
+  const roleResult = tryHandleRoleAdminCommand({
+    command: args.command,
+    args: args.args,
+    userId: args.userId,
+    agentGroupId: args.agentGroupId,
+  });
+  if (roleResult.handled) return roleResult;
+
+  // Slice 8: /restart — async (kicks per-group restarts).
+  const restartResult = await tryHandleRestartAdminCommand({
+    command: args.command,
+    userId: args.userId,
+    agentGroupId: args.agentGroupId,
+  });
+  if (restartResult.handled) return restartResult;
+
   // /rebuild-image — async (image build).
   const rebuildResult = await tryHandleRebuildImageAdminCommand({
     command: args.command,
@@ -74,13 +111,15 @@ export async function dispatchAdminCommand(
   });
   if (rebuildResult.handled) return rebuildResult;
 
-  // /pair-telegram — async (pairing-code allocation).
-  const pairResult = await tryHandlePairAdminCommand({
+  // Slice 8: /register-group + /pair-telegram alias — async (pairing-code
+  // allocation + optional agent_group create).
+  const registerResult = await tryHandleRegisterGroupAdminCommand({
     command: args.command,
+    args: args.args,
     userId: args.userId,
     agentGroupId: args.agentGroupId,
   });
-  if (pairResult.handled) return pairResult;
+  if (registerResult.handled) return registerResult;
 
   return { handled: false };
 }

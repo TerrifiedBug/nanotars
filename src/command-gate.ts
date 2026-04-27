@@ -31,8 +31,13 @@ const ADMIN_COMMANDS = new Map<string, AdminCommandMeta>([
   ['/grant',          { name: '/grant',          description: 'Grant a role to a user.',                              usage: '<user_id> <role>' }],
   ['/revoke',         { name: '/revoke',         description: 'Revoke a role from a user.',                           usage: '<user_id> <role>' }],
   ['/list-users',     { name: '/list-users',     description: 'List all known users with their roles.',               usage: '' }],
-  ['/list-roles',     { name: '/list-roles',     description: 'List role definitions.',                               usage: '' }],
-  ['/register-group', { name: '/register-group', description: 'Register the current chat as a group.',                usage: '<folder>' }],
+  ['/list-roles',     { name: '/list-roles',     description: 'List role definitions and who holds each.',            usage: '' }],
+  // Slice 8: list-groups shows registered (folder, channel, chat) wirings.
+  ['/list-groups',    { name: '/list-groups',    description: 'List registered agent groups and their wired chats.',  usage: '' }],
+  // Slice 8: register-group is the canonical pairing-code generator. Works
+  // across any channel (Telegram / WhatsApp / Discord / Slack / webhook) —
+  // pairing codes are channel-agnostic.
+  ['/register-group', { name: '/register-group', description: 'Pair the next chat (any channel) to an agent group folder.', usage: '<folder>' }],
   ['/delete-group',   { name: '/delete-group',   description: 'Delete a registered group.',                           usage: '<folder>' }],
   ['/restart',        { name: '/restart',        description: 'Restart all agent containers.',                        usage: '' }],
   // Phase 5D: soft-pause / resume the host. Layered on top of the existing
@@ -44,11 +49,13 @@ const ADMIN_COMMANDS = new Map<string, AdminCommandMeta>([
   // src/rebuild-image-admin-command.ts; pairs with buildAgentGroupImage in
   // src/container-runner.ts.
   ['/rebuild-image',  { name: '/rebuild-image',  description: 'Force-rebuild a per-agent-group container image.',     usage: '<agent_group_id>' }],
-  // Cross-channel pairing-codes primitive — generate a 4-digit code that
-  // the operator echoes from the chat they want to register. Handler lives
-  // in src/pair-admin-command.ts; pairs with src/pending-codes.ts and the
-  // marketplace telegram plugin's inbound interceptor.
-  ['/pair-telegram',  { name: '/pair-telegram',  description: 'Generate a 4-digit pairing code to register a chat.',  usage: '' }],
+  // Slice 8: /health prints a quick at-a-glance status (DB rows, agent
+  // groups, uptime). Mirrors the nanotars-health skill.
+  ['/health',         { name: '/health',         description: 'Quick service health summary.',                        usage: '' }],
+  // Legacy alias for /register-group main. Kept for backward compatibility
+  // and discoverability — the bootstrap CLI `nanotars pair-main` still
+  // covers the no-admin-chat-yet case.
+  ['/pair-telegram',  { name: '/pair-telegram',  description: '(Legacy) Alias for /register-group main.',             usage: '' }],
   // Slice 5: /help renders the admin-command list. Handler in help-command.ts.
   ['/help',           { name: '/help',           description: 'List all admin commands with descriptions.',           usage: '' }],
 ]);
