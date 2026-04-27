@@ -95,6 +95,8 @@ Remaining incremental work (not blocking; pull in if/when one of these commands 
 
 - [ ] Activate the 6 still-agent-interpreted admin commands in `dispatchAdminCommand` — `/grant`, `/revoke`, `/list-users`, `/list-roles`, `/register-group`, `/delete-group`, `/restart`. Each needs its own host-side `tryHandle*AdminCommand` module (the dispatcher is already structured to accept new handlers; adding one is ~20 LOC plus tests). Estimated ~1 day total if done as a single slice.
 
+- [ ] Add `nanotars rebuild` subcommand that runs `npm run build && ./container/build.sh && nanotars restart` in one shot. Today operators have to remember which combination of host-build / container-build / service-restart applies to a given change (host code → npm + restart; agent-runner src → restart only because of the bind mount; Dockerfile/Dockerfile.partial / new deps → container build + restart). A single `rebuild` shortcut would prevent "did I forget a step?" debugging. Surfaced 2026-04-27 during slice 6 smoke test. Implementation: add a `rebuild)` branch to `nanotars.sh` and `setup/wrapper-template.sh` next to the existing subcommands. ~30 min.
+
 ## Side debt — schema-stale skills sweep (local)
 
 Skills queried the dropped `registered_groups` schema (migration 009). 7 skills affected, 22 stale references total. All shipped 2026-04-27 in slices 3a-1 (canonical) and 3a-2 (the other six) — see entries below for landing slice + commit SHA:
