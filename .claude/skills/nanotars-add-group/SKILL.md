@@ -26,7 +26,13 @@ ls -d plugins/channels/*/plugin.json 2>/dev/null
 For each found plugin, read its `plugin.json` to get the name and description. Also check for existing registered groups:
 
 ```bash
-sqlite3 store/messages.db "SELECT jid, name, folder, channel FROM registered_groups ORDER BY channel, added_at"
+sqlite3 -header -column store/messages.db "
+  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, ag.folder, mg.channel_type AS channel
+  FROM agent_groups ag
+  JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+  ORDER BY mg.channel_type, ag.created_at
+"
 ```
 
 Present the findings to the user:
@@ -51,9 +57,20 @@ Before asking the user, check the current state to pick smart defaults:
 
 ```bash
 # Does a main group exist?
-sqlite3 store/messages.db "SELECT folder, channel FROM registered_groups WHERE folder = 'main'" 2>/dev/null
+sqlite3 store/messages.db "
+  SELECT ag.folder, COALESCE(mg.channel_type, '(unwired)') AS channel
+  FROM agent_groups ag
+  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+  WHERE ag.folder = 'main'
+" 2>/dev/null
 # How many groups does the selected channel already have?
-sqlite3 store/messages.db "SELECT COUNT(*) FROM registered_groups WHERE channel = '{channel}'" 2>/dev/null
+sqlite3 store/messages.db "
+  SELECT COUNT(DISTINCT mga.agent_group_id)
+  FROM messaging_group_agents mga
+  JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+  WHERE mg.channel_type = '{channel}'
+" 2>/dev/null
 ```
 
 **Apply these rules in order:**
@@ -153,11 +170,27 @@ Read the assistant name from config:
 grep '^ASSISTANT_NAME=' .env | cut -d= -f2 || echo "TARS"
 ```
 
-Determine the channel name from the plugin. Then register via SQLite:
+Determine the channel name from the plugin. Then hand off to the existing registration flow — DO NOT inline-INSERT into the entity-model tables, since direct SQL bypasses validation and idempotency in `src/db/agent-groups.ts` (`createAgentGroup` / `createMessagingGroup` / `createWiring`).
+
+**First-time main-group bootstrap (folder = 'main'):**
 
 ```bash
-sqlite3 store/messages.db "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger, channel) VALUES ('{jid}', '{name}', '{folder}', '{trigger}', datetime('now'), {requiresTrigger}, '{channel}')"
+nanotars pair-main
 ```
+
+This emits a 4-digit pairing code. The operator sends the code from the chat they want to register as main; the channel plugin's inbound interceptor consumes the code and creates the `agent_groups` + `messaging_groups` + `messaging_group_agents` rows atomically.
+
+**Subsequent groups (any non-main folder, on a channel already wired):**
+
+Send the channel-specific pairing-code admin slash-command from a chat that already has admin privileges. For Telegram:
+
+```
+/pair-telegram
+```
+
+The operator then sends the printed code from the new chat to register it.
+
+Both paths are idempotent and route through the same database accessors as the IPC `register_group` action — no manual SQL needed.
 
 Create the group's directory:
 
@@ -222,7 +255,13 @@ sleep 3
 pgrep -f 'node.*nanoclaw' > /dev/null && echo "SERVICE_RUNNING" || echo "SERVICE_FAILED"
 
 # Verify group is registered
-sqlite3 store/messages.db "SELECT jid, name, folder, channel FROM registered_groups WHERE folder = '{folder}'"
+sqlite3 -header -column store/messages.db "
+  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, ag.folder, mg.channel_type AS channel
+  FROM agent_groups ag
+  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+  WHERE ag.folder = '{folder}'
+"
 
 # Check logs for channel connection
 tail -20 logs/nanoclaw.log | grep -i '{channel}'
@@ -247,10 +286,23 @@ Before starting, always check the current state to avoid redundant work:
 for d in plugins/channels/*/plugin.json; do echo "$(dirname $d): $(cat $d | python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"name\",\"unknown\"))' 2>/dev/null || echo 'unknown')"; done
 
 # What groups are already registered?
-sqlite3 store/messages.db "SELECT jid, name, folder, channel, requires_trigger FROM registered_groups" 2>/dev/null
+sqlite3 store/messages.db "
+  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, ag.folder,
+         mg.channel_type AS channel,
+         CASE mga.engage_mode WHEN 'always' THEN 0 ELSE 1 END AS requires_trigger
+  FROM agent_groups ag
+  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+" 2>/dev/null
 
 # Is there a main group?
-sqlite3 store/messages.db "SELECT jid, name, channel FROM registered_groups WHERE folder = 'main'" 2>/dev/null
+sqlite3 store/messages.db "
+  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, mg.channel_type AS channel
+  FROM agent_groups ag
+  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+  WHERE ag.folder = 'main'
+" 2>/dev/null
 
 # Is the service running?
 pgrep -f 'node.*nanoclaw' > /dev/null && echo "RUNNING" || echo "STOPPED"
