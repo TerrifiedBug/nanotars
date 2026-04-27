@@ -53,8 +53,24 @@ const ADMIN_COMMANDS = new Map<string, AdminCommandMeta>([
   ['/help',           { name: '/help',           description: 'List all admin commands with descriptions.',           usage: '' }],
 ]);
 
+/**
+ * Normalize a command token so the lookup matches whether the user typed
+ * the canonical hyphenated form (e.g. `/list-users`) OR the underscored
+ * form Telegram requires for setMyCommands (e.g. `/list_users` after a
+ * dropdown tap). Also strips the optional `@<botname>` suffix Telegram
+ * appends in group chats.
+ */
+function normalizeCommand(token: string): string {
+  // Strip @<botname> suffix (Telegram convention in group chats).
+  const noBot = token.split('@')[0];
+  // Convert underscores → hyphens so /list_users matches the canonical
+  // /list-users key in ADMIN_COMMANDS. Underscores are never legal in
+  // canonical command names, so this is a safe one-way fold.
+  return noBot.replace(/_/g, '-');
+}
+
 export function getAdminCommandMeta(name: string): AdminCommandMeta | undefined {
-  return ADMIN_COMMANDS.get(name);
+  return ADMIN_COMMANDS.get(normalizeCommand(name));
 }
 
 export function listAdminCommands(): AdminCommandMeta[] {
@@ -64,7 +80,7 @@ export function listAdminCommands(): AdminCommandMeta[] {
 export function isAdminCommand(text: string): boolean {
   if (!text) return false;
   const first = text.trim().split(/\s+/)[0];
-  return ADMIN_COMMANDS.has(first);
+  return ADMIN_COMMANDS.has(normalizeCommand(first));
 }
 
 export interface CommandPermissionDecision {
