@@ -62,7 +62,7 @@ nanotars's plugin model lives across two repos: this fork (`TerrifiedBug/nanotar
 
 Inventory done 2026-04-27: only 5 channel-plugin installer skills have raw SQL touching `registered_groups` (discord, slack, telegram, webhook, whatsapp). Container skills and non-channel plugin installers don't touch the DB at all. Total: 10 stale refs, much smaller than initially feared.
 
-- [~] Patch the 5 channel-plugin SKILL.md files to use entity-model SQL — PR open as `TerrifiedBug/nanotars-skills#11` (2026-04-27). Flip to `[x]` once merged.
+- [x] Patch the 5 channel-plugin SKILL.md files to use entity-model SQL — `TerrifiedBug/nanotars-skills#11` merged 2026-04-27.
 - [x] **Decision: dropped the `compatibleNanotarsVersion` / CI-bot ideas.** Versioning infrastructure is over-engineered for a single-user installation, and the breakage was a one-time hit from the entity-model migration rather than a recurring drift problem. The right fix is enforcing the plugin boundary so skills don't reach into core schema in the first place — see the new "Skills MUST NOT query the SQLite database directly" rule in `CLAUDE.md` (added 2026-04-27).
 
 **Deferred — `nanotars` CLI subcommands abstracting operator DB ops** (e.g. `nanotars groups list/view/status/update`, `nanotars debug groups`):
