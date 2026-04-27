@@ -471,6 +471,64 @@ export async function processTaskIpc(
       break;
     }
 
+    case 'create_skill_plugin': {
+      // Slice 6: chat-driven plugin creation. Host validates the spec
+      // (defense in depth), queues an admin approval card via the 4C
+      // primitive, and on approve writes plugin files + restarts the
+      // originating group's container.
+      const { handleCreateSkillPluginRequest } = await import(
+        '../permissions/create-skill-plugin.js'
+      );
+      const name = typeof data.name === 'string' ? data.name : '';
+      const description =
+        typeof (data as unknown as { description?: unknown }).description === 'string'
+          ? ((data as unknown as { description: string }).description)
+          : '';
+      const archetype =
+        (data as unknown as { archetype?: unknown }).archetype === 'mcp' ? 'mcp' : 'skill-only';
+      const pluginJson =
+        typeof (data as unknown as { pluginJson?: unknown }).pluginJson === 'object' &&
+        (data as unknown as { pluginJson?: unknown }).pluginJson !== null
+          ? ((data as unknown as { pluginJson: Record<string, unknown> }).pluginJson)
+          : ({} as Record<string, unknown>);
+      const containerSkillMd =
+        typeof (data as unknown as { containerSkillMd?: unknown }).containerSkillMd === 'string'
+          ? ((data as unknown as { containerSkillMd: string }).containerSkillMd)
+          : '';
+      const mcpJson =
+        typeof (data as unknown as { mcpJson?: unknown }).mcpJson === 'string'
+          ? ((data as unknown as { mcpJson: string }).mcpJson)
+          : undefined;
+      const envVarValues =
+        typeof (data as unknown as { envVarValues?: unknown }).envVarValues === 'object' &&
+        (data as unknown as { envVarValues?: unknown }).envVarValues !== null &&
+        !Array.isArray((data as unknown as { envVarValues?: unknown }).envVarValues)
+          ? Object.fromEntries(
+              Object.entries(
+                (data as unknown as { envVarValues: Record<string, unknown> }).envVarValues,
+              )
+                .filter(([, v]) => typeof v === 'string')
+                .map(([k, v]) => [k, v as string]),
+            )
+          : undefined;
+      // pluginJson coerced into the typed shape expected by the handler;
+      // missing fields fall back to defaults at validation time.
+      await handleCreateSkillPluginRequest(
+        {
+          name,
+          description,
+          archetype: archetype as 'skill-only' | 'mcp',
+          pluginJson: pluginJson as never,
+          containerSkillMd,
+          mcpJson,
+          envVarValues,
+          groupFolder: sourceGroup,
+        },
+        '',
+      );
+      break;
+    }
+
     case 'create_agent': {
       // Phase 5E: admin-only agent provisioning. The container-side MCP tool
       // is registered only when NANOCLAW_IS_ADMIN=1; the host re-validates
