@@ -18,10 +18,6 @@ All Phase 1 items shipped. See the Reconciliation section at the bottom of this 
 
 ## Phase 2 — medium architecture-preserving
 
-**Cluster A — migration framework / DB shape**
-- [ ] `chat_sdk_*` SqliteStateAdapter as a generic KV + TTL + lock primitive (Area 1, ADOPT medium).
-- [ ] Per-provider `session_state` continuation namespacing (Area 1, PORT trivial). Provider seam is in (`container/agent-runner/src/providers/`) but session_state isn't keyed per provider.
-
 **Cluster B — compose pipeline**
 - [~] Three-tier container skills — shared `container/skills/` + per-group `groups/<folder>/skills/` + selection list in `container.json`. Shared tier exists (`container/skills/agent-browser`, `container/skills/self-customize`); per-group tier and selection mechanism not yet present.
 
@@ -29,8 +25,7 @@ All Phase 1 items shipped. See the Reconciliation section at the bottom of this 
 - [ ] Telegram typed-media routing (`sendPhoto` / `sendVideo` / `sendAudio` extension-dispatch) — closes the `sendFile` gap. Not present in `plugins/channels/telegram/index.js`.
 - [ ] CLI always-on local-socket channel (Area 4, ADOPT medium).
 
-**Cluster E — secret redaction**
-- [?] Verify nanotars's `src/secret-redact.ts` matches v2's body (length-sort, Set-dedup, injectable paths, `ONECLI_API_KEY` exempt). Module exists; body parity not checked.
+(Cluster A items reassigned: chat_sdk_* KV adapter → Phase 6+7, per-provider session_state → Phase 5D. Cluster E secret-redact body parity verified — see Reconciliation.)
 
 ## Phase 4 — multi-user RBAC + entity model
 
@@ -49,13 +44,15 @@ Migrations + scaffolding are in: `install_packages` and `add_mcp_server` MCP too
 - [?] 5A self-mod — end-to-end smoke test (request → approve → image rebuild → container restart with new package available). Pieces exist; confirm the full flow runs.
 - [?] 5B finish — verify `image-build.ts` is invoked from the live install_packages path (not just available).
 - [?] 5C `create_agent` MCP tool — permissions stub exists; confirm tool is registered and wired through approval primitive.
-- [ ] 5D provider plugins — Codex / OpenCode / Ollama as plugins (not skill-branches). Provider seam is in; plugin manifests not.
+- [ ] 5D provider plugins — Codex / OpenCode / Ollama as plugins (not skill-branches). Provider seam is in (`container/agent-runner/src/providers/`); plugin-loader recognises `agentProvider: true` manifests (`src/plugin-loader.ts:440-462`); resolution reads `NANOCLAW_AGENT_PROVIDER` env var with `'claude'` fallback. No second real provider plugin shipped yet.
+- [ ] 5D dependency — per-provider `session_state` continuation namespacing. v1's `sessions` table is `(group_folder PK, session_id)` — one continuation per group, not keyed by provider. Once a second provider lands under 5D, switching `NANOCLAW_AGENT_PROVIDER` for a group would feed a Claude session-id to the new provider's SDK and either reject or replay nothing. Re-key as `(group_folder, provider, session_id)` and update `setSession` / lookup paths in `src/orchestrator.ts` as part of the same slice that ships the second provider — designing the namespace shape blindly without a real consumer risks getting it wrong.
 
 ## Phase 6 + 7 — architectural foundation (OPTIONAL)
 
 Per the triage doc, this is the only fully-optional block. Per-session containers + two-DB IPC + heartbeat sweep + Phase-6-enabled bolt-ons (cross-container agent messaging, supportsThreads, subscribe, admin-transport, per-provider session_state).
 
 - [ ] Decision needed: commit to Phase 6 or formally close it as "skipped under technical-merit lens." If skipped, Phase 7 items roll into "won't fix" since they require Phase 6 to land.
+- [ ] `chat_sdk_*` SqliteStateAdapter (KV + TTL + lock primitive) — defer until Phase 6 commits or until a real consumer surfaces. v2's `src/state-sqlite.ts` is the reference (~120 LOC, three tables: `chat_sdk_kv`, `chat_sdk_subscriptions`, `chat_sdk_locks`). v2's only consumer is `chat-sdk-bridge.ts` which is on the SKIP-ALT list (vendor lock-in to `@chat-adapter/*`). v1 has no current consumer; `pending-codes.json`'s file-with-mutex works fine for single-process. Phase 6's per-session two-DB IPC creates the natural consumer (per-session locks, KV with TTL for pending state). Pull this in alongside the Phase 6 commit if/when that block is taken.
 
 ## Plugin & marketplace ecosystem
 
@@ -143,3 +140,4 @@ These are nanotars wins missing in v2. Pure upside for upstream; no effect on th
 - [x] `dockerfilePartials` path-traversal guard — `src/image-build.ts:43-49` (TypeScript path) + `container/build.sh:24-34` (shared base build path). Both code paths that resolve+read partials guard with `path.relative` (TS) or `readlink -f` + case-pattern (bash). Verified 2026-04-27.
 - [x] `READ_TOOLS_RE` expansion — `container/agent-runner/src/security-hooks.ts:62` regex includes every tool from the triage list (`more`, `od`, `hexdump`, `bun`, `awk`, `sed`, `python3`) plus `cat`, `less`, `head`, `tail`, `base64`, `xxd`, `strings`, `python`, `node`, `perl`, `ruby`. Tests at `security-hooks.test.ts:72,86` cover `hexdump` and `bun`. Verified 2026-04-27.
 - [x] `shellQuote` unit tests — extracted into `src/container-mounts.ts` as `shellQuote(value)`; tests in `src/__tests__/shell-quote.test.ts` (5 cases). Slice 1 work, 2026-04-27.
+- [x] `secret-redact` body parity with v2 — verified 2026-04-27. v1 (`src/secret-redact.ts`, 170 lines) and v2 (`src/modules/secret-redaction/index.ts`, 171 lines) are functionally identical. Required behaviors all present in v1: length-sort + `Set` dedup at line 99, injectable paths via `LoadSecretsOptions.projectRoot` / `credentialsPath`, `ONECLI_API_KEY` in `NEVER_EXEMPT` (line 24). v1 is slightly more capable (back-compat array form on `loadSecrets`).
