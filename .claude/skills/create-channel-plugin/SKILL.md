@@ -522,7 +522,7 @@ After the channel connects, use `/nanotars-add-group` to register a group/chat o
 ## Troubleshooting
 
 - Bot not connecting: Check credentials in `.env`
-- Messages not received: Verify chat is registered in `registered_groups` table
+- Messages not received: Verify chat is wired in the entity model — `messaging_groups` row exists for the (channel_type, platform_id) pair AND a `messaging_group_agents` row links it to an `agent_groups` row
 - No response: Check trigger pattern matches (or `requiresTrigger: false` for main)
 
 ## Uninstall
@@ -533,12 +533,13 @@ To remove the {Platform} channel:
 
 2. **Cancel affected tasks:**
    ```bash
-   sqlite3 store/messages.db "UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (SELECT jid FROM registered_groups WHERE channel = '{name}');"
+   sqlite3 store/messages.db "UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (SELECT platform_id FROM messaging_groups WHERE channel_type = '{name}');"
    ```
 
 3. **Remove group registrations:**
    ```bash
-   sqlite3 store/messages.db "DELETE FROM registered_groups WHERE channel = '{name}';"
+   sqlite3 store/messages.db "DELETE FROM messaging_group_agents WHERE messaging_group_id IN (SELECT id FROM messaging_groups WHERE channel_type = '{name}');"
+   sqlite3 store/messages.db "DELETE FROM messaging_groups WHERE channel_type = '{name}';"
    ```
 
 4. **Remove the plugin directory:**
