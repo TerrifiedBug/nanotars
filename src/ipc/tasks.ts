@@ -484,8 +484,11 @@ export async function processTaskIpc(
         typeof (data as unknown as { description?: unknown }).description === 'string'
           ? ((data as unknown as { description: string }).description)
           : '';
+      // Pass-through; host validator rejects unknown archetypes.
       const archetype =
-        (data as unknown as { archetype?: unknown }).archetype === 'mcp' ? 'mcp' : 'skill-only';
+        typeof (data as unknown as { archetype?: unknown }).archetype === 'string'
+          ? ((data as unknown as { archetype: string }).archetype)
+          : '';
       const pluginJson =
         typeof (data as unknown as { pluginJson?: unknown }).pluginJson === 'object' &&
         (data as unknown as { pluginJson?: unknown }).pluginJson !== null
@@ -511,8 +514,8 @@ export async function processTaskIpc(
                 .map(([k, v]) => [k, v as string]),
             )
           : undefined;
-      // pluginJson coerced into the typed shape expected by the handler;
-      // missing fields fall back to defaults at validation time.
+      // pluginJson shape is re-validated by the handler;
+      // cast unblocks the type checker.
       await handleCreateSkillPluginRequest(
         {
           name,
