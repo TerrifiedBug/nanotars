@@ -33,6 +33,7 @@ import {
   pickApprovalDelivery,
   type ApprovalDeliveryTarget,
 } from './approval-routing.js';
+import { deliverApprovalCard } from './approval-delivery.js';
 import type { User } from '../types.js';
 
 /**
@@ -181,6 +182,14 @@ export interface RequestApprovalArgs {
   expires_at?: string | null;
   /** Channel kind of the originating message — used for same-channel-kind preference. */
   originatingChannel?: string;
+  /**
+   * Slice 7: opt out of the hoisted deliverApprovalCard call. Set true if the
+   * caller invokes deliverApprovalCard itself (sender-approval.ts,
+   * channel-approval.ts, onecli-bridge.ts have custom delivery flows that
+   * pre-resolve the deliveryTarget). Defaults to false — most self-mod
+   * handlers want auto-delivery.
+   */
+  skipDelivery?: boolean;
 }
 
 export interface RequestApprovalResult {
@@ -260,11 +269,26 @@ export async function requestApproval(args: RequestApprovalArgs): Promise<Reques
       optionsJson,
     );
 
-  // Card delivery itself is the caller's responsibility — they own the
-  // 4D row write that pairs with `approvalId` and need to persist that
-  // row before issuing the (potentially fast-clicking) card. They call
-  // `deliverApprovalCard` from approval-delivery.ts with the returned
-  // `card` + `deliveryTarget`.
+  // Slice 7: hoisted delivery. Self-mod handlers used to forget this; now
+  // requestApproval itself ensures the card reaches the approver. Custom-flow
+  // callers (sender-approval, channel-approval, onecli-bridge) opt out via
+  // skipDelivery: true since they invoke deliverApprovalCard themselves.
+  if (!args.skipDelivery && rendered && deliveryTarget) {
+    void deliverApprovalCard({
+      approval_id: approvalId,
+      channel_type: deliveryTarget.messagingGroup.channel_type,
+      platform_id: deliveryTarget.messagingGroup.platform_id,
+      title: rendered.title,
+      body: rendered.body,
+      options: rendered.options,
+    }).catch((err) =>
+      logger.warn(
+        { err, approvalId, action: args.action },
+        'requestApproval: hoisted delivery failed',
+      ),
+    );
+  }
+
   return {
     approvalId,
     approvers,

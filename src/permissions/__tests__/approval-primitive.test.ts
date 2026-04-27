@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as deliveryModule from '../approval-delivery.js';
 
 import { _initTestDatabase, getDb } from '../../db/init.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
@@ -415,5 +416,109 @@ describe('notifyAgent', () => {
       .get('%multi-route%') as { chat_jid: string } | undefined;
     expect(row).toBeDefined();
     expect(row!.chat_jid).toBe('dc:high');
+  });
+});
+
+// ── requestApproval — hoisted delivery (Slice 7) ────────────────────────────
+
+describe('requestApproval — hoisted delivery', () => {
+  let deliverSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    _initTestDatabase();
+    clearApprovalHandlers();
+    deliverSpy = vi.spyOn(deliveryModule, 'deliverApprovalCard').mockResolvedValue({
+      delivered: true,
+      platform_message_id: 'mid-1',
+    });
+  });
+
+  afterEach(() => {
+    deliverSpy.mockRestore();
+  });
+
+  async function setupGroupAndApprover() {
+    ensureUser({ id: 'telegram:owner', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:owner', role: 'owner' });
+    await ensureUserDm({ user_id: 'telegram:owner', channel_type: 'telegram' });
+    return createAgentGroup({ name: 'g', folder: 'g' });
+  }
+
+  it('hoists deliverApprovalCard when handler renders + deliveryTarget exists', async () => {
+    const ag = await setupGroupAndApprover();
+    registerApprovalHandler('test_action', {
+      render: () => ({ title: 'T', body: 'B', options: [{ id: 'approve', label: 'A' }] }),
+      applyDecision: async () => undefined,
+    });
+    await requestApproval({
+      action: 'test_action',
+      agentGroupId: ag.id,
+      payload: {},
+      originatingChannel: 'telegram',
+    });
+    expect(deliverSpy).toHaveBeenCalledOnce();
+    const call = deliverSpy.mock.calls[0][0];
+    expect(call.title).toBe('T');
+    expect(call.body).toBe('B');
+    expect(call.channel_type).toBe('telegram');
+  });
+
+  it('does NOT call deliver when skipDelivery=true', async () => {
+    const ag = await setupGroupAndApprover();
+    registerApprovalHandler('test_action', {
+      render: () => ({ title: 'T', body: 'B', options: [] }),
+      applyDecision: async () => undefined,
+    });
+    await requestApproval({
+      action: 'test_action',
+      agentGroupId: ag.id,
+      payload: {},
+      originatingChannel: 'telegram',
+      skipDelivery: true,
+    });
+    expect(deliverSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call deliver when no deliveryTarget (no approver DM)', async () => {
+    const ag = createAgentGroup({ name: 'g', folder: 'g' });
+    registerApprovalHandler('test_action', {
+      render: () => ({ title: 'T', body: 'B', options: [] }),
+      applyDecision: async () => undefined,
+    });
+    await requestApproval({
+      action: 'test_action',
+      agentGroupId: ag.id,
+      payload: {},
+      originatingChannel: 'telegram',
+    });
+    expect(deliverSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call deliver when no handler registered (no rendered card)', async () => {
+    const ag = await setupGroupAndApprover();
+    await requestApproval({
+      action: 'unknown_action',
+      agentGroupId: ag.id,
+      payload: {},
+      originatingChannel: 'telegram',
+    });
+    expect(deliverSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns approvalId even if hoisted delivery throws', async () => {
+    const ag = await setupGroupAndApprover();
+    registerApprovalHandler('test_action', {
+      render: () => ({ title: 'T', body: 'B', options: [] }),
+      applyDecision: async () => undefined,
+    });
+    deliverSpy.mockRejectedValueOnce(new Error('network down'));
+    const result = await requestApproval({
+      action: 'test_action',
+      agentGroupId: ag.id,
+      payload: {},
+      originatingChannel: 'telegram',
+    });
+    expect(result.approvalId).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 5));
   });
 });
