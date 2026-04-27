@@ -188,3 +188,166 @@ export function buildAddMcpServerPayload(
     },
   };
 }
+
+// ── create_skill_plugin ─────────────────────────────────────────────────────
+
+/** Plugin name regex: lowercase, dash-separated, 2-31 chars. */
+export const PLUGIN_NAME_RE = /^[a-z][a-z0-9-]{1,30}$/;
+/** Env var name regex: UPPER_SNAKE_CASE, 1-64 chars. */
+export const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+/** Env var names that may not be set by chat-created plugins. */
+export const RESERVED_ENV_VAR_NAMES = new Set([
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ASSISTANT_NAME',
+  'CLAUDE_MODEL',
+]);
+
+/** Env var name prefixes reserved for the host. */
+export const RESERVED_ENV_VAR_PREFIXES = ['NANOCLAW_'];
+
+/** Channel names accepted in the plugin's channels filter. */
+export const ALLOWED_CHANNEL_NAMES = new Set([
+  '*',
+  'whatsapp',
+  'discord',
+  'telegram',
+  'slack',
+  'webhook',
+]);
+
+export const MAX_CONTAINER_SKILL_MD_BYTES = 20000;
+export const MAX_MCP_JSON_BYTES = 4096;
+
+const archetypeEnum = z.enum(['skill-only', 'mcp']);
+
+const pluginJsonShape = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    version: z.string(),
+    containerEnvVars: z.array(z.string()).optional(),
+    publicEnvVars: z.array(z.string()).optional(),
+    channels: z.array(z.string()).default(['*']),
+    groups: z.array(z.string()).default(['*']),
+    hooks: z.array(z.string()).optional(),
+    containerHooks: z.array(z.string()).optional(),
+    dependencies: z.boolean().optional(),
+  })
+  .strict();
+
+export const createSkillPluginInputSchema = {
+  name: z.string().describe('Plugin name (lowercase, 2-31 chars)'),
+  description: z.string().describe('Plugin description (1-200 chars)'),
+  archetype: archetypeEnum.describe('Plugin archetype: skill-only or mcp'),
+  pluginJson: pluginJsonShape.describe('Plugin manifest (will be written to plugins/{name}/plugin.json)'),
+  containerSkillMd: z.string().describe('Agent-facing SKILL.md content (max 20 KB)'),
+  mcpJson: z.string().optional().describe('MCP server config JSON (required for mcp archetype, max 4 KB)'),
+  envVarValues: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe('Optional credential values. Names must be UPPER_SNAKE_CASE; reserved prefixes blocked.'),
+};
+
+export const createSkillPluginInput = z.object(createSkillPluginInputSchema);
+
+export type CreateSkillPluginInput = z.infer<typeof createSkillPluginInput>;
+
+export interface CreateSkillPluginPayload {
+  type: 'create_skill_plugin';
+  name: string;
+  description: string;
+  archetype: 'skill-only' | 'mcp';
+  pluginJson: z.infer<typeof pluginJsonShape>;
+  containerSkillMd: string;
+  mcpJson?: string;
+  envVarValues?: Record<string, string>;
+  groupFolder: string;
+  isMain: boolean;
+  timestamp: string;
+}
+
+/**
+ * Validate + build the IPC payload for a `create_skill_plugin` request.
+ *
+ * Defense-in-depth: the host re-runs the same checks plus filesystem-level
+ * uniqueness. This is the in-container fast feedback path.
+ */
+export function buildCreateSkillPluginPayload(
+  input: CreateSkillPluginInput,
+  ctx: { groupFolder: string; isMain: boolean; now?: Date },
+): ValidationResult<CreateSkillPluginPayload> {
+  if (!PLUGIN_NAME_RE.test(input.name)) {
+    return { ok: false, error: `invalid name "${input.name}" (lowercase, 2-31 chars, [a-z0-9-])` };
+  }
+  if (input.description.length < 1 || input.description.length > 200) {
+    return { ok: false, error: `description length must be 1-200 (got ${input.description.length})` };
+  }
+  if (!archetypeEnum.options.includes(input.archetype)) {
+    return { ok: false, error: `invalid archetype "${input.archetype}" (must be skill-only or mcp)` };
+  }
+  if (Array.isArray(input.pluginJson.hooks) && input.pluginJson.hooks.length > 0) {
+    return { ok: false, error: 'pluginJson.hooks not allowed (host-process hooks must be built on the host)' };
+  }
+  if (Array.isArray(input.pluginJson.containerHooks) && input.pluginJson.containerHooks.length > 0) {
+    return { ok: false, error: 'pluginJson.containerHooks not allowed (container hooks must be built on the host)' };
+  }
+  if (input.pluginJson.dependencies === true) {
+    return { ok: false, error: 'pluginJson.dependencies=true not allowed (no npm install in chat-creation flow)' };
+  }
+  if (Buffer.byteLength(input.containerSkillMd, 'utf8') > MAX_CONTAINER_SKILL_MD_BYTES) {
+    return { ok: false, error: `containerSkillMd exceeds ${MAX_CONTAINER_SKILL_MD_BYTES} bytes` };
+  }
+  if (input.mcpJson && Buffer.byteLength(input.mcpJson, 'utf8') > MAX_MCP_JSON_BYTES) {
+    return { ok: false, error: `mcpJson exceeds ${MAX_MCP_JSON_BYTES} bytes` };
+  }
+  if (input.archetype === 'mcp' && !input.mcpJson) {
+    return { ok: false, error: 'archetype=mcp requires mcpJson' };
+  }
+  if (input.envVarValues) {
+    for (const name of Object.keys(input.envVarValues)) {
+      if (!ENV_VAR_NAME_RE.test(name)) {
+        return { ok: false, error: `invalid env var name "${name}" (UPPER_SNAKE_CASE, 1-64 chars)` };
+      }
+      if (RESERVED_ENV_VAR_NAMES.has(name)) {
+        return { ok: false, error: `env var name "${name}" is reserved` };
+      }
+      for (const prefix of RESERVED_ENV_VAR_PREFIXES) {
+        if (name.startsWith(prefix)) {
+          return { ok: false, error: `env var name prefix "${prefix}" is reserved` };
+        }
+      }
+    }
+  }
+  for (const ch of input.pluginJson.channels) {
+    if (!ALLOWED_CHANNEL_NAMES.has(ch)) {
+      return { ok: false, error: `unknown channel "${ch}"` };
+    }
+  }
+  // groups must be ['*'] OR contain only the originating folder
+  const groups = input.pluginJson.groups;
+  const isWildcard = groups.length === 1 && groups[0] === '*';
+  const isSelfOnly = groups.every((g) => g === ctx.groupFolder);
+  if (!isWildcard && !isSelfOnly) {
+    return { ok: false, error: `groups scope must be ["*"] or ["${ctx.groupFolder}"]` };
+  }
+
+  const now = ctx.now ?? new Date();
+  return {
+    ok: true,
+    payload: {
+      type: 'create_skill_plugin',
+      name: input.name,
+      description: input.description,
+      archetype: input.archetype,
+      pluginJson: input.pluginJson,
+      containerSkillMd: input.containerSkillMd,
+      mcpJson: input.mcpJson,
+      envVarValues: input.envVarValues,
+      groupFolder: ctx.groupFolder,
+      isMain: ctx.isMain,
+      timestamp: now.toISOString(),
+    },
+  };
+}

@@ -17,6 +17,11 @@ import {
   buildAddMcpServerPayload,
   buildInstallPackagesPayload,
   installPackagesInput,
+  buildCreateSkillPluginPayload,
+  type CreateSkillPluginInput,
+  RESERVED_ENV_VAR_NAMES,
+  RESERVED_ENV_VAR_PREFIXES,
+  ALLOWED_CHANNEL_NAMES,
 } from '../self-mod.js';
 
 // ── install_packages schema ────────────────────────────────────────────────
@@ -268,5 +273,266 @@ describe('buildAddMcpServerPayload', () => {
     if (!result.ok) return;
     const round = JSON.parse(JSON.stringify(result.payload));
     expect(round).toEqual(result.payload);
+  });
+});
+
+// ── create_skill_plugin ────────────────────────────────────────────────────
+
+describe('buildCreateSkillPluginPayload', () => {
+  const baseCtx = { groupFolder: 'main', isMain: true, now: new Date('2026-04-27T12:00:00Z') };
+
+  function skillOnlyInput(overrides: Partial<CreateSkillPluginInput> = {}): CreateSkillPluginInput {
+    return {
+      name: 'weather',
+      description: 'Look up weather forecasts',
+      archetype: 'skill-only',
+      pluginJson: {
+        name: 'weather',
+        description: 'Look up weather forecasts',
+        version: '1.0.0',
+        channels: ['*'],
+        groups: ['*'],
+      },
+      containerSkillMd: '# Weather\n\nUse curl to fetch from wttr.in',
+      ...overrides,
+    };
+  }
+
+  it('happy path: skill-only with no env vars', () => {
+    const result = buildCreateSkillPluginPayload(skillOnlyInput(), baseCtx);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.type).toBe('create_skill_plugin');
+    expect(result.payload.name).toBe('weather');
+    expect(result.payload.archetype).toBe('skill-only');
+    expect(result.payload.groupFolder).toBe('main');
+    expect(result.payload.timestamp).toBe('2026-04-27T12:00:00.000Z');
+  });
+
+  it('happy path: mcp archetype with mcpJson and env vars', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        archetype: 'mcp',
+        pluginJson: {
+          name: 'github',
+          description: 'GitHub via MCP',
+          version: '1.0.0',
+          containerEnvVars: ['GH_TOKEN'],
+          channels: ['*'],
+          groups: ['*'],
+        },
+        mcpJson: '{"mcpServers":{"github":{"command":"npx","args":["-y","@some/gh-mcp"]}}}',
+        envVarValues: { GH_TOKEN: 'ghp_secret' },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.archetype).toBe('mcp');
+    expect(result.payload.envVarValues).toEqual({ GH_TOKEN: 'ghp_secret' });
+  });
+
+  it('rejects invalid name format', () => {
+    const result = buildCreateSkillPluginPayload(skillOnlyInput({ name: 'Weather' }), baseCtx);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/name/);
+  });
+
+  it('rejects name longer than 31 chars', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({ name: 'a'.repeat(32) }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects description longer than 200 chars', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({ description: 'x'.repeat(201) }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects archetype not in enum', () => {
+    const result = buildCreateSkillPluginPayload(
+      // @ts-expect-error testing runtime guard
+      skillOnlyInput({ archetype: 'host-hook' }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/archetype/);
+  });
+
+  it('rejects pluginJson.hooks if non-empty', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        pluginJson: {
+          name: 'x',
+          description: 'd',
+          version: '1.0.0',
+          // @ts-expect-error testing runtime guard
+          hooks: ['onStartup'],
+          channels: ['*'],
+          groups: ['*'],
+        },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/hooks/);
+  });
+
+  it('rejects pluginJson.containerHooks if non-empty', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        pluginJson: {
+          name: 'x',
+          description: 'd',
+          version: '1.0.0',
+          // @ts-expect-error testing runtime guard
+          containerHooks: ['hooks/x.js'],
+          channels: ['*'],
+          groups: ['*'],
+        },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/containerHooks/);
+  });
+
+  it('rejects pluginJson.dependencies = true', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        pluginJson: {
+          name: 'x',
+          description: 'd',
+          version: '1.0.0',
+          // @ts-expect-error testing runtime guard
+          dependencies: true,
+          channels: ['*'],
+          groups: ['*'],
+        },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/dependencies/);
+  });
+
+  it('rejects containerSkillMd over 20 KB', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({ containerSkillMd: 'a'.repeat(20001) }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/containerSkillMd/);
+  });
+
+  it('rejects mcpJson over 4 KB', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({ archetype: 'mcp', mcpJson: 'a'.repeat(4097) }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/mcpJson/);
+  });
+
+  it('rejects malformed env var name', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({ envVarValues: { 'lower_case': 'x' } }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/env var/i);
+  });
+
+  it('rejects reserved env var names', () => {
+    for (const name of RESERVED_ENV_VAR_NAMES) {
+      const result = buildCreateSkillPluginPayload(
+        skillOnlyInput({ envVarValues: { [name]: 'x' } }),
+        baseCtx,
+      );
+      expect(result.ok, name).toBe(false);
+    }
+  });
+
+  it('rejects env var with reserved prefix (NANOCLAW_*)', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({ envVarValues: { NANOCLAW_DATA_DIR: 'x' } }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects groups scope that is neither ["*"] nor [groupFolder]', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        pluginJson: {
+          name: 'x',
+          description: 'd',
+          version: '1.0.0',
+          channels: ['*'],
+          groups: ['other-group'],
+        },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/groups/);
+  });
+
+  it('accepts groups scope = [groupFolder]', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        pluginJson: {
+          name: 'x',
+          description: 'd',
+          version: '1.0.0',
+          channels: ['*'],
+          groups: ['main'],
+        },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects unknown channel name', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        pluginJson: {
+          name: 'x',
+          description: 'd',
+          version: '1.0.0',
+          channels: ['ircchat'],
+          groups: ['*'],
+        },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/channel/);
+  });
+
+  it('exports stable allowlist constants', () => {
+    expect([...RESERVED_ENV_VAR_NAMES].sort()).toEqual(
+      ['ANTHROPIC_API_KEY', 'ASSISTANT_NAME', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_MODEL'].sort(),
+    );
+    expect(RESERVED_ENV_VAR_PREFIXES).toEqual(['NANOCLAW_']);
+    expect([...ALLOWED_CHANNEL_NAMES].sort()).toEqual(
+      ['*', 'discord', 'slack', 'telegram', 'webhook', 'whatsapp'].sort(),
+    );
   });
 });
