@@ -85,15 +85,15 @@ Currently `src/command-gate.ts` has a hardcoded admin-only command Set (`/grant`
 
 ## Side debt — schema-stale skills sweep (local)
 
-Skills still query the dropped `registered_groups` schema (migration 009). 7 skills affected, 21 stale references total (verified 2026-04-27 — earlier note that `nanotars-groups` had been rewritten was wrong; the file still uses the legacy schema):
+Skills queried the dropped `registered_groups` schema (migration 009). 7 skills affected, 22 stale references total. All shipped 2026-04-27 in slices 3a-1 (canonical) and 3a-2 (the other six) — see entries below for landing slice + commit SHA:
 
 - [x] `.claude/skills/nanotars-groups/SKILL.md` — 4 refs, 104 lines. Rewrite first as the canonical template for the others. — Done 2026-04-27 (slice 3a-1, canonical template).
-- [ ] `.claude/skills/nanotars-add-agent/SKILL.md` — 1 ref, 248 lines.
-- [ ] `.claude/skills/nanotars-add-group/SKILL.md` — 7 refs, 282 lines.
-- [ ] `.claude/skills/nanotars-debug/SKILL.md` — 2 refs, 528 lines.
-- [ ] `.claude/skills/nanotars-remove-plugin/SKILL.md` — 2 refs, 147 lines.
-- [ ] `.claude/skills/create-channel-plugin/SKILL.md` — 3 refs, 585 lines.
-- [ ] `.claude/skills/nanotars-setup/SKILL.md` — 6 refs, 857 lines.
+- [x] `.claude/skills/nanotars-add-agent/SKILL.md` — 1 ref, 248 lines. — Done 2026-04-27 (slice 3a-2, commit cdd99a7).
+- [x] `.claude/skills/nanotars-add-group/SKILL.md` — 7 refs, 282 lines. — Done 2026-04-27 (slice 3a-2, commit c68e93c).
+- [x] `.claude/skills/nanotars-debug/SKILL.md` — 2 refs, 528 lines. — Done 2026-04-27 (slice 3a-2, commit 083068a).
+- [x] `.claude/skills/nanotars-remove-plugin/SKILL.md` — 2 refs, 147 lines. — Done 2026-04-27 (slice 3a-2, commit ba262fd).
+- [x] `.claude/skills/create-channel-plugin/SKILL.md` — 3 refs, 585 lines. — Done 2026-04-27 (slice 3a-2, commit e3d91f2).
+- [x] `.claude/skills/nanotars-setup/SKILL.md` — 6 refs, 857 lines. — Done 2026-04-27 (slice 3a-2, commit 5a29862).
 
 Each should switch to the three-table join (`agent_groups` ⋈ `messaging_group_agents` ⋈ `messaging_groups`) and target modern wiring fields (`engage_mode` / `engage_pattern` / `sender_scope` / `ignored_message_policy`) instead of `requires_trigger`.
 
