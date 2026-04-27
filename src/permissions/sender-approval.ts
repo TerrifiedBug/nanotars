@@ -390,6 +390,7 @@ export async function requestSenderApproval(
       message_text: args.message_text ?? null,
     },
     originatingChannel,
+    skipDelivery: true,
   });
 
   // If the primitive couldn't pick a delivery target, there's no admin to

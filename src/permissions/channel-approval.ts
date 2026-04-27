@@ -361,6 +361,7 @@ export async function requestChannelApproval(
     agentGroupId: target.id,
     payload,
     originatingChannel: args.channel_type,
+    skipDelivery: true,
   });
 
   // No approver / no DM → don't persist a 4D row. The 4C row already

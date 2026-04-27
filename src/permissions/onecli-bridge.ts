@@ -197,6 +197,7 @@ export async function handleRequest(request: ApprovalRequest): Promise<Decision>
     },
     request_id: request.id,
     expires_at: request.expiresAt,
+    skipDelivery: true,
   });
 
   // Phase 4D D6: deliver the credentialed-action card via the
