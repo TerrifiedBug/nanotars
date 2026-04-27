@@ -95,7 +95,13 @@ done
 [ $CHANNELS -eq 0 ] && echo "  NONE — install a channel with /add-channel-whatsapp, /add-channel-discord, or /add-channel-telegram"
 
 echo -e "\n--- Registered Groups ---"
-sqlite3 store/messages.db "SELECT folder, jid, name FROM registered_groups" 2>/dev/null || echo "  No database or no groups registered"
+sqlite3 store/messages.db "
+  SELECT ag.folder, COALESCE(mg.platform_id, '') AS platform_id, ag.name AS agent_name
+  FROM agent_groups ag
+  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+  ORDER BY COALESCE(mg.channel_type, 'zz-unwired'), ag.folder
+" 2>/dev/null || echo "  No database or no groups registered"
 
 echo -e "\n--- Service ---"
 if systemctl is-active nanoclaw >/dev/null 2>&1; then
@@ -485,7 +491,13 @@ container builder stop && container builder rm && container builder start
 sqlite3 store/messages.db ".tables"
 
 # Check registered groups
-sqlite3 store/messages.db "SELECT * FROM registered_groups"
+sqlite3 store/messages.db "
+  SELECT ag.*, mg.channel_type, mg.platform_id, mg.name AS chat_name,
+         mga.engage_mode, mga.engage_pattern, mga.sender_scope, mga.session_mode, mga.priority
+  FROM agent_groups ag
+  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+"
 
 # Check recent messages
 sqlite3 store/messages.db "SELECT id, jid, substr(content,1,50), timestamp FROM messages ORDER BY id DESC LIMIT 10"
