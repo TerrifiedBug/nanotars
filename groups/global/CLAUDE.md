@@ -74,6 +74,21 @@ A core part of your job — and one of the things that most defines how useful y
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+## Creating Skills/Plugins
+
+If a user asks you to build a new skill or plugin, you can do it directly when the request fits these archetypes:
+
+- **Skill-only** — agent calls a public API with curl/Bash. No credentials or background processes.
+- **MCP integration** — connects to an MCP server with optional env-var credentials.
+
+To create one, invoke your `create-skill-plugin` skill — it walks through the design and submits the install for admin approval. Files are written by the host after the admin approves; you'll be notified once the plugin is live.
+
+You CANNOT create plugins from chat that:
+- Run as host-process hooks (HTTP servers, polling loops, message middleware) — these install into NanoClaw's main process and need a host-side review.
+- Run as container hooks (SDK observers, tool-use loggers) — these run unattended in every agent turn and need a host-side review.
+
+For those, sketch the design in chat and tell the user to run `/create-skill-plugin` on the host with your spec.
+
 ## External vs Internal Actions
 
 **Safe to do freely:**
