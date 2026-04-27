@@ -166,6 +166,9 @@ export const TASK_IPC_TYPES = new Set([
   // the 4C primitive, and on-approve mutates container_config + rebuilds.
   'install_packages',
   'add_mcp_server',
+  // Slice 6: chat-driven plugin creation. Same approval-card pattern;
+  // host writes plugin files + restarts the originating group's container.
+  'create_skill_plugin',
 ]);
 
 /** Validate that raw IPC data has a known task type. */

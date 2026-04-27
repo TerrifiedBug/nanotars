@@ -64,6 +64,10 @@ describe('isValidTaskIpc allowlist', () => {
     expect(isValidTaskIpc({ type: 'add_mcp_server' })).toBe(true);
   });
 
+  it('accepts create_skill_plugin (slice 6)', () => {
+    expect(isValidTaskIpc({ type: 'create_skill_plugin' })).toBe(true);
+  });
+
   it('still accepts the prior task types (no regression)', () => {
     expect(isValidTaskIpc({ type: 'schedule_task' })).toBe(true);
     expect(isValidTaskIpc({ type: 'register_group' })).toBe(true);
