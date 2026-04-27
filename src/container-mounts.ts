@@ -15,6 +15,17 @@ import type { AgentGroup, ContainerConfig } from './types.js';
 import type { PluginRegistry } from './plugin-loader.js';
 
 /**
+ * Wrap an arbitrary string in single quotes safe for `set -a; . envfile; set +a`
+ * sourcing inside the agent container's spawn shell. Internal `'` characters
+ * are escaped using the canonical `'\''` end-quote / escape / start-quote
+ * sequence — neutralises `$(...)`, backticks, `#`, and other shell
+ * metacharacters at source time so an env value reaches the agent unchanged.
+ */
+export function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+/**
  * Parse the JSON-encoded container_config off an AgentGroup row.
  * Mirrors orchestrator-side parsing — invalid JSON logs a warning and
  * returns undefined rather than throwing, so a corrupted row can't take
@@ -419,8 +430,7 @@ async function buildEnvMount(
     if (eqIdx < 0) return line;
     const key = line.slice(0, eqIdx);
     const value = line.slice(eqIdx + 1);
-    const escaped = value.replace(/'/g, "'\\''");
-    return `${key}='${escaped}'`;
+    return `${key}=${shellQuote(value)}`;
   });
 
   if (quotedLines.length > 0) {
