@@ -49,6 +49,7 @@ import {
   registerChannelApprovalHandler,
   requestChannelApproval,
 } from './permissions/channel-approval.js';
+import { tryHandleApprovalTextReply } from './permissions/approval-text-reply.js';
 import { isAdminCommand } from './command-gate.js';
 import { dispatchAdminCommand } from './admin-command-dispatch.js';
 
@@ -589,6 +590,32 @@ export class MessageOrchestrator {
           );
           return true;
         }
+      }
+    }
+
+    // Slice 7: universal approval text-reply middleware. If this is a
+    // single-message reply matching ^approve|reject$ (case-insensitive)
+    // for a pending approval routed to this chat, dispatch via
+    // approval-click-router and suppress the agent turn for this message.
+    // Falls through silently if not matched / no pending / not authorized
+    // (we don't leak approval existence via error messages).
+    if (missedMessages.length === 1) {
+      const trigger = missedMessages[0];
+      const replyResult = await tryHandleApprovalTextReply({
+        channel_type: channel?.name ?? group.channel ?? 'unknown',
+        platform_id: chatJid,
+        sender_handle: trigger.sender,
+        sender_name: trigger.sender_name ?? undefined,
+        text: trigger.content,
+      });
+      if (replyResult.matched) {
+        // Mark trigger as processed so we don't redispatch on the next sweep.
+        this.lastAgentTimestamp[chatJid] = trigger.timestamp;
+        this.deps.logger.info(
+          { chatJid, sender: userId },
+          'Approval text-reply consumed; skipping agent turn',
+        );
+        return true;
       }
     }
 
