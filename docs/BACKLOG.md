@@ -31,19 +31,19 @@ All Phase 1 items shipped. See the Reconciliation section at the bottom of this 
 
 Migrations 008-018 are in (`agent_groups`, `messaging_groups`, `messaging_group_agents`, `users`, `user_roles`, `agent_group_members`, `user_dms`, `pending_approvals`, `pending_sender_approvals`, `pending_channel_approvals`, `pending_questions`). Approval primitive (`pickApprover`, `registerApprovalHandler`) and `pending-questions` accessors are in. The remaining work is finish-and-verify, not new design.
 
-- [?] 4A finish — sender-resolver + access-gate hook callsites wired through router/orchestrator path (orchestrator references `agent_group_*` rows but the explicit hook surface needs an audit).
-- [?] 4B finish — `command-gate.ts` host-side command gate against `user_roles`. Not yet found in `src/`.
-- [?] 4C finish — card-expiry timer + edit-to-Expired sweep on startup. `index.ts:136` references the expiry sweep — confirm it covers `pending_sender_approvals` and `pending_channel_approvals` too.
-- [?] 4C finish — OneCLI manual-approval bridge port. OneCLI gateway is in but the approval-bridge handler that uses `pickApprover` needs verification.
-- [?] 4D finish — `pending_sender_approvals` and `pending_channel_approvals` request/respond flows. Tables exist; verify the orchestrator + plugin-side wiring is complete and end-to-end tested.
+- [x] 4A — sender-resolver + access-gate hooks wired through router/orchestrator. Verified in slice 4 audit (`docs/phase-4-5-audit-2026-04-27.md` §1) — `resolveSender` callsites at `src/orchestrator.ts:502, 843, 869` plus `sender_scope='known'` gate at lines 504-509 / 871-876.
+- [x] 4B — `command-gate.ts` host-side command gate against `user_roles`. Verified slice 4 audit §2 — `src/command-gate.ts` exists; `checkCommandPermission` callsite chain at `src/ipc/auth.ts:58, 66` plus per-handler defensive re-checks. (The earlier "not yet found" note was stale.)
+- [x] 4C — card-expiry timer + sweep coverage. Verified slice 4 audit §3 — `startApprovalExpiryPoll()` at `src/index.ts:139` + `sweepExpiredApprovals()` at `src/permissions/approval-expiry.ts:33-49`. Sender/channel coverage is via the unified-approval architecture (paired `pending_approvals` row).
+- [x] 4C — OneCLI manual-approval bridge port. Verified slice 4 audit §4 — `src/permissions/onecli-bridge.ts` invoked at `src/index.ts:169` (`startOneCLIBridge()`) / `src/index.ts:261` (`stopOneCLIBridge()`).
+- [x] 4D — `pending_sender_approvals` / `pending_channel_approvals` request/respond flows. Verified slice 4 audit §5 — `requestSenderApproval` invoked at `src/orchestrator.ts:518, 883`; `requestChannelApproval` at `src/orchestrator.ts:844`. Tests at `src/permissions/__tests__/{sender,channel}-approval.test.ts`.
 
 ## Phase 5 — capability bolt-ons
 
 Migrations + scaffolding are in: `install_packages` and `add_mcp_server` MCP tools, host-side validation/approval queueing, `applyDecision` handlers, `notifyAgent`, lifecycle pause/resume (`emergency_stop` + `resume_processing` in `src/lifecycle-handlers.ts`), per-agent-group image build (`src/image-build.ts`), `create_agent` permissions stub (`src/permissions/create-agent.ts`), AgentProvider seam (`container/agent-runner/src/providers/`).
 
-- [?] 5A self-mod — end-to-end smoke test (request → approve → image rebuild → container restart with new package available). Pieces exist; confirm the full flow runs.
-- [?] 5B finish — verify `image-build.ts` is invoked from the live install_packages path (not just available).
-- [?] 5C `create_agent` MCP tool — permissions stub exists; confirm tool is registered and wired through approval primitive.
+- [x] 5A — self-mod end-to-end. Verified slice 4 audit §6 — full flow asserted by `src/__tests__/self-mod-flow.test.ts` (Phase 5C-06 test): pending_approvals row, applyDecision mutates container_config + buildImage + restartGroup + notifyAfter + agent system message, denial path, invalid-input path.
+- [x] 5B — `image-build.ts` invoked from install_packages live path. Verified slice 4 audit §7 — `buildAgentGroupImage` injected as the `buildImage` dep at `src/index.ts:151`.
+- [x] 5C — `create_agent` MCP tool registered + wired. Verified slice 4 audit §8 — admin-gated tool registration at `container/agent-runner/src/ipc-mcp-stdio.ts:663-684`; host-side handler at `src/permissions/create-agent.ts` with re-validation + filesystem scaffold + member registration.
 - [ ] 5D provider plugins — Codex / OpenCode / Ollama as plugins (not skill-branches). Provider seam is in (`container/agent-runner/src/providers/`); plugin-loader recognises `agentProvider: true` manifests (`src/plugin-loader.ts:440-462`); resolution reads `NANOCLAW_AGENT_PROVIDER` env var with `'claude'` fallback. No second real provider plugin shipped yet.
 - [ ] 5D dependency — per-provider `session_state` continuation namespacing. v1's `sessions` table is `(group_folder PK, session_id)` — one continuation per group, not keyed by provider. Once a second provider lands under 5D, switching `NANOCLAW_AGENT_PROVIDER` for a group would feed a Claude session-id to the new provider's SDK and either reject or replay nothing. Re-key as `(group_folder, provider, session_id)` and update `setSession` / lookup paths in `src/orchestrator.ts` as part of the same slice that ships the second provider — designing the namespace shape blindly without a real consumer risks getting it wrong.
 
