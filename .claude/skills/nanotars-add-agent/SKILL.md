@@ -32,7 +32,13 @@ The agent-runner auto-discovers agents by scanning for `agent.json` files and re
 List registered groups:
 
 ```bash
-sqlite3 store/messages.db "SELECT folder, name, channel FROM registered_groups ORDER BY folder"
+sqlite3 -header -column store/messages.db "
+  SELECT ag.folder, ag.name, COALESCE(mg.channel_type, '(unwired)') AS channel
+  FROM agent_groups ag
+  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
+  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
+  ORDER BY COALESCE(mg.channel_type, 'zz-unwired'), ag.folder
+"
 ```
 
 If only one group exists, use it automatically. Otherwise ask:
