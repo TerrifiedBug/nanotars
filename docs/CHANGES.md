@@ -899,3 +899,34 @@ All plugin install skills now include a mandatory **Plugin Configuration** step 
   - 16 skills received new Plugin Configuration steps (brief for informational/system plugins, detailed for sensitive plugins)
 - **Channel plugins** (discord, slack, telegram, whatsapp) — `plugin.json` templates updated for completeness; install skills unchanged since channels scope via group registration.
 
+---
+
+## 18. In-Chat Skill Creation
+
+In-container TARS can build skill-only and MCP-integration plugins from chat without the operator SSHing to the host. The user asks for a new capability; TARS conducts a conversational design flow; an admin approval card lands in the admin chat; on approve, the host writes plugin files and restarts the originating group's container.
+
+### What was built
+
+- **Boundary rules in `groups/global/CLAUDE.md`** — short prose section telling every TARS what archetypes are creatable from chat (skill-only, MCP) versus which require host-side review (host-process hooks, container hooks).
+- **Conversational SKILL** at `container/skills/create-skill-plugin/SKILL.md` — mounted into every agent container. Walks TARS through a 5-phase flow (idea → specifics → scope → credentials → submit) with archetype-specific templates.
+- **`create_skill_plugin` MCP tool** — emits an IPC task with the full plugin spec; mirrors the existing `add_mcp_server` shape.
+- **Host handler `src/permissions/create-skill-plugin.ts`** — re-validates the spec (defense-in-depth), checks filesystem uniqueness, queues an admin approval card via the existing 4C primitive. On approve: writes `plugins/{name}/`, `.claude/skills/add-skill-{name}/`, appends env vars to root or per-group `.env`, restarts via `queue.restartGroup`. Rolls back files on partial failure.
+- **Validation** — name regex, archetype enum (skill-only / mcp only), forbidden plugin.json fields (`hooks`, `containerHooks`, `dependencies=true`), payload size bounds, env var name format, reserved names (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ASSISTANT_NAME`, `CLAUDE_MODEL`, `PATH`, `HOME`, `USER`, `SHELL`, `PWD`) and reserved prefixes (`NANOCLAW_`, `LD_`, `DYLD_`, `NODE_`) — the prefix list blocks LD_PRELOAD / NODE_OPTIONS injection vectors.
+- **Drift-check script** at `scripts/check-skill-drift.sh` + `docs/skill-drift-log.md` — soft CI hint when plugin-interface files change without corresponding skill-doc updates.
+
+### Restricted to skill-only and MCP archetypes
+
+Host-process hooks (archetype 3) and container hooks (archetype 4) cannot be created from chat. Their JS code runs unattended (host main process or every agent turn) and warrants editor-grade review. The conversational SKILL gates these and redirects the user to run `/create-skill-plugin` on the host.
+
+### Files
+
+- `groups/global/CLAUDE.md` — added "Creating Skills/Plugins" section
+- `container/skills/create-skill-plugin/SKILL.md` — new (~210 lines)
+- `container/agent-runner/src/mcp-tools/self-mod.ts` — new `buildCreateSkillPluginPayload` block
+- `container/agent-runner/src/ipc-mcp-stdio.ts` — new `server.tool('create_skill_plugin', ...)` registration
+- `src/permissions/create-skill-plugin.ts` — new (~400 lines), validator + request handler + applyDecision
+- `src/ipc/tasks.ts` — new `case 'create_skill_plugin':` dispatch
+- `src/index.ts` — `registerCreateSkillPluginHandler` boot wiring
+- Tests: `src/permissions/__tests__/create-skill-plugin-{request,apply}.test.ts`, `src/__tests__/e2e/create-skill-plugin-flow.test.ts`, `container/agent-runner/src/mcp-tools/__tests__/self-mod.test.ts` (extended)
+- `scripts/check-skill-drift.sh` + `docs/skill-drift-log.md` — periodic accuracy re-check tooling
+
