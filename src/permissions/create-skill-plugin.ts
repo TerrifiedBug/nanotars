@@ -33,7 +33,6 @@ import {
   registerApprovalHandler,
   requestApproval,
 } from './approval-primitive.js';
-import { deliverApprovalCard } from './approval-delivery.js';
 
 /** Plugin name regex: lowercase, dash-separated, 2-31 chars. */
 export const PLUGIN_NAME_RE = /^[a-z][a-z0-9-]{1,30}$/;
@@ -210,30 +209,9 @@ export async function handleCreateSkillPluginRequest(
       pluginName: task.name,
       archetype: task.archetype,
       hasApprover: result.approvers.length > 0,
-      hasDeliveryTarget: !!result.deliveryTarget,
     },
     'create_skill_plugin approval queued',
   );
-
-  // Deliver the card to the approver. Same pattern as channel-approval.ts /
-  // onecli-bridge.ts — fire-and-forget; failure logged but doesn't block the
-  // approvalId return. Without this call the row sits in pending_approvals
-  // forever and the admin never sees it.
-  if (result.card && result.deliveryTarget) {
-    void deliverApprovalCard({
-      approval_id: result.approvalId,
-      channel_type: result.deliveryTarget.messagingGroup.channel_type,
-      platform_id: result.deliveryTarget.messagingGroup.platform_id,
-      title: result.card.title,
-      body: result.card.body,
-      options: result.card.options,
-    }).catch((err) =>
-      logger.warn(
-        { err, approvalId: result.approvalId },
-        'create_skill_plugin: deliverApprovalCard failed',
-      ),
-    );
-  }
 
   return result.approvalId;
 }
