@@ -59,6 +59,7 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { logger } from './logger.js';
 import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
 import { registerAddMcpServerHandler } from './permissions/add-mcp-server.js';
+import { registerCreateSkillPluginHandler } from './permissions/create-skill-plugin.js';
 import { registerInstallPackagesHandler } from './permissions/install-packages.js';
 import { notifyAgent } from './permissions/approval-primitive.js';
 import { startOneCLIBridge, stopOneCLIBridge } from './permissions/onecli-bridge.js';
@@ -164,6 +165,9 @@ async function main(): Promise<void> {
     },
   });
   registerAddMcpServerHandler({
+    restartGroup: (folder, reason) => queue.restartGroup(folder, reason),
+  });
+  registerCreateSkillPluginHandler({
     restartGroup: (folder, reason) => queue.restartGroup(folder, reason),
   });
 
