@@ -528,11 +528,21 @@ describe('buildCreateSkillPluginPayload', () => {
 
   it('exports stable allowlist constants', () => {
     expect([...RESERVED_ENV_VAR_NAMES].sort()).toEqual(
-      ['ANTHROPIC_API_KEY', 'ASSISTANT_NAME', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_MODEL'].sort(),
+      ['ANTHROPIC_API_KEY', 'ASSISTANT_NAME', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_MODEL', 'HOME', 'PATH', 'PWD', 'SHELL', 'USER'].sort(),
     );
-    expect(RESERVED_ENV_VAR_PREFIXES).toEqual(['NANOCLAW_']);
+    expect([...RESERVED_ENV_VAR_PREFIXES].sort()).toEqual(['DYLD_', 'LD_', 'NANOCLAW_', 'NODE_'].sort());
     expect([...ALLOWED_CHANNEL_NAMES].sort()).toEqual(
       ['*', 'discord', 'slack', 'telegram', 'webhook', 'whatsapp'].sort(),
     );
+  });
+
+  it('rejects dangerous env var prefixes (LD_, DYLD_, NODE_)', () => {
+    for (const name of ['LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES', 'NODE_OPTIONS', 'NODE_PATH']) {
+      const result = buildCreateSkillPluginPayload(
+        skillOnlyInput({ envVarValues: { [name]: 'x' } }),
+        baseCtx,
+      );
+      expect(result.ok, name).toBe(false);
+    }
   });
 });

@@ -44,9 +44,14 @@ export const RESERVED_ENV_VAR_NAMES = new Set([
   'CLAUDE_CODE_OAUTH_TOKEN',
   'ASSISTANT_NAME',
   'CLAUDE_MODEL',
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'PWD',
 ]);
 
-export const RESERVED_ENV_VAR_PREFIXES = ['NANOCLAW_'];
+export const RESERVED_ENV_VAR_PREFIXES = ['NANOCLAW_', 'LD_', 'DYLD_', 'NODE_'];
 
 export const ALLOWED_CHANNEL_NAMES = new Set([
   '*',

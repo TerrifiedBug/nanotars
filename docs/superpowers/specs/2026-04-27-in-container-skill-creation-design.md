@@ -185,7 +185,8 @@ All rules enforced **both** container-side (Zod, fast feedback to TARS) and host
 | `pluginJson.dependencies` | False or absent | No `npm install` shell-out |
 | Forbidden files | No `Dockerfile.partial` | No image rebuild path |
 | Env var name format | `^[A-Z][A-Z0-9_]{0,63}$` | Standard env var naming |
-| Reserved env var names | Reject `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ASSISTANT_NAME`, `CLAUDE_MODEL`, `NANOCLAW_*` | Prevent clobbering install-level secrets and runtime config |
+| Reserved env var names | Reject `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ASSISTANT_NAME`, `CLAUDE_MODEL`, `PATH`, `HOME`, `USER`, `SHELL`, `PWD` | Prevent clobbering install-level secrets and runtime config |
+| Reserved env var prefixes | Reject names starting with `NANOCLAW_`, `LD_`, `DYLD_`, `NODE_` | Block native-loader injection (LD_PRELOAD/DYLD_*) and Node bootstrap injection (NODE_OPTIONS) |
 | Payload size | `containerSkillMd` ≤ 20 KB, `mcpJson` ≤ 4 KB | Bound `pending_approvals` row size |
 | `mcpJson` shape | Valid JSON; only `mcpServers.<name>.{type,url,command,args,env,headers}` keys; `command` matches existing add-mcp-server allowlist | Reuse existing trust model |
 | Channel allowlist | Each entry from `{'*', 'whatsapp', 'discord', 'telegram', 'slack', 'webhook'}` | Catch typos that silently disable plugin |
@@ -345,7 +346,7 @@ Rollout: ship the host handler + MCP tool + container SKILL + boundary rules tog
 - Approval gate enforced by admin (existing `pending_approvals` routing, unchanged)
 - Archetype 3 + 4 hard-rejected — no path to install host-process or container hooks from chat
 - Group scope restricted to `['*']` or originating folder — TARS cannot install for a different group
-- Reserved env var names protected (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ASSISTANT_NAME`, `CLAUDE_MODEL`, `NANOCLAW_*`)
+- Reserved env var names protected (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ASSISTANT_NAME`, `CLAUDE_MODEL`, `PATH`, `HOME`, `USER`, `SHELL`, `PWD`); reserved prefixes (`NANOCLAW_`, `LD_`, `DYLD_`, `NODE_`) block native-loader and Node-bootstrap injection
 - `secret-redact.ts` already redacts plugin env vars from outbound messages once registered
 - Approval card displays redacted credential values (`ab****xz`) and explicit destination path
 

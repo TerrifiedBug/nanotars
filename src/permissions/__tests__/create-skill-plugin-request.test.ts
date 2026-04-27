@@ -175,6 +175,17 @@ describe('handleCreateSkillPluginRequest', () => {
     expect(approvalId).toBeUndefined();
   });
 
+  it('rejects dangerous env var prefixes (LD_, DYLD_, NODE_)', async () => {
+    const ag = await setupGroupWithApprover();
+    for (const name of ['LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'NODE_OPTIONS']) {
+      const approvalId = await handleCreateSkillPluginRequest(
+        validTask({ groupFolder: ag.folder, envVarValues: { [name]: 'x' } }),
+        'telegram',
+      );
+      expect(approvalId, name).toBeUndefined();
+    }
+  });
+
   it('rejects groups scope that includes a different group folder', async () => {
     const ag = await setupGroupWithApprover('main');
     const task = validTask({ groupFolder: ag.folder });
