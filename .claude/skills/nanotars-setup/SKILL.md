@@ -34,13 +34,13 @@ echo "=== SETUP STATE ==="
 [ -d node_modules ] && echo "DEPS: installed" || echo "DEPS: missing"
 (which docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && echo "CONTAINER_RUNTIME: docker") || (which container >/dev/null 2>&1 && echo "CONTAINER_RUNTIME: apple_container") || echo "CONTAINER_RUNTIME: none"
 (docker image inspect nanoclaw-agent:latest >/dev/null 2>&1 || container image list 2>/dev/null | grep -q nanoclaw-agent) && echo "IMAGE: built" || echo "IMAGE: not_built"
-(grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f ~/.claude/.credentials.json ]) && echo "AUTH: configured" || echo "AUTH: missing"
+if grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f "$HOME/.claude/.credentials.json" ]; then echo "AUTH: configured"; else echo "AUTH: missing"; fi
 ls plugins/channels/*/plugin.json 2>/dev/null | head -1 | xargs -I{} sh -c '
   DIR=$(dirname "{}")
   NAME=$(basename "$DIR")
   [ -f "data/channels/$NAME/auth/creds.json" ] || [ -f "data/channels/$NAME/auth-status.txt" ] && echo "CHANNEL_AUTH: $NAME" || echo "CHANNEL_AUTH: none"
 ' 2>/dev/null || echo "CHANNEL_AUTH: no_channels"
-sqlite3 store/messages.db "SELECT COUNT(*) FROM agent_groups WHERE folder = 'main'" 2>/dev/null | grep -q "^[1-9]" && echo "MAIN_GROUP: registered" || echo "MAIN_GROUP: not_registered"
+[ -d groups/main ] && echo "MAIN_GROUP: folder_exists" || echo "MAIN_GROUP: not_registered"
 grep -q "^TZ=" .env 2>/dev/null && echo "TIMEZONE: configured" || echo "TIMEZONE: not_set"
 [ -f ~/.config/nanotars/mount-allowlist.json ] && echo "MOUNT_ALLOWLIST: configured" || echo "MOUNT_ALLOWLIST: missing"
 which ffmpeg >/dev/null 2>&1 && echo "FFMPEG: installed" || echo "FFMPEG: not_installed (optional)"
@@ -482,15 +482,7 @@ Ask the user for the phone number if not already known (country code, no + or sp
 
 **For group** (they chose option 2 or 3):
 
-Groups are synced on startup via `groupFetchAllParticipating`. Query the database for recent groups:
-```bash
-sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE jid LIKE '%@g.us' AND jid != '__group_sync__' ORDER BY last_message_time DESC LIMIT 40"
-```
-
-Show only the **10 most recent** group names to the user and ask them to pick one. If they say their group isn't in the list, show the next batch from the results you already have. If they tell you the group name directly, look it up:
-```bash
-sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE name LIKE '%GROUP_NAME%' AND jid LIKE '%@g.us'"
-```
+Groups are synced on startup via `groupFetchAllParticipating`. To find the group JID, use `/nanotars-groups` (queries the live Baileys connection's `groupFetchAllParticipating()`) — or skip the JID lookup entirely and use the cross-channel pairing-code flow: `/register-group <folder>` from main → 4-digit code → send the code from the WhatsApp chat you want to wire up. The pairing flow sidesteps the JID lookup entirely.
 
 #### Telegram: Get JID
 
@@ -654,10 +646,10 @@ Tell the user:
 > - This config file is stored outside the project, so agents cannot modify it
 > - Changes require restarting the NanoTars service
 >
-> To grant a group access to an external directory, update its config in the database:
-> ```bash
-> sqlite3 store/messages.db "UPDATE agent_groups SET container_config = json('{\"additionalMounts\": [{\"hostPath\": \"~/projects/my-app\"}]}') WHERE folder = '<FOLDER>'"
-> ```
+> To grant a group access to an external directory:
+>
+> Per-group `additionalMounts` can currently only be set at registration time (the `container_config` field on `agent_groups`). Mutating it later via slash command isn't shipped yet — file a backlog item if you need this. Workaround: re-register the group via `/delete-group <folder>` + `/register-group <folder>` and pass the desired mounts at registration.
+>
 > The folder appears inside the container at `/workspace/extra/<folder-name>` (derived from the last segment of the path). Add `"readonly": false` for write access, or `"containerPath": "custom-name"` to override the default name.
 
 ## 8. Configure Background Service
@@ -815,7 +807,7 @@ The user should receive a response in their registered channel.
 - Verify the trigger pattern matches (e.g., `@AssistantName` at start of message)
 - Main channel doesn't require a prefix — all messages are processed
 - Personal/solo chats with `requiresTrigger: false` also don't need a prefix
-- Check that the chat JID is in the database: `sqlite3 store/messages.db "SELECT mg.platform_id, mg.channel_type, ag.folder, ag.name FROM agent_groups ag LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id"`
+- From your main chat, run `/list-groups` to see what's registered. The output groups by channel_type and shows the wired chats; you can spot a missing wiring or wrong engage_mode at a glance. Don't reach into the SQLite schema directly — the entity-model migration silently breaks inline SQL.
 - Check `logs/nanotars.log` for errors
 
 **Unload service**:
@@ -856,4 +848,4 @@ journalctl -u nanotars -f
 For channel-specific troubleshooting, check the channel plugin's documentation or `auth.js` script. Common issues:
 - **Token expired**: Re-run the channel's auth flow or update the token in `.env`
 - **Bot not receiving messages**: Verify the bot has the right permissions in the platform
-- **Chat not registered**: Check `sqlite3 store/messages.db "SELECT mg.platform_id, ag.folder, mga.engage_mode FROM messaging_groups mg JOIN messaging_group_agents mga ON mga.messaging_group_id = mg.id JOIN agent_groups ag ON ag.id = mga.agent_group_id WHERE mg.channel_type = 'CHANNEL_NAME'"`
+- **Chat not registered**: From your main chat, run `/list-groups` to see what's registered. The output groups by channel_type and shows the wired chats; you can spot a missing wiring or wrong engage_mode at a glance. Don't reach into the SQLite schema directly — the entity-model migration silently breaks inline SQL.
