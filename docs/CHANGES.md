@@ -983,3 +983,24 @@ three host-side, plus native Telegram inline buttons via marketplace PR.
 ### Net behavior
 
 In a Telegram chat, ask TARS to create a skill. The approval card lands in the admin DM with **Approve** / **Reject** buttons. Tap Approve. The card edits to "✅ Approved by @user at HH:MM UTC", buttons disappear, container restarts, TARS confirms the install. For channels without inline-button rendering, plain-text "reply approve" works — the host parses the reply natively.
+
+---
+
+## 21. Config Path Rename: `nanoclaw` → `nanotars`
+
+The `nanotars-setup` and `manage-mounts` skills wrote and read `~/.config/nanotars/mount-allowlist.json`, but the runtime (`src/config.ts`) loaded `~/.config/nanoclaw/mount-allowlist.json` — leftover branding from the upstream nanoclaw. Result: a fresh `/nanotars-setup` run produced an allowlist file the runtime never read, and every plugin-declared `containerMount` was silently rejected. Symptom: install a plugin that needs a host mount (calendar, gmail), restart, agent reports "no auth tokens" or similar, with no obvious error to the operator. The rejection was logged at WARN level inside the orchestrator log but never surfaced.
+
+### What changed
+
+- **`src/config.ts`** — `MOUNT_ALLOWLIST_PATH` and `SENDER_ALLOWLIST_PATH` constants moved from `~/.config/nanoclaw/` to `~/.config/nanotars/`. Skills already used the `nanotars` path; source was the outlier.
+- **`src/mount-security.ts`** + **`src/types.ts`** — docstrings updated to match.
+- **Calendar skill (`nanotars-calendar/skills/add-skill-calendar/SKILL.md`)** — added "Step 7: Allow the Mount Path" between plugin install and rebuild/restart. Detects whether `data/gogcli` is covered by an allowedRoot in the allowlist; if not, prompts the operator and appends a tightly-scoped entry (`~/nanotars/data/gogcli`, not the broader `~/nanotars/data`). Includes a stale-container cleanup step (`docker rm -f` any `nanoclaw-*` containers) so the next message spawns with the new mount.
+- **Gmail skill (`nanotars-gmail/skills/add-skill-gmail/SKILL.md`)** — same pattern. Both skills mount the shared `data/gogcli` path so installing one is enough to allowlist for the other.
+
+### Net behavior
+
+Plugin mounts no longer fail silently. Operators are prompted before allowlist edits with a tightly-scoped entry shown in the prompt (no `data/` blanket access). The rename closes the path-mismatch trap for any future skill that touches the allowlist.
+
+### What stayed `nanoclaw`
+
+Internal Docker artifacts kept the legacy name to avoid a container image rebuild + retag of running containers: image `nanoclaw-agent:latest`, install label `nanoclaw.install`, container name prefix `nanoclaw-{group}-{ts}`. These are invisible to skill workflows and renaming them is purely cosmetic, so out of scope.

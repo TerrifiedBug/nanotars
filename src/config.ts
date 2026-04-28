@@ -23,13 +23,13 @@ const HOME_DIR = process.env.HOME || os.homedir() || '/root';
 export const MOUNT_ALLOWLIST_PATH = path.join(
   HOME_DIR,
   '.config',
-  'nanoclaw',
+  'nanotars',
   'mount-allowlist.json',
 );
 export const SENDER_ALLOWLIST_PATH = path.join(
   HOME_DIR,
   '.config',
-  'nanoclaw',
+  'nanotars',
   'sender-allowlist.json',
 );
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
