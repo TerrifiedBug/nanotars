@@ -13,151 +13,127 @@ triggers:
 
 # Group Config Management
 
-View and manage NanoTars group registrations. For adding new groups, use `/nanotars-add-group`.
+Inspect and manage NanoTars group registrations through the canonical operator surfaces (admin slash commands + filesystem). Do not query the SQLite schema directly — schema migrations move column shapes around silently and break inlined SQL.
 
-The entity model splits the old `registered_groups` table into three (migration 009): `agent_groups` (per-folder agent identity), `messaging_groups` (one chat on one platform), and `messaging_group_agents` (the many-to-many wiring with engage rules).
+The entity model splits group state across three tables (`agent_groups`, `messaging_groups`, `messaging_group_agents`). The slash commands below abstract that — use them.
 
-## Step 1: Determine the operation
+## List groups
 
-Ask the user:
-- **List** — Show all wired (agent_group, messaging_group) pairs
-- **View** — Detailed config for one folder
-- **Update** — Change a wiring or agent-group setting
-- **Status** — Activity stats per folder
+From your **main chat**, send:
 
-## Step 2a: List groups
-
-```bash
-sqlite3 -header -column store/messages.db "
-  SELECT
-    ag.folder,
-    ag.name AS agent_name,
-    COALESCE(mg.channel_type, '(unwired)') AS channel,
-    COALESCE(mg.platform_id, '') AS platform_id,
-    COALESCE(mga.engage_mode, '') AS engage_mode,
-    COALESCE(mga.engage_pattern, '') AS engage_pattern,
-    ag.created_at
-  FROM agent_groups ag
-  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  ORDER BY COALESCE(mg.channel_type, 'zz-unwired'), ag.folder;
-"
+```
+/list-groups
 ```
 
-Show disk usage per group:
+The host handles this directly (it never reaches the agent — see `src/command-gate.ts`) and replies with each registered agent group and the chats wired to it.
 
-```bash
-for dir in groups/*/; do
-  folder=$(basename "$dir")
-  size=$(du -sh "$dir" 2>/dev/null | cut -f1)
-  echo "  $folder: $size"
-done
+Example output:
+
+```
+Registered groups:
+
+  main
+    channel: telegram   platform_id: -1001234567890   engage_mode: always
+  research
+    channel: whatsapp   platform_id: 120363336345536173@g.us   engage_mode: pattern
+  ops
+    (unwired)
 ```
 
-## Step 2b: View group details
+Columns:
 
-Ask which folder, then:
+| Field | Meaning |
+|-------|---------|
+| `folder` | Directory under `groups/` — the agent group's identity |
+| `channel` | `telegram`, `whatsapp`, `discord`, etc. — the platform the chat lives on |
+| `platform_id` | Channel-native chat identifier (Telegram chat_id, WhatsApp JID, Discord channel ID) |
+| `engage_mode` | One of the four engage axes (see Schema Reference below) |
 
-```bash
-GROUP="{selected}"
+An agent group with no wiring shows `(unwired)` — the folder exists but no chat routes messages to it yet.
 
-# Agent group + every wiring + every wired messaging_group:
-sqlite3 -header -column store/messages.db "
-  SELECT ag.folder, ag.name, ag.agent_provider, ag.created_at,
-         mg.channel_type, mg.platform_id, mg.name AS chat_name,
-         mga.engage_mode, mga.engage_pattern, mga.sender_scope, mga.ignored_message_policy, mga.session_mode, mga.priority
-  FROM agent_groups ag
-  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  WHERE ag.folder = '${GROUP}';
-"
+## View a group's config
 
-# Message count joined via platform_id (chat_jid) → messaging_groups → wiring → agent_group:
-echo "Messages: $(sqlite3 store/messages.db "
-  SELECT COUNT(*)
-  FROM messages m
-  JOIN messaging_groups mg ON mg.platform_id = m.chat_jid
-  JOIN messaging_group_agents mga ON mga.messaging_group_id = mg.id
-  JOIN agent_groups ag ON ag.id = mga.agent_group_id
-  WHERE ag.folder = '${GROUP}';
-")"
-
-sqlite3 -header -column store/messages.db "
-  SELECT id, substr(prompt,1,40) as prompt, schedule_type, status, next_run
-  FROM scheduled_tasks WHERE group_folder = '${GROUP}';
-"
-
-echo "Files:"
-ls -la "groups/${GROUP}/" 2>/dev/null
-
-if [ -f "groups/${GROUP}/CLAUDE.md" ]; then
-  echo "--- CLAUDE.md (first 10 lines) ---"
-  head -10 "groups/${GROUP}/CLAUDE.md"
-fi
-
-if [ -d "groups/${GROUP}/agents" ]; then
-  echo "Agents: $(ls "groups/${GROUP}/agents/" 2>/dev/null)"
-fi
-```
-
-## Step 2c: Update group
-
-Ask which field to change. The entity model splits old `registered_groups` columns across two tables — pick the right target:
-
-- **engage_pattern** (was `trigger_pattern`) — the regex/string the @mention check uses. Lives on `messaging_group_agents`.
-- **engage_mode** (was `requires_trigger`) — `'always'` (every message wakes the agent) or `'pattern'` (only when `engage_pattern` matches). Other values may exist; `sqlite3 store/messages.db "SELECT DISTINCT engage_mode FROM messaging_group_agents"` to inspect.
-- **agent name** — the agent group's display name. Lives on `agent_groups`.
-- **chat name** — the messaging group's name (per-chat). Lives on `messaging_groups`.
-
-Confirm before applying:
+There's no slash command for per-group detail today; inspect the filesystem layer:
 
 ```bash
 GROUP="{folder}"
 
-# engage_pattern (per-wiring):
-sqlite3 store/messages.db "
-  UPDATE messaging_group_agents
-  SET engage_pattern = '{value}'
-  WHERE agent_group_id = (SELECT id FROM agent_groups WHERE folder = '${GROUP}');
-"
-
-# engage_mode (per-wiring) — replaces requires_trigger:
-sqlite3 store/messages.db "
-  UPDATE messaging_group_agents
-  SET engage_mode = '{value}'
-  WHERE agent_group_id = (SELECT id FROM agent_groups WHERE folder = '${GROUP}');
-"
-
-# agent name:
-sqlite3 store/messages.db "
-  UPDATE agent_groups SET name = '{value}' WHERE folder = '${GROUP}';
-"
-
-# chat name (each wired chat individually — pick by platform_id):
-sqlite3 store/messages.db "
-  UPDATE messaging_groups SET name = '{value}' WHERE platform_id = '{platform_id}';
-"
-
-echo "Updated. Restart NanoTars for changes to take effect."
+ls -la groups/${GROUP}/
+cat groups/${GROUP}/IDENTITY.md   2>/dev/null
+cat groups/${GROUP}/CLAUDE.md     2>/dev/null
+ls   groups/${GROUP}/agents/      2>/dev/null
+du -sh groups/${GROUP}/
 ```
 
-## Step 2d: Status
+`IDENTITY.md` holds the agent group's persona/role. `CLAUDE.md` is the per-group memory the agent reads on every turn. `agents/` holds subagent definitions installed by `/nanotars-add-agent`.
 
-```bash
-sqlite3 -header -column store/messages.db "
-  SELECT
-    ag.folder,
-    ag.name AS agent_name,
-    COALESCE(mg.channel_type, '(unwired)') AS channel,
-    COUNT(DISTINCT m.id) AS messages,
-    MAX(m.timestamp) AS last_activity,
-    (SELECT COUNT(*) FROM scheduled_tasks t
-       WHERE t.group_folder = ag.folder AND t.status = 'active') AS tasks
-  FROM agent_groups ag
-  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  LEFT JOIN messages m ON m.chat_jid = mg.platform_id
-  GROUP BY ag.folder
-  ORDER BY last_activity DESC;
-"
+For wiring details (engage_mode, platform_id, etc.) the `/list-groups` output is the source of truth — don't reach into the schema.
+
+## Add a new group
+
+Use `/nanotars-add-group` — it walks through the channel-specific chat discovery and registration. Don't duplicate that workflow here.
+
+The underlying primitive (channel-agnostic) is:
+
 ```
+/register-group <folder>
+```
+
+…sent from the **main chat**. The host emits a 4-digit pairing code; send that code from the new chat to claim the wiring.
+
+`/pair-telegram` is a legacy alias for `/register-group main`.
+
+## Delete a group
+
+From the main chat:
+
+```
+/delete-group <folder>
+```
+
+This removes the entity-model rows (the agent group plus all of its wirings). The directory `groups/<folder>/` is **preserved on disk** so you can reinstate later by running `/register-group <folder>` again — the existing IDENTITY.md, CLAUDE.md, and agent definitions will be picked up on re-registration.
+
+## Modify wiring (engage_mode, engage_pattern, sender_scope, ignored_message_policy)
+
+**Not yet shipped.** Wiring-modification commands (`/set-engage-mode`, `/set-trigger`, `/set-scope`, `/set-ignored-policy`) aren't in the admin command set today — see backlog for the proposed addition.
+
+Until then, the four engage axes default to sane values per channel and per group-type at registration time. If you need to change them, file a backlog item rather than reaching into the schema. Editing `messaging_group_agents` rows by hand bypasses validation and will drift out of sync the next time the schema changes.
+
+## Schema Reference (background)
+
+The four "engage axes" on each `messaging_group_agent` wiring describe **when** the agent wakes up for a given (chat, agent_group) pair. Useful background when filing backlog items or reading `/list-groups` output:
+
+### `engage_mode`
+
+| Value | Meaning |
+|-------|---------|
+| `always` | Every inbound message wakes the agent |
+| `pattern` | Only messages matching `engage_pattern` wake the agent |
+| `mention` | Only when the agent is @-mentioned (channel-defined) |
+| `reply` | Only when a message is a reply to the agent's last message |
+
+Default depends on channel + chat type (a 1:1 DM defaults to `always`; a busy group defaults to `pattern` or `mention`).
+
+### `engage_pattern`
+
+The string/regex consulted when `engage_mode = pattern`. Was called `trigger_pattern` pre-migration. Empty when `engage_mode != pattern`.
+
+### `sender_scope`
+
+| Value | Meaning |
+|-------|---------|
+| `all` | Anyone in the chat can engage the agent |
+| `whitelist` | Only operator-listed senders engage |
+| `admin_only` | Only operators with the `admin` role engage |
+
+Combined with role grants (`/grant`, `/revoke`, `/list-users`).
+
+### `ignored_message_policy`
+
+| Value | Meaning |
+|-------|---------|
+| `drop` | Messages that don't engage are discarded |
+| `log` | Recorded to history but not shown to the agent |
+| `context` | Recorded **and** shown as context on the next engagement |
+
+Determines what the agent sees in the rolling chat history when it does eventually wake up.
