@@ -246,18 +246,25 @@ export async function consumePendingCode(
       matched: false,
     };
 
+    // `channel: 'any'` codes (issued by /register-group) are channel-agnostic
+    // — they can be claimed from any channel. Channel-pinned codes (legacy
+    // /pair-telegram) only match consume attempts from that exact channel.
+    const channelMatches = (recordChannel: string) =>
+      recordChannel === 'any' || recordChannel === input.channel;
+
     const record = store.pairings.find(
-      (r) => r.code === candidate && r.status === 'pending' && r.channel === input.channel,
+      (r) => r.code === candidate && r.status === 'pending' && channelMatches(r.channel),
     );
 
     if (!record) {
-      // Wrong-code on any pending entry for the same channel invalidates that
-      // entry — matches v2's auto-regenerate behaviour. Other channels are
-      // untouched so a stray Discord guess does not nuke a Telegram pairing.
+      // Wrong-code on any pending entry for the same channel (or 'any')
+      // invalidates that entry — matches v2's auto-regenerate behaviour.
+      // Codes pinned to a different channel are untouched so a stray Discord
+      // guess does not nuke a Telegram-pinned pairing.
       let invalidated = false;
       for (const r of store.pairings) {
         if (r.status !== 'pending') continue;
-        if (r.channel !== input.channel) continue;
+        if (!channelMatches(r.channel)) continue;
         r.attempts = [...r.attempts, attempt].slice(-MAX_ATTEMPTS_PER_RECORD);
         r.status = 'invalidated';
         invalidated = true;
