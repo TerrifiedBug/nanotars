@@ -13,6 +13,8 @@ triggers:
 
 Runs maintenance operations on the NanoTars SQLite database at `store/messages.db`.
 
+> **Boundary note:** CLAUDE.md forbids skills from querying entity-model tables (`agent_groups`, `messaging_groups`, `messaging_group_agents`, `users`, `user_roles`, etc.) via raw `sqlite3` because schema migrations silently break them. This skill is the one deliberate exception — its SQL is schema-stable maintenance: `PRAGMA integrity_check`, `ANALYZE`, `VACUUM`, and age-based `DELETE FROM messages | task_run_logs` (both append-only application data, not entity-model). Don't expand this skill to query entity-model tables — add an IPC action / slash command to core if you need that surface.
+
 ## Step 1: Backup
 
 Always back up before maintenance:
