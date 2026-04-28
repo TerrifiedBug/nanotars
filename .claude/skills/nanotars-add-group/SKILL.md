@@ -13,6 +13,8 @@ This skill adds a new group (chat) to an existing channel plugin in NanoTars. It
 
 This is NOT for creating new channel plugins from scratch — use `/create-channel-plugin` for that.
 
+All registration goes through the canonical operator surfaces (admin slash-commands and `nanotars` CLI subcommands). Skills MUST NOT touch the SQLite schema directly — the entity-model migration (2026-04) split `registered_groups` into `agent_groups` / `messaging_groups` / `messaging_group_agents`, and inlined SQL silently breaks every time the schema evolves.
+
 ## Workflow
 
 ### Step 1: Discover Available Channels
@@ -23,29 +25,15 @@ Scan for installed channel plugins:
 ls -d plugins/channels/*/plugin.json 2>/dev/null
 ```
 
-For each found plugin, read its `plugin.json` to get the name and description. Also check for existing registered groups:
+For each found plugin, read its `plugin.json` to get the name and description.
 
-```bash
-sqlite3 -header -column store/messages.db "
-  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, ag.folder, mg.channel_type AS channel
-  FROM agent_groups ag
-  JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  ORDER BY mg.channel_type, ag.created_at
-"
-```
+To see what groups are already registered (and on which channels), tell the user:
 
-Present the findings to the user:
+> "From your main chat, send `/list-groups`. The bot will reply with all registered agent groups grouped by channel — that's how we'll see the current state."
 
-> "I found these channel plugins installed:
-> - **whatsapp** — WhatsApp channel via Baileys
->   - Registered groups: main (admin), family-chat
-> - **telegram** — Telegram channel via Grammy
->   - No groups registered yet
->
-> Which channel do you want to add a group for?"
+If this is a brand-new install with no main chat yet, skip the `/list-groups` step — there is nothing to list. Proceed to Step 2.
 
-If only one channel plugin is installed, skip the selection and proceed directly.
+If only one channel plugin is installed, skip the channel-selection prompt and proceed directly.
 
 If NO channel plugins are found:
 
@@ -53,34 +41,16 @@ If NO channel plugins are found:
 
 ### Step 2: Determine Group Type (Smart Defaults)
 
-Before asking the user, check the current state to pick smart defaults:
-
-```bash
-# Does a main group exist?
-sqlite3 store/messages.db "
-  SELECT ag.folder, COALESCE(mg.channel_type, '(unwired)') AS channel
-  FROM agent_groups ag
-  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  WHERE ag.folder = 'main'
-" 2>/dev/null
-# How many groups does the selected channel already have?
-sqlite3 store/messages.db "
-  SELECT COUNT(DISTINCT mga.agent_group_id)
-  FROM messaging_group_agents mga
-  JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  WHERE mg.channel_type = '{channel}'
-" 2>/dev/null
-```
+Before asking the user, figure out the current state. Ask the operator to run `/list-groups` from their main chat and paste the output, OR — if no main chat exists yet — assume this is the very first group.
 
 **Apply these rules in order:**
 
-1. **No main group exists at all** → This is the first group being registered. Default to admin/main. Tell the user:
+1. **No main group exists at all** (no main chat to run `/list-groups` from, or `/list-groups` output shows no `folder=main` entry) → This is the first group being registered. Default to admin/main. Tell the user:
    > "This will be your admin (main) channel — it gets elevated privileges and responds to all messages. I'll set it up as your primary control channel."
 
-   Skip the group type question entirely. Use folder `main`, `requiresTrigger: false`.
+   Skip the group type question entirely. Use folder `main`, `requiresTrigger: false`. The bootstrap path is `nanotars pair-main` (see Step 5) because `/register-group` requires an existing admin chat to type from.
 
-2. **Main exists, but this is the first group on a NEW channel** → Default to a personal DM, but offer the option to move admin here. Ask with `AskUserQuestion`:
+2. **Main exists, but this is the first group on a NEW channel** (`/list-groups` output has a `main` entry but no rows for the channel selected in Step 1) → Default to a personal DM, but offer the option to move admin here. Ask with `AskUserQuestion`:
    > "You already have a main (admin) channel on {other_channel}. How should I set up this {channel} chat?"
 
    Options:
@@ -89,10 +59,10 @@ sqlite3 store/messages.db "
    3. **Group chat** — Register a group channel. Requires @mention or trigger word.
 
    For "Personal chat": use folder `{channel}-dm`, `requiresTrigger: false`.
-   For "Move admin here": use folder `main` (replace existing registration), `requiresTrigger: false`. Warn before proceeding.
+   For "Move admin here": use folder `main` (the registration flow replaces the existing wiring), `requiresTrigger: false`. Warn before proceeding.
    For "Group chat": ask for folder name, default `requiresTrigger: true`.
 
-3. **Channel already has groups registered** → This is an additional group. NOW ask the full question:
+3. **Channel already has groups registered** (`/list-groups` output has rows for the selected channel) → This is an additional group. NOW ask the full question:
 
    > "You already have groups on {channel}. What kind of group do you want to add?"
 
@@ -109,45 +79,27 @@ sqlite3 store/messages.db "
 
    Suggest a name based on the chat name if known.
 
-### Step 3: Get the Chat JID
+### Step 3: Identify the Target Chat
 
-This step varies by channel. The approach depends on the channel plugin.
+The pairing-code flow (Step 5) doesn't need a JID up front — the operator just sends the code from the chat they want to register, and the host's inbound interceptor figures out which chat that is. So in most cases, you can skip JID-hunting entirely.
+
+The only thing you need before Step 5 is confidence that the target chat actually exists and the bot is present in it.
 
 #### WhatsApp Groups
 
-WhatsApp groups are discoverable. Check if the service is running and the channel is connected:
+> "Make sure the bot is added to the WhatsApp group you want to register. After WhatsApp is authenticated (`nanotars auth whatsapp`), you can also run `/nanotars-groups` — it queries the live Baileys connection's `groupFetchAllParticipating()` and lists every group the bot can see."
 
-```bash
-# Check if nanotars is running
-pgrep -f 'node.*nanotars' > /dev/null && echo "RUNNING" || echo "STOPPED"
-```
-
-If running, the agent can discover WhatsApp groups via IPC. But since we're in Claude Code (not inside a container), we need to guide the user:
-
-> "For WhatsApp groups, I need the group's JID. Here's how to get it:
->
-> **Option A**: If the group has already messaged while NanoTars was running, I can look it up:
-> ```bash
-> sqlite3 store/messages.db "SELECT jid, name, last_message_time FROM chats WHERE jid LIKE '%@g.us' ORDER BY last_message_time DESC LIMIT 20"
-> ```
->
-> **Option B**: Send a message in the WhatsApp group, then I can find it in the chats table.
->
-> **Option C**: Paste the JID directly if you have it (format: `120363XXXXXXXXX@g.us`)."
-
-For WhatsApp DMs:
-
-> "For a WhatsApp DM, the JID is the phone number followed by `@s.whatsapp.net`. Example: `14155551234@s.whatsapp.net`"
+For WhatsApp DMs: just message the bot's number from your phone. The pairing-code flow will pick it up.
 
 #### Telegram Chats
 
-> "For Telegram, the chat ID is shown when someone sends `/chatid` to the bot in that chat. The JID format is `tg:{chat_id}` — for example `tg:123456789` for a DM or `tg:-1001234567890` for a group."
+> "Add the bot to the Telegram group, or open a DM with it. The pairing-code flow works in either — no chat-id lookup needed."
 
-#### Other Channels
+#### Discord / Slack / Other Channels
 
-For unknown channels, ask the user directly:
+> "Make sure the bot is in the target channel. The pairing-code flow is channel-agnostic — once the bot is present, it can claim the chat."
 
-> "What's the chat identifier for this group? (The format depends on the channel — check the channel plugin's documentation)"
+If the operator specifically wants the JID for some other reason (logging, manual debugging), see the "Quick Reference: JID Formats" table at the bottom of this file.
 
 ### Step 4: Set the Trigger
 
@@ -162,7 +114,9 @@ Options:
 
 For admin/main groups, default to "Respond to all messages". For regular groups, default to "Require @mention".
 
-### Step 5: Register the Group
+Note: trigger settings come from the registration flow's defaults plus per-group config. The pairing-code flow registers the group with sensible defaults (admin/main → engage always, regular → engage on trigger). Adjust afterward via group-management commands if needed.
+
+### Step 5: Register the Group (Pairing-Code Flow)
 
 Read the assistant name from config:
 
@@ -170,31 +124,35 @@ Read the assistant name from config:
 grep '^ASSISTANT_NAME=' .env | cut -d= -f2 || echo "TARS"
 ```
 
-Determine the channel name from the plugin. Then hand off to the existing registration flow — DO NOT inline-INSERT into the entity-model tables, since direct SQL bypasses validation and idempotency in `src/db/agent-groups.ts` (`createAgentGroup` / `createMessagingGroup` / `createWiring`).
+Registration always goes through the canonical pairing-code flow. **Never write to `agent_groups` / `messaging_groups` / `messaging_group_agents` directly** — direct SQL bypasses validation and idempotency in `src/db/agent-groups.ts` (`createAgentGroup` / `createMessagingGroup` / `createWiring`), and silently desyncs `schema_version`.
 
-**First-time main-group bootstrap (folder = 'main'):**
+#### First-time main-group bootstrap (folder = `main`, no admin chat exists yet)
+
+From the install host:
 
 ```bash
 nanotars pair-main
 ```
 
-This emits a 4-digit pairing code. The operator sends the code from the chat they want to register as main; the channel plugin's inbound interceptor consumes the code and creates the `agent_groups` + `messaging_groups` + `messaging_group_agents` rows atomically.
+This emits a 4-digit pairing code. The operator sends the code as a normal message from the chat they want to register as `main`; the channel plugin's inbound interceptor consumes the code and creates the `agent_groups` + `messaging_groups` + `messaging_group_agents` rows atomically.
 
-**Subsequent groups (any non-main folder, on a channel already wired):**
+`/pair-telegram` is kept as a legacy alias for `/register-group main` (zero-arg, hard-coded to the bootstrap folder) — prefer `nanotars pair-main` for the very-first-time case.
 
-Send the canonical pairing-code admin slash-command from a chat that already has admin privileges:
+#### Subsequent groups (any folder, on any channel where the bot is present)
+
+From a chat that already has admin privileges (typically your `main` chat), send the admin slash-command:
 
 ```
 /register-group <folder>
 ```
 
-For example: `/register-group work`. The host emits a 4-digit code. The operator then sends the printed code from the new chat to claim it for `<folder>` — works on any channel (Telegram / WhatsApp / Discord / Slack / webhook) where the bot is present, since pairing codes are channel-agnostic.
+For example: `/register-group work`. The host replies with a 4-digit code. The operator then sends that code as a normal message from the new chat to claim it for `<folder>`. Works on any channel (Telegram / WhatsApp / Discord / Slack / webhook) where the bot is present — pairing codes are channel-agnostic.
 
-`/pair-telegram` is kept as a legacy alias for `/register-group main` (zero-arg, hard-coded to the bootstrap folder).
+If the operator picked "Move admin here" in Step 2, the same flow applies: `/register-group main` from the existing admin chat, then send the code from the new chat. The wiring rewires atomically.
 
 Both paths are idempotent and route through the same database accessors as the IPC `register_group` action — no manual SQL needed.
 
-Create the group's directory:
+After the host confirms the registration, create the group's directory:
 
 ```bash
 mkdir -p groups/{folder}
@@ -231,9 +189,14 @@ If not authenticated, guide through the channel's auth flow:
 
 > "This channel needs authentication first. Let me run the auth setup."
 
-For WhatsApp, run:
+For WhatsApp:
 ```bash
-node plugins/channels/whatsapp/auth.js --serve
+nanotars auth whatsapp
+```
+
+Fallback for older installs without the `auth` subcommand:
+```bash
+node plugins/channels/whatsapp/auth.js
 ```
 
 For other channels, check if they have an `auth.js`:
@@ -241,7 +204,9 @@ For other channels, check if they have an `auth.js`:
 [ -f plugins/channels/{name}/auth.js ] && echo "HAS_AUTH" || echo "NO_AUTH"
 ```
 
-If they have `auth.js`, run it. If not, check for credential env vars and guide the user through adding them to `.env`.
+If they have `auth.js`, run it (preferring `nanotars auth <channel>` if the wrapper exposes the channel). If not, check for credential env vars and guide the user through adding them to `.env`.
+
+Auth must complete *before* the pairing-code flow in Step 5, because the bot has to actually be online in the channel to receive the operator's code message.
 
 ### Step 7: Restart and Verify
 
@@ -254,18 +219,16 @@ Wait a few seconds, then verify:
 ```bash
 # Check service is running
 sleep 3
-pgrep -f 'node.*nanotars' > /dev/null && echo "SERVICE_RUNNING" || echo "SERVICE_FAILED"
+nanotars status
+```
 
-# Verify group is registered
-sqlite3 -header -column store/messages.db "
-  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, ag.folder, mg.channel_type AS channel
-  FROM agent_groups ag
-  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  WHERE ag.folder = '{folder}'
-"
+Then confirm the registration landed:
 
-# Check logs for channel connection
+> "From your main chat, send `/list-groups`. You should see a row with `folder={folder}` on `channel={channel}`. If it's there, you're done."
+
+Check logs for channel connection:
+
+```bash
 tail -20 logs/nanotars.log | grep -i '{channel}'
 ```
 
@@ -285,48 +248,42 @@ Before starting, always check the current state to avoid redundant work:
 
 ```bash
 # What channels are installed?
-for d in plugins/channels/*/plugin.json; do echo "$(dirname $d): $(cat $d | python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"name\",\"unknown\"))' 2>/dev/null || echo 'unknown')"; done
-
-# What groups are already registered?
-sqlite3 store/messages.db "
-  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, ag.folder,
-         mg.channel_type AS channel,
-         CASE mga.engage_mode WHEN 'always' THEN 0 ELSE 1 END AS requires_trigger
-  FROM agent_groups ag
-  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-" 2>/dev/null
-
-# Is there a main group?
-sqlite3 store/messages.db "
-  SELECT mg.platform_id AS jid, COALESCE(mg.name, ag.name) AS name, mg.channel_type AS channel
-  FROM agent_groups ag
-  LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id
-  LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id
-  WHERE ag.folder = 'main'
-" 2>/dev/null
+for d in plugins/channels/*/plugin.json; do
+  echo "$(dirname $d): $(cat $d | python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"name\",\"unknown\"))' 2>/dev/null || echo 'unknown')"
+done
 
 # Is the service running?
-pgrep -f 'node.*nanotars' > /dev/null && echo "RUNNING" || echo "STOPPED"
+nanotars status
 ```
+
+For registered-group state and main-group existence, use the operator surface:
+
+> "Send `/list-groups` from your main chat (or any chat with admin privileges) and paste the output. That's the source of truth — it tells me which folders exist, which channels they're wired to, and which one is `main`."
+
+If no main chat exists yet, that's itself a signal: this install is pre-bootstrap and `nanotars pair-main` is the next move.
 
 ## Multi-Instance Support
 
 A user might want multiple groups on the same channel (e.g., two WhatsApp groups — one admin, one for a family chat). This is fully supported:
 
-- Each group has a unique JID (different WhatsApp group = different JID)
+- Each group has a unique platform identifier (different WhatsApp group = different JID)
 - Each group has a unique folder name (different isolated storage)
-- The `channel` column tracks which channel plugin owns each group
+- The `channel_type` column on `messaging_groups` tracks which channel plugin owns each chat
 - Plugin scoping (`channels` and `groups` fields in plugin.json) controls which plugins are injected into which group's container
+
+Run `/list-groups` to see the full picture.
 
 ## Error Handling
 
-- **Channel not connected**: If the channel plugin exists but isn't connected (e.g., WhatsApp auth expired), guide through re-authentication before registering
-- **Duplicate folder**: If the user picks a folder name that already exists, warn and suggest alternatives
-- **Invalid JID**: Validate JID format matches the channel's convention before registering
-- **Service not running**: If nanotars isn't running, register the group in the DB and tell the user to start the service
+- **Channel not connected**: If the channel plugin exists but isn't connected (e.g., WhatsApp auth expired), guide through re-authentication before registering — the pairing-code flow can't complete if the bot isn't online to receive the code message.
+- **Duplicate folder**: If the user picks a folder name that already exists, `/register-group` will reject it. Suggest alternatives.
+- **Pairing code never claimed**: Codes have a short TTL (see `src/command-gate.ts`). If it expires, just re-issue with `/register-group <folder>`.
+- **Service not running**: If `nanotars status` shows stopped, run `nanotars start` before attempting registration.
+- **`/list-groups` returns nothing**: Either no groups are registered yet, or the chat you're typing from isn't recognized as admin. For first-ever bootstrap, use `nanotars pair-main`.
 
 ## Quick Reference: JID Formats
+
+You don't need these for the pairing-code flow — included only for debugging or log-grepping.
 
 | Channel | Groups | DMs | Example |
 |---------|--------|-----|---------|
