@@ -10,6 +10,8 @@
 #   logs      — tail -f logs/nanotars.log
 #   pair-main — issue a 4-digit pairing code for the main control chat
 #               (forwards extra args to dist/cli/pair-main.js)
+#   auth      — run channel-specific auth (e.g. `nanotars auth whatsapp`).
+#               Dispatches to plugins/channels/<channel>/auth.js if present.
 
 set -euo pipefail
 
@@ -30,12 +32,13 @@ usage() {
 Usage: bash nanotars.sh <command>
 
 Commands:
-  start      Start the nanotars service
-  stop       Stop the nanotars service
-  restart    Restart the nanotars service
-  status     Show service + dependency status
-  logs       Tail logs/nanotars.log
-  pair-main  Issue a 4-digit pairing code for the main control chat
+  start            Start the nanotars service
+  stop             Stop the nanotars service
+  restart          Restart the nanotars service
+  status           Show service + dependency status
+  logs             Tail logs/nanotars.log
+  pair-main        Issue a 4-digit pairing code for the main control chat
+  auth <channel>   Run channel-specific auth (dispatches to plugins/channels/<channel>/auth.js)
 EOF
 }
 
@@ -141,6 +144,32 @@ cmd_pair_main() {
   exec node "$cli" "$@"
 }
 
+cmd_auth() {
+  local channel="${1:-}"
+  if [ -z "$channel" ]; then
+    log_error "usage: nanotars auth <channel> [args...]"
+    local available
+    available="$(ls "$PROJECT_ROOT/plugins/channels/" 2>/dev/null \
+      | grep -v '^\.' | tr '\n' ' ' | sed 's/ $//')"
+    if [ -n "$available" ]; then
+      log_info "installed channels: $available"
+    else
+      log_info "no channel plugins installed yet"
+    fi
+    exit 1
+  fi
+  shift
+  local script="$PROJECT_ROOT/plugins/channels/$channel/auth.js"
+  if [ ! -f "$script" ]; then
+    log_error "no auth.js found for channel '$channel' (expected $script)"
+    log_info "is the channel plugin installed? Try /add-channel-$channel"
+    exit 1
+  fi
+  # auth.js uses paths relative to the install dir (./data/channels/...).
+  cd "$PROJECT_ROOT"
+  exec node "$script" "$@"
+}
+
 cmd_logs() {
   LOG="$PROJECT_ROOT/logs/nanotars.log"
   ERR="$PROJECT_ROOT/logs/nanotars.error.log"
@@ -177,6 +206,7 @@ case "${1:-}" in
   status)    cmd_status ;;
   logs)      cmd_logs ;;
   pair-main) shift; cmd_pair_main "$@" ;;
+  auth)      shift; cmd_auth "$@" ;;
   ""|-h|--help|help) usage ;;
   *)         usage; exit 1 ;;
 esac

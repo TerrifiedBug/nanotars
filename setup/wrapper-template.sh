@@ -8,6 +8,7 @@
 #   nanotars restart | status |
 #   nanotars logs
 #   nanotars pair-main           # issue a pairing code for the main chat
+#   nanotars auth <channel>      # run channel auth (e.g. nanotars auth whatsapp)
 #   nanotars setup               # re-run setup.sh
 #   nanotars <prompt...>         # claude "<prompt...>" (one-shot pass-through)
 
@@ -26,7 +27,7 @@ case "${1:-}" in
   "")
     exec claude
     ;;
-  start|stop|restart|status|logs|pair-main)
+  start|stop|restart|status|logs|pair-main|auth)
     exec bash ./nanotars.sh "$@"
     ;;
   setup)
@@ -34,7 +35,7 @@ case "${1:-}" in
     exec bash ./setup.sh "$@"
     ;;
   -h|--help|help)
-    sed -n '2,12p' "$0" | sed 's/^# \?//'
+    sed -n '2,13p' "$0" | sed 's/^# \?//'
     ;;
   *)
     exec claude "$@"
