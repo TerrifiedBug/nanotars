@@ -4,7 +4,8 @@
       "source": {
         "source": "github",
         "repo": "TerrifiedBug/nanotars-skills"
-      }
+      },
+      "autoUpdate": true
     }
   }
 }
