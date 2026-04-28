@@ -5,235 +5,222 @@ description: Sync improved local plugins to the NanoTars skills marketplace and 
 
 # Update Plugin in Marketplace
 
-Syncs changes from locally installed plugins to the NanoTars skills marketplace at `TerrifiedBug/nanotars-skills` via a pull request.
+Syncs local plugin changes to the NanoTars skills marketplace at `TerrifiedBug/nanotars-skills` via a pull request.
 
 Use `/nanotars-publish-skill` for **new** plugins. Use this skill for **updating** existing marketplace plugins.
 
 Run `/nanotars-update-skill` (all changed plugins) or `/nanotars-update-skill weather` (specific plugin).
 
+## Where skills live (read this if confused)
+
+Four directories use the name "skills" for different jobs. Only **two** of them participate in this sync:
+
+| Location | Audience | Synced by this skill? |
+|---|---|---|
+| `~/nanotars/.claude/skills/` | Operator (host slash commands like `/nanotars-setup`) | **No** — host-only, never published |
+| `~/nanotars/container/skills/` | Agent (core skills mounted into every container) | **No** — fork-local |
+| `~/nanotars/plugins/{name}/container-skills/` | Agent (per-plugin, mounted when installed) | **Yes** — synced as a runtime file under `files/` |
+| `marketplaces/nanotars-skills/plugins/nanotars-{name}/skills/add-skill-{name}/` | Operator (the install workflow Claude executes for `/add-skill-{name}`) | **Yes** — operators edit this *directly in the marketplace cache*, dirty changes get bundled |
+
+So this skill picks up changes from **two sources**:
+1. **Runtime files** in `~/nanotars/plugins/{name}/` (rsync into marketplace `files/`)
+2. **Install skill edits** already present as uncommitted changes in `~/.claude/plugins/marketplaces/nanotars-skills/plugins/nanotars-{name}/skills/` (left in place, committed)
+
 ## Step 0: Preflight
 
-Check GitHub CLI authentication:
 ```bash
-gh auth status
+gh auth status 2>&1 | head -3
+[ -d ~/.claude/plugins/marketplaces/nanotars-skills/.git ] && echo "MARKETPLACE: ok" || echo "MARKETPLACE: missing"
 ```
 
-If not authenticated, tell the user to run `gh auth login` first and stop.
+If `gh` is not authenticated, tell the user to run `gh auth login` and stop.
+If marketplace cache is missing, tell the user to run `/plugin marketplace update nanotars-skills` and stop.
 
-Verify marketplace cache exists:
+Refuse to proceed if the marketplace cache is in a weird state — it's our working tree, so it must be on a clean known branch:
+
 ```bash
-[ -d ~/.claude/plugins/marketplaces/nanotars-skills ] && echo "CACHE: ok" || echo "CACHE: missing"
+cd ~/.claude/plugins/marketplaces/nanotars-skills
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "BRANCH: $BRANCH"
+git status --porcelain | head
 ```
 
-If missing, tell the user:
-> Marketplace cache not found. Run `/plugin marketplace update nanoclaw-skills` to sync, then re-run this skill.
+If branch is not `main`, tell the user the cache is on `$BRANCH` (likely from a prior run). Show the dirty status. Ask whether to:
+- Return to main (`git checkout main` — dirty edits are preserved if they don't conflict, otherwise stop and let the user resolve manually)
+- Proceed on the current branch (only if they intentionally want to amend an in-flight PR)
+
+Default to returning to main if uncertain.
+
+If on main, pull (preserve dirty changes — uncommitted edits are the operator's intentional install-skill work):
+
+```bash
+cd ~/.claude/plugins/marketplaces/nanotars-skills && git pull --rebase --autostash origin main 2>&1 | tail -3
+```
+
+## Step 1: Detect changes per plugin
+
+Define paths once (used in every later step):
+
+```bash
+NANOTARS=~/nanotars
+MARKETPLACE=~/.claude/plugins/marketplaces/nanotars-skills
+```
+
+If the user passed a plugin name argument (e.g., `calendar`), restrict scanning to that one. Otherwise scan everything under `$NANOTARS/plugins/` and `$NANOTARS/plugins/channels/`.
+
+For each plugin directory, find the marketplace counterpart:
+- Skill plugins: `$MARKETPLACE/plugins/nanotars-{name}/`
+- Channel plugins: `$MARKETPLACE/plugins/nanotars-{name}/` (same — channel plugins live alongside skill plugins in the marketplace)
+
+If no marketplace counterpart, skip with a note (this is a local-only plugin → use `/nanotars-publish-skill` instead).
+
+Detect changes from **both sources**:
+
+**Source A — runtime files** (local install vs marketplace `files/`):
+
+```bash
+diff -rq -x node_modules -x package-lock.json -x plugin.json \
+  $NANOTARS/plugins/{name}/ $MARKETPLACE/plugins/nanotars-{name}/files/
+# plus a content-only plugin.json diff (ignoring scoping fields):
+jq 'del(.channels, .groups, .version)' $NANOTARS/plugins/{name}/plugin.json > /tmp/local-pj.json
+jq 'del(.channels, .groups, .version)' $MARKETPLACE/plugins/nanotars-{name}/files/plugin.json > /tmp/market-pj.json
+diff /tmp/local-pj.json /tmp/market-pj.json
+```
+
+**Source B — install-skill edits** (any uncommitted changes in the marketplace cache scoped to this plugin):
+
+```bash
+cd $MARKETPLACE
+git status --porcelain plugins/nanotars-{name}/ 2>/dev/null
+```
+
+If both sources are empty for a plugin, mark it unchanged.
+
+## Step 2: Present and select
+
+If nothing changed anywhere:
+
+> All marketplace plugins are up to date.
 
 Then stop.
 
-## Step 1: Detect changed plugins
+Otherwise show a per-plugin summary like:
 
-If the user provided a plugin name argument, resolve it:
-- `weather` → `plugins/weather/` (marketplace: `nanoclaw-weather`)
-- `whatsapp` → `plugins/channels/whatsapp/` (marketplace: `nanoclaw-whatsapp`)
-- If not found, list installed plugins and ask
-
-If no argument, scan all installed plugins.
-
-For each plugin directory under `plugins/` and `plugins/channels/`:
-1. Extract the directory name (e.g., `weather`, `whatsapp`)
-2. Locate marketplace cache: `~/.claude/plugins/marketplaces/nanotars-skills/plugins/nanotars-{name}/files/`
-3. If no marketplace match, skip (local-only plugin — use `/nanotars-publish-skill` instead)
-4. Diff installed vs marketplace cache (excluding `node_modules`, `package-lock.json`, and user-scoping fields in `plugin.json`):
-   ```bash
-   diff -rq -x node_modules -x package-lock.json -x plugin.json {installed}/ {cache}/
-   jq 'del(.channels, .groups)' {installed}/plugin.json > /tmp/installed-pj.json
-   jq 'del(.channels, .groups)' {cache}/plugin.json > /tmp/cache-pj.json
-   diff -q /tmp/installed-pj.json /tmp/cache-pj.json
-   ```
-5. Collect plugins with differences
-6. For each plugin with differences, check directionality — determine whether local is ahead of marketplace or behind:
-   ```bash
-   # Count lines only in local (local additions)
-   LOCAL_ONLY=$(diff -r -x node_modules -x package-lock.json -x plugin.json {installed}/ {cache}/ | grep -c '^< ' || true)
-   # Count lines only in marketplace (marketplace additions)
-   MARKET_ONLY=$(diff -r -x node_modules -x package-lock.json -x plugin.json {installed}/ {cache}/ | grep -c '^> ' || true)
-   # Files only in local
-   FILES_LOCAL=$(diff -rq -x node_modules -x package-lock.json -x plugin.json {installed}/ {cache}/ | grep -c "^Only in {installed}" || true)
-   # Files only in marketplace
-   FILES_MARKET=$(diff -rq -x node_modules -x package-lock.json -x plugin.json {installed}/ {cache}/ | grep -c "^Only in {cache}" || true)
-   ```
-   - If marketplace has more content (MARKET_ONLY > LOCAL_ONLY or FILES_MARKET > FILES_LOCAL): marketplace may be **ahead** of local — flag as "marketplace ahead"
-   - If local has more content: local is likely **ahead** — flag as "local ahead" (safe to sync)
-   - If roughly equal (both have similar additions/removals): flag as "unclear direction" — show the diff summary and ask the user whether to sync or skip
-
-## Step 2: Present changes
-
-If no changes detected:
-> All marketplace plugins are up to date with your local installation.
-
-Then stop.
-
-Otherwise, show what changed with directionality:
 ```
-Local improvements (safe to sync → marketplace):
-  - weather: 3 files differ
+calendar:
+  runtime files: 0 changed
+  install skill: 1 file modified (skills/add-skill-calendar/SKILL.md)
 
-⚠ Marketplace may be ahead of local (sync would downgrade):
-  - slack: 1 file differs — marketplace has additions not in local
-
-? Unclear direction (similar changes on both sides):
-  - calendar: 2 files differ — review diff before syncing
+gmail:
+  runtime files: 2 changed (Dockerfile.partial, plugin.json)
+  install skill: clean
 ```
 
-**If ALL plugins are flagged "marketplace ahead"**, tell the user:
-> No local improvements detected. The marketplace appears to be ahead of your local plugins.
-> Run `/nanotars-update` to pull marketplace updates into your local installation instead.
+If a plugin name was passed in, proceed with that plugin only. Otherwise use `AskUserQuestion` with `multiSelect: true` to let the operator pick which to include.
 
-Then stop.
-
-For "unclear direction" plugins, show the `diff` output and ask the user whether to include them.
-
-Only auto-proceed with plugins flagged "local ahead". Warn about and skip "marketplace ahead" plugins unless the user explicitly overrides.
-
-If a plugin name argument was given, skip selection and proceed with that plugin.
-
-Otherwise, use `AskUserQuestion` with `multiSelect: true`:
-> Which plugins would you like to sync to the marketplace?
-
-Options: list each changed plugin as an option.
-
-## Step 3: Clone or update marketplace repo
+## Step 3: Branch off main
 
 ```bash
-if [ -d /tmp/nanotars-skills/.git ]; then
-  cd /tmp/nanotars-skills && git checkout main && git pull origin main
-else
-  gh repo clone TerrifiedBug/nanotars-skills /tmp/nanotars-skills
-  cd /tmp/nanotars-skills
-fi
-```
-
-Create a feature branch:
-```bash
+cd $MARKETPLACE
 NAMES=$(echo "{selected_plugins}" | tr ' ' '-')
 git checkout -b "update/${NAMES}"
 ```
 
-## Step 4: Sync files
+Uncommitted install-skill edits travel into the new branch automatically (git carries dirty files when switching to a new branch from clean state — and we're branching off main where the only diff is the operator's intentional edits).
 
-For each selected plugin:
+## Step 4: Sync runtime files into the marketplace tree
 
-Determine paths:
-- Installed: `plugins/{name}/` or `plugins/channels/{name}/`
-- Marketplace: `/tmp/nanotars-skills/plugins/nanotars-{name}/files/`
+For each selected plugin, copy runtime files into `$MARKETPLACE/plugins/nanotars-{name}/files/`. **No `--delete`** — the marketplace may have files we don't carry locally.
 
-Sync plugin runtime files (excluding `plugin.json` which needs special handling):
 ```bash
 rsync -av \
   --exclude node_modules \
   --exclude package-lock.json \
   --exclude plugin.json \
-  {installed}/ /tmp/nanotars-skills/plugins/nanotars-{name}/files/
+  $NANOTARS/plugins/{name}/ $MARKETPLACE/plugins/nanotars-{name}/files/
 ```
 
-**Do NOT use `--delete`** — the marketplace may contain files not present locally (README, docs added by other contributors). Only sync files that exist locally.
+Merge `plugin.json` separately, preserving the marketplace's `version`, `channels`, and `groups` (operator scoping must not leak into the marketplace, and the version is auto-bumped by CI):
 
-Sync `plugin.json` separately, preserving marketplace `version`, `channels`, and `groups` fields:
 ```bash
-# Start with marketplace plugin.json (preserves version + scoping)
-MARKET_PJ="/tmp/nanotars-skills/plugins/nanotars-{name}/files/plugin.json"
-LOCAL_PJ="{installed}/plugin.json"
-
-# Merge: take all fields from local EXCEPT version/channels/groups which stay from marketplace
-jq -s '.[0] as $market | .[1] | .version = $market.version | .channels = $market.channels | .groups = $market.groups' \
+MARKET_PJ=$MARKETPLACE/plugins/nanotars-{name}/files/plugin.json
+LOCAL_PJ=$NANOTARS/plugins/{name}/plugin.json
+jq -s '.[0] as $m | .[1] | .version = $m.version | .channels = $m.channels | .groups = $m.groups' \
   "$MARKET_PJ" "$LOCAL_PJ" > "${MARKET_PJ}.tmp" && mv "${MARKET_PJ}.tmp" "$MARKET_PJ"
 ```
 
-This prevents three problems:
-- **Scoping leak**: local `"channels": ["whatsapp"]` overwriting marketplace `"channels": ["*"]`
-- **Version downgrade**: local `1.0.0` overwriting marketplace `1.0.3` (auto-bumped by CI)
-- **File deletion**: marketplace-only files being removed by `--delete`
+## Step 5: Review
 
-Also sync the install skill if it exists in the main repo:
 ```bash
-SKILL_TYPE="skill"  # or "channel" for channel plugins
-SKILL_DIR="add-${SKILL_TYPE}-${name}"
-if [ -d ".claude/skills/${SKILL_DIR}" ]; then
-  rsync -av \
-    .claude/skills/${SKILL_DIR}/ /tmp/nanotars-skills/plugins/nanotars-{name}/skills/${SKILL_DIR}/
-fi
+cd $MARKETPLACE
+git status -s
+git diff --stat
 ```
 
-## Step 5: Review changes
+Show the per-file diff stat. For non-trivial changes also show the full diff of any `add-skill-*/SKILL.md` files (these are the operator-facing instructions Claude will execute — worth eyeballing).
 
-Show what will be committed:
+Credential scan (post-rsync, after all files are in place):
+
 ```bash
-cd /tmp/nanotars-skills && git diff --stat
+git diff --diff-filter=ACM -z --name-only HEAD | xargs -0 -r grep -lnE '(password|secret|token|api_key|private_key)\s*[:=]' 2>/dev/null
 ```
 
-For a detailed diff:
+If anything matches, show the matched lines and confirm with the operator before committing.
+
+## Step 6: Commit, push, PR
+
+Stage only the directories of the selected plugins (don't sweep up unrelated dirty files):
+
 ```bash
-git diff
+cd $MARKETPLACE
+for name in {selected_plugins}; do
+  git add "plugins/nanotars-${name}/"
+done
 ```
 
-Scan for potential credentials:
-```bash
-git diff --diff-filter=ACM -z --name-only | xargs -0 grep -lnE '(password|secret|token|api_key|private_key)\s*[:=]' 2>/dev/null | grep -v plugin.json || echo "No credential patterns found"
-```
-
-If matches found, warn the user and ask for confirmation before proceeding.
-
-## Step 6: Commit and create PR
+Write a commit message that names what actually changed. Look at the diff and produce something specific — e.g., `update: nanotars-calendar — add mount-allowlist preflight to install skill`. Generic `sync {names} from local` is a fallback only if the diff doesn't tell a clear story.
 
 ```bash
-cd /tmp/nanotars-skills
-git add .
-git commit -m "update: sync {plugin_names} from local"
+git -c user.name='TARS' -c user.email='dannyfeates@yahoo.co.uk' commit -m "<your-message>"
 git push -u origin "update/${NAMES}"
 ```
 
-Create the pull request. **Must use `--head`** because cwd may not be the marketplace checkout:
+Create the PR (always pass `--head` — cwd may have been reset):
+
 ```bash
 gh pr create \
   --repo TerrifiedBug/nanotars-skills \
   --head "update/${NAMES}" \
-  --title "update: {plugin_names}" \
+  --title "<short title matching commit>" \
   --body "$(cat <<'PREOF'
 ## Summary
-Syncs latest local changes for: {plugin_list}
+<2–3 bullets — what changed and why, derived from the diff>
 
 ## Changed files
-{git_diff_stat}
+<git diff --stat output>
 
 ## Notes
-Version will be auto-bumped on merge (patch by default).
-Add label `minor` or `major` to this PR to change bump level.
+Version will be auto-bumped on merge. Add the `minor` or `major` label to override.
 PREOF
 )"
 ```
 
 ## Step 7: Auto-label version bump
 
-Analyze the diff from Step 5 and determine the semver bump level:
+Pick the bump level by reading the diff:
 
-- **patch** (default — no label needed): Bug fixes, performance improvements, internal refactors that don't change behavior. Examples: fixing a reconnect loop, filtering noisy messages, improving error handling.
-- **minor** (add `minor` label): New features or capabilities. Examples: new config options, new exported functions, new message types handled, new files added.
-- **major** (add `major` label): Breaking changes. Examples: removed functions/config, renamed env vars, changed message format, changed plugin.json schema.
+- **patch** (no label needed, default): bug fixes, performance tweaks, internal refactors that don't change behavior or surface area
+- **minor** (add `minor` label): new features — new config options, new mount paths, new Step in an install skill, additional plugin capabilities
+- **major** (add `major` label): breaking changes — removed/renamed env vars, schema changes in `plugin.json`, removed install steps that operators relied on
 
-If the bump level is `minor` or `major`, apply the label:
 ```bash
-gh pr edit {pr_number} --repo TerrifiedBug/nanotars-skills --add-label "{level}"
+gh pr edit <pr-number> --repo TerrifiedBug/nanotars-skills --add-label "<level>"
 ```
 
-Tell the user what you chose and why:
-> Version bump: **{level}** — {one-sentence reasoning}
-> You can change this by editing PR labels before merging.
+Tell the operator: `Version bump: <level> — <one-sentence reason>. Edit PR labels to override.`
 
-## Step 8: Summary
+## Step 8: Done
 
 Show the PR URL.
 
-Tell the user:
-> PR created. The GitHub Action will auto-bump the version on merge ({level}).
->
-> After merge, users running `/nanotars-update` will see the new version and be offered the update.
+> PR opened. The GitHub Action will auto-bump the version on merge (`<level>`). After merge, `/nanotars-update` will see the new version and offer the update.
