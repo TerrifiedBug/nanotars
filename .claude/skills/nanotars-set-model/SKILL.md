@@ -1,6 +1,6 @@
 ---
 name: nanotars-set-model
-description: Change the Claude model used by NanoClaw agent containers
+description: Change the Claude model used by NanoTars agent containers
 triggers:
   - set model
   - change model

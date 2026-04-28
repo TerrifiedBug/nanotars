@@ -1,21 +1,21 @@
 ---
 name: nanotars-update
-description: Pull updates from the nanoclaw fork, preview core and plugin changes, and optionally update installed plugins.
+description: Pull updates from the nanotars fork, preview core and plugin changes, and optionally update installed plugins.
 ---
 
 > **Plugin architecture means most customizations live in gitignored directories** (`plugins/`, `groups/`, `.env`). Fork updates should always be clean merges — if conflicts arise, something is wrong with the fork and the update should be aborted.
 
 # About
 
-Your NanoClaw installation (nanotars) tracks the fork at `TerrifiedBug/nanoclaw`. This skill fetches from the fork, shows you exactly what would change — both code and plugins — then lets you decide whether to apply the update.
+Your NanoTars installation (nanotars) tracks the fork at `TerrifiedBug/nanotars`. This skill fetches from the fork, shows you exactly what would change — both code and plugins — then lets you decide whether to apply the update.
 
 Run `/nanotars-update` in Claude Code.
 
 ## How it works
 
-**Fetch & assess**: checks for clean working tree, fetches from `nanoclaw` remote, then shows a full preview of what changed — commits, file categories, and plugin version differences. You see everything before any merge happens.
+**Fetch & assess**: checks for clean working tree, fetches from `nanotars` remote, then shows a full preview of what changed — commits, file categories, and plugin version differences. You see everything before any merge happens.
 
-**Merge**: `git merge nanoclaw/main --no-edit`. This should always be clean. If conflicts arise, the merge is aborted — conflicts mean the fork has diverged and needs to be fixed first.
+**Merge**: `git merge nanotars/main --no-edit`. This should always be clean. If conflicts arise, the merge is aborted — conflicts mean the fork has diverged and needs to be fixed first.
 
 **Plugin updates**: after merge, if the marketplace has newer plugin versions (higher semver), offers to apply them while preserving your group/channel scoping.
 
@@ -35,15 +35,15 @@ Uses `git log`, `git diff`, and `git status` for previews. Plugin version compar
 ---
 
 # Goal
-Help a user safely pull fork updates into their NanoClaw installation, with full preview of both code and plugin changes before committing to anything.
+Help a user safely pull fork updates into their NanoTars installation, with full preview of both code and plugin changes before committing to anything.
 
 # Quick Update (try first)
 
 For installs where customizations live in gitignored directories:
 
 ```bash
-git fetch nanoclaw
-git merge nanoclaw/main --no-edit
+git fetch nanotars
+git merge nanotars/main --no-edit
 npm run build
 ```
 
@@ -64,19 +64,19 @@ If output is non-empty:
 
 Confirm remotes:
 - `git remote -v`
-If `nanoclaw` remote is missing:
-- Ask the user for the fork repo URL (default: `https://github.com/TerrifiedBug/nanoclaw.git`).
-- Add it: `git remote add nanoclaw <url>`
+If `nanotars` remote is missing:
+- Ask the user for the fork repo URL (default: `https://github.com/TerrifiedBug/nanotars.git`).
+- Add it: `git remote add nanotars <url>`
 
 Determine the fork branch name:
-- `git branch -r | grep nanoclaw/`
-- If `nanoclaw/main` exists, use `main`.
-- If only `nanoclaw/master` exists, use `master`.
+- `git branch -r | grep nanotars/`
+- If `nanotars/main` exists, use `main`.
+- If only `nanotars/master` exists, use `master`.
 - Otherwise, ask the user which branch to use.
 - Store this as FORK_BRANCH for all subsequent commands.
 
 Fetch:
-- `git fetch nanoclaw --prune`
+- `git fetch nanotars --prune`
 
 # Step 1: Create a safety net
 Capture current state:
@@ -94,16 +94,16 @@ Save the tag name for later reference in the summary and rollback instructions.
 ## 2a: Core code preview
 
 Compute common base:
-- `BASE=$(git merge-base HEAD nanoclaw/$FORK_BRANCH)`
+- `BASE=$(git merge-base HEAD nanotars/$FORK_BRANCH)`
 
 Show fork commits since BASE:
-- `git log --oneline $BASE..nanoclaw/$FORK_BRANCH`
+- `git log --oneline $BASE..nanotars/$FORK_BRANCH`
 
 Show local commits since BASE (nanotars-only drift):
 - `git log --oneline $BASE..HEAD`
 
 Show file-level impact from fork:
-- `git diff --name-only $BASE..nanoclaw/$FORK_BRANCH`
+- `git diff --name-only $BASE..nanotars/$FORK_BRANCH`
 
 Bucket the fork changed files:
 - **Source** (`src/`): core code changes
@@ -147,7 +147,7 @@ For each directory under `plugins/` and `plugins/channels/`:
 
 Dry-run merge to check for conflicts. Run as a single chained command so the abort always executes:
 ```
-git merge --no-commit --no-ff nanoclaw/$FORK_BRANCH; CONFLICTS=$(git diff --name-only --diff-filter=U); git merge --abort
+git merge --no-commit --no-ff nanotars/$FORK_BRANCH; CONFLICTS=$(git diff --name-only --diff-filter=U); git merge --abort
 ```
 
 ## 2d: Present combined summary
@@ -180,7 +180,7 @@ If Abort: stop here.
 
 # Step 3: Apply update (MERGE)
 Run:
-- `git merge nanoclaw/$FORK_BRANCH --no-edit`
+- `git merge nanotars/$FORK_BRANCH --no-edit`
 
 The merge should succeed cleanly (conflicts were already checked in Step 2c). If it somehow fails:
 - `git merge --abort`
@@ -231,8 +231,8 @@ If user says no, skip — they can update individually later by re-running the s
 Show:
 - Backup tag: the tag name created in Step 1
 - New HEAD: `git rev-parse --short HEAD`
-- Fork HEAD: `git rev-parse --short nanoclaw/$FORK_BRANCH`
-- Remaining local diff vs fork: `git diff --name-only nanoclaw/$FORK_BRANCH..HEAD`
+- Fork HEAD: `git rev-parse --short nanotars/$FORK_BRANCH`
+- Remaining local diff vs fork: `git diff --name-only nanotars/$FORK_BRANCH..HEAD`
 
 Update summary:
 - **Core code**: "X files changed in src/, container/, etc."
@@ -242,5 +242,5 @@ Tell the user:
 - To rollback: `git reset --hard <backup-tag-from-step-1>`
 - Backup branch also exists: `backup/pre-update-<HASH>-<TIMESTAMP>`
 - If plugins were updated or core code changed, restart the service:
-  - If using systemd: `sudo systemctl restart nanoclaw`
+  - If using systemd: `sudo nanotars restart`
   - If running manually: restart `npm run dev`

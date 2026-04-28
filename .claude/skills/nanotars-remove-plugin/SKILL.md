@@ -1,11 +1,11 @@
 ---
 name: nanotars-remove-plugin
-description: Use when removing, uninstalling, or deleting a NanoClaw plugin. Handles runtime plugin cleanup, env var removal, database cleanup for channels, container rebuild if needed, and marketplace skill uninstall.
+description: Use when removing, uninstalling, or deleting a NanoTars plugin. Handles runtime plugin cleanup, env var removal, database cleanup for channels, container rebuild if needed, and marketplace skill uninstall.
 ---
 
 # Remove Plugin
 
-Fully removes a NanoClaw plugin — both the runtime plugin from `plugins/` and the marketplace installer skill if present.
+Fully removes a NanoTars plugin — both the runtime plugin from `plugins/` and the marketplace installer skill if present.
 
 ## Step 1: Identify the Plugin
 
@@ -51,20 +51,20 @@ Present what will happen using `AskUserQuestion` for confirmation:
 - Channel-specific: group registrations and scheduled tasks to be cleaned from the database
 - Dockerfile.partial: container image will need rebuilding
 
-**Ask:** "Remove plugin `{name}`? This will delete the plugin directory and clean up env vars. NanoClaw will be rebuilt and restarted."
+**Ask:** "Remove plugin `{name}`? This will delete the plugin directory and clean up env vars. NanoTars will be rebuilt and restarted."
 
 If the user declines, stop.
 
-## Step 4: Stop NanoClaw
+## Step 4: Stop NanoTars
 
-For channel plugins, NanoClaw must be stopped first. For skill plugins it's not strictly required but keeps things clean:
+For channel plugins, NanoTars must be stopped first. For skill plugins it's not strictly required but keeps things clean:
 
 ```bash
 # Linux
-sudo systemctl stop nanoclaw 2>/dev/null
+sudo systemctl stop nanotars 2>/dev/null
 
 # macOS
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist 2>/dev/null
+launchctl unload ~/Library/LaunchAgents/com.nanotars.plist 2>/dev/null
 ```
 
 ## Step 5: Channel-Specific Database Cleanup
@@ -131,14 +131,14 @@ If the plugin had a `Dockerfile.partial`, also rebuild the container image:
 ./container/build.sh
 ```
 
-## Step 9: Restart NanoClaw
+## Step 9: Restart NanoTars
 
 ```bash
 # Linux
-sudo systemctl start nanoclaw
+sudo systemctl start nanotars
 
 # macOS
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl load ~/Library/LaunchAgents/com.nanotars.plist
 ```
 
 ## Step 10: Marketplace Cleanup

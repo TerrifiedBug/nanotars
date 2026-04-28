@@ -1,6 +1,6 @@
 ---
 name: use-native-credential-proxy
-description: Use NanoClaw's built-in .env-based credential pipe instead of the OneCLI gateway. v1's default path; this skill documents how to switch back from OneCLI if /init-onecli was previously run.
+description: Use NanoTars's built-in .env-based credential pipe instead of the OneCLI gateway. v1's default path; this skill documents how to switch back from OneCLI if /init-onecli was previously run.
 ---
 
 # Use Native Credential Pipe (v1)
@@ -50,14 +50,14 @@ Pick one. There's no "remove the SDK from the codebase" step needed — v1 does 
 
 Restart the service:
 
-- macOS (launchd): `launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
-- Linux (systemd): `systemctl --user restart nanoclaw`
-- WSL/manual: stop and re-run `bash start-nanoclaw.sh`
+- macOS (launchd): `nanotars restart`
+- Linux (systemd): `nanotars restart`
+- WSL/manual: stop and re-run `nanotars restart`
 
 Send a test message in a registered chat. Inspect logs:
 
 ```bash
-tail -30 logs/nanoclaw.log | grep -iE "onecli|gateway|secret"
+tail -30 logs/nanotars.log | grep -iE "onecli|gateway|secret"
 ```
 
 Expected: either no OneCLI lines (if uninstalled), or "OneCLI gateway error — falling back" (if dead address). The agent should respond normally because the .env stdin pipe is delivering credentials.

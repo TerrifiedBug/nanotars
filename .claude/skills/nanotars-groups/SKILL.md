@@ -1,6 +1,6 @@
 ---
 name: nanotars-groups
-description: List, view, and manage NanoClaw group configurations
+description: List, view, and manage NanoTars group configurations
 triggers:
   - list groups
   - show groups
@@ -13,7 +13,7 @@ triggers:
 
 # Group Config Management
 
-View and manage NanoClaw group registrations. For adding new groups, use `/nanotars-add-group`.
+View and manage NanoTars group registrations. For adding new groups, use `/nanotars-add-group`.
 
 The entity model splits the old `registered_groups` table into three (migration 009): `agent_groups` (per-folder agent identity), `messaging_groups` (one chat on one platform), and `messaging_group_agents` (the many-to-many wiring with engage rules).
 
@@ -138,7 +138,7 @@ sqlite3 store/messages.db "
   UPDATE messaging_groups SET name = '{value}' WHERE platform_id = '{platform_id}';
 "
 
-echo "Updated. Restart NanoClaw for changes to take effect."
+echo "Updated. Restart NanoTars for changes to take effect."
 ```
 
 ## Step 2d: Status

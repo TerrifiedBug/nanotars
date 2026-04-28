@@ -3,7 +3,7 @@ name: nanotars-debug
 description: Debug container agent issues and run health checks. Use when things aren't working, container fails, authentication problems, plugin issues, or to understand how the system works. Covers logs, environment variables, mounts, plugins, and common issues.
 ---
 
-# NanoClaw Debugging & Health Check
+# NanoTars Debugging & Health Check
 
 Start with the health check. Then use targeted diagnostics based on what fails.
 
@@ -45,7 +45,7 @@ src/task-scheduler.ts
 Run this first. It checks every layer of the system.
 
 ```bash
-echo "=== NanoClaw Health Check ==="
+echo "=== NanoTars Health Check ==="
 
 echo -e "\n--- Runtime ---"
 (which docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && echo "RUNTIME: docker (running)") || \
@@ -104,11 +104,11 @@ sqlite3 store/messages.db "
 " 2>/dev/null || echo "  No database or no groups registered"
 
 echo -e "\n--- Service ---"
-if systemctl is-active nanoclaw >/dev/null 2>&1; then
+if systemctl is-active nanotars >/dev/null 2>&1; then
   echo "SERVICE: running (systemd)"
-  echo "  PID: $(systemctl show nanoclaw --property=MainPID --value)"
-  echo "  Uptime: $(systemctl show nanoclaw --property=ActiveEnterTimestamp --value)"
-elif launchctl list 2>/dev/null | grep -q nanoclaw; then
+  echo "  PID: $(systemctl show nanotars --property=MainPID --value)"
+  echo "  Uptime: $(systemctl show nanotars --property=ActiveEnterTimestamp --value)"
+elif launchctl list 2>/dev/null | grep -q nanotars; then
   echo "SERVICE: running (launchd)"
 elif pgrep -f 'node.*dist/index.js' >/dev/null 2>&1; then
   echo "SERVICE: running (manual process)"
@@ -121,7 +121,7 @@ echo -e "\n--- Active Containers ---"
 if which docker >/dev/null 2>&1; then
   docker ps --filter name=nanoclaw- --format "table {{.Names}}\t{{.Status}}\t{{.RunningFor}}" 2>/dev/null || echo "  None"
 elif which container >/dev/null 2>&1; then
-  container ls 2>/dev/null | grep nanoclaw || echo "  None"
+  container ls 2>/dev/null | grep nanotars || echo "  None"
 fi
 
 echo -e "\n--- Recent Container Logs ---"
@@ -143,7 +143,7 @@ echo "  Sessions: $(du -sh data/sessions/ 2>/dev/null | cut -f1 || echo 'N/A')"
 echo "  Logs: $(du -sh logs/ 2>/dev/null | cut -f1 || echo 'N/A')"
 
 echo -e "\n--- Recent Errors ---"
-tail -20 logs/nanoclaw.log 2>/dev/null | grep -i '"level":50' | tail -5 || echo "  No recent errors"
+tail -20 logs/nanotars.log 2>/dev/null | grep -i '"level":50' | tail -5 || echo "  No recent errors"
 ```
 
 Interpret the results and tell the user what's healthy and what needs fixing. If everything passes, say so.
@@ -152,8 +152,8 @@ Interpret the results and tell the user what's healthy and what needs fixing. If
 
 | Log | Location | Content |
 |-----|----------|---------|
-| **Main app** | `logs/nanoclaw.log` | Routing, container spawning, plugin lifecycle, message loop |
-| **Main errors** | `logs/nanoclaw.error.log` | Errors only |
+| **Main app** | `logs/nanotars.log` | Routing, container spawning, plugin lifecycle, message loop |
+| **Main errors** | `logs/nanotars.error.log` | Errors only |
 | **Container runs** | `groups/{folder}/logs/container-*.log` | Per-run: input, mounts, stderr, stdout, exit code |
 | **Conversations** | `groups/{folder}/conversations/*.md` | Archived agent transcripts |
 
@@ -183,8 +183,8 @@ LOG_LEVEL=debug npm run dev
 
 # systemd service
 # Add Environment=LOG_LEVEL=debug to [Service] section
-systemctl edit nanoclaw
-systemctl restart nanoclaw
+systemctl edit nanotars
+nanotars restart
 
 # launchd service
 # Add to plist EnvironmentVariables:
@@ -258,7 +258,7 @@ chown -R 1000:1000 data/sessions/ data/ipc/ groups/
 
 ```bash
 # Check plugin loader output in logs
-grep -i "plugin" logs/nanoclaw.log | tail -20
+grep -i "plugin" logs/nanotars.log | tail -20
 ```
 
 Common issues:
@@ -375,10 +375,10 @@ docker run --rm \
 **Check the message loop:**
 ```bash
 # Recent message activity
-grep "New messages\|Processing messages\|Piped messages" logs/nanoclaw.log | tail -10
+grep "New messages\|Processing messages\|Piped messages" logs/nanotars.log | tail -10
 
 # Check if queue is stuck
-grep "concurrency limit\|Max retries\|scheduling retry" logs/nanoclaw.log | tail -10
+grep "concurrency limit\|Max retries\|scheduling retry" logs/nanotars.log | tail -10
 
 # Check active containers
 docker ps --filter name=nanoclaw-
@@ -516,17 +516,17 @@ sqlite3 store/messages.db "SELECT * FROM sessions"
 
 ### systemd (Linux)
 ```bash
-systemctl status nanoclaw
-systemctl restart nanoclaw
-journalctl -u nanoclaw -f          # follow logs
-journalctl -u nanoclaw --since "1 hour ago"
+systemctl status nanotars
+nanotars restart
+journalctl -u nanotars -f          # follow logs
+journalctl -u nanotars --since "1 hour ago"
 ```
 
 ### launchd (macOS)
 ```bash
-launchctl list | grep nanoclaw
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl list | grep nanotars
+launchctl unload ~/Library/LaunchAgents/com.nanotars.plist
+launchctl load ~/Library/LaunchAgents/com.nanotars.plist
 ```
 
 ### Clear sessions (fresh start)

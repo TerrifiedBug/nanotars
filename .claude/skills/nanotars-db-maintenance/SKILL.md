@@ -11,7 +11,7 @@ triggers:
 
 # Database Maintenance
 
-Runs maintenance operations on the NanoClaw SQLite database at `store/messages.db`.
+Runs maintenance operations on the NanoTars SQLite database at `store/messages.db`.
 
 ## Step 1: Backup
 

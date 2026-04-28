@@ -1,6 +1,6 @@
 ---
 name: nanotars-health
-description: Quick system health check — shows status of all NanoClaw components at a glance
+description: Quick system health check — shows status of all NanoTars components at a glance
 triggers:
   - health check
   - system health
@@ -9,7 +9,7 @@ triggers:
   - system status
 ---
 
-# NanoClaw Health Check
+# NanoTars Health Check
 
 Quick pass/fail check on all system components. For deeper investigation, use `/nanotars-debug`.
 
@@ -21,7 +21,7 @@ Execute each check and present results as a summary table.
 
 ```bash
 if command -v systemctl &>/dev/null; then
-  systemctl is-active nanoclaw 2>/dev/null && echo "SERVICE: PASS" || echo "SERVICE: FAIL"
+  systemctl is-active nanotars 2>/dev/null && echo "SERVICE: PASS" || echo "SERVICE: FAIL"
 fi
 ```
 
@@ -99,8 +99,8 @@ du -sh logs/ 2>/dev/null | awk '{print "  logs: " $1}'
 ### 9. Recent Errors
 
 ```bash
-if [ -f logs/nanoclaw.error.log ]; then
-  LINES=$(wc -l < logs/nanoclaw.error.log)
+if [ -f logs/nanotars.error.log ]; then
+  LINES=$(wc -l < logs/nanotars.error.log)
   echo "ERRORS: ${LINES} lines in error log"
 else
   echo "ERRORS: none"

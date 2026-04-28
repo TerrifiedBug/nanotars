@@ -1,9 +1,9 @@
 ---
 name: nanotars-setup
-description: Run initial NanoClaw setup. Use when user wants to install dependencies, authenticate a channel, register their main channel, or start the background services. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
+description: Run initial NanoTars setup. Use when user wants to install dependencies, authenticate a channel, register their main channel, or start the background services. Triggers on "setup", "install", "configure nanotars", or first-time setup requests.
 ---
 
-# NanoClaw Setup
+# NanoTars Setup
 
 Run all commands automatically. Only pause when user action is required (channel authentication, configuration choices).
 
@@ -42,16 +42,16 @@ ls plugins/channels/*/plugin.json 2>/dev/null | head -1 | xargs -I{} sh -c '
 ' 2>/dev/null || echo "CHANNEL_AUTH: no_channels"
 sqlite3 store/messages.db "SELECT COUNT(*) FROM agent_groups WHERE folder = 'main'" 2>/dev/null | grep -q "^[1-9]" && echo "MAIN_GROUP: registered" || echo "MAIN_GROUP: not_registered"
 grep -q "^TZ=" .env 2>/dev/null && echo "TIMEZONE: configured" || echo "TIMEZONE: not_set"
-[ -f ~/.config/nanoclaw/mount-allowlist.json ] && echo "MOUNT_ALLOWLIST: configured" || echo "MOUNT_ALLOWLIST: missing"
+[ -f ~/.config/nanotars/mount-allowlist.json ] && echo "MOUNT_ALLOWLIST: configured" || echo "MOUNT_ALLOWLIST: missing"
 which ffmpeg >/dev/null 2>&1 && echo "FFMPEG: installed" || echo "FFMPEG: not_installed (optional)"
-(pgrep -f 'node.*dist/index.js' >/dev/null 2>&1 || launchctl list 2>/dev/null | grep -q nanoclaw || systemctl is-active nanoclaw >/dev/null 2>&1) && echo "SERVICE: running" || echo "SERVICE: not_running"
+(pgrep -f 'node.*dist/index.js' >/dev/null 2>&1 || launchctl list 2>/dev/null | grep -q nanotars || systemctl is-active nanotars >/dev/null 2>&1) && echo "SERVICE: running" || echo "SERVICE: not_running"
 ```
 
 Based on the results, determine the setup state:
 
-**If everything shows configured/installed/running**: NanoClaw is already fully set up. Tell the user:
+**If everything shows configured/installed/running**: NanoTars is already fully set up. Tell the user:
 
-> NanoClaw is already set up and running. Here's what I found:
+> NanoTars is already set up and running. Here's what I found:
 > - Dependencies: installed
 > - Container runtime: {docker/apple_container}
 > - Container image: built
@@ -75,7 +75,7 @@ If they pick option 4: Done.
 
 **If partially configured**: Show what's done and what's missing, then start from the first incomplete step. For example:
 
-> NanoClaw is partially set up:
+> NanoTars is partially set up:
 > - [x] Dependencies installed
 > - [x] Container runtime (Docker)
 > - [x] Container image built
@@ -136,7 +136,7 @@ Wait for confirmation, verify with `docker info`, then continue to Section 3.
 **If Apple Container is already installed:** Continue to Section 3.
 
 **If Apple Container is NOT installed:** Ask the user:
-> NanoClaw needs a container runtime for isolated agent execution. You have two options:
+> NanoTars needs a container runtime for isolated agent execution. You have two options:
 >
 > 1. **Apple Container** (default) - macOS-native, lightweight, designed for Apple silicon
 > 2. **Docker** - Cross-platform, widely used, works on macOS and Linux
@@ -161,7 +161,7 @@ container system start
 container --version
 ```
 
-**Note:** NanoClaw automatically starts the Apple Container system when it launches, so you don't need to start it manually after reboots.
+**Note:** NanoTars automatically starts the Apple Container system when it launches, so you don't need to start it manually after reboots.
 
 #### Option B: Docker
 
@@ -240,7 +240,7 @@ KEY=$(grep "^ANTHROPIC_API_KEY=" .env | cut -d= -f2)
 
 ## 4. Build Container Image
 
-Build the NanoClaw agent container:
+Build the NanoTars agent container:
 
 ```bash
 ./container/build.sh
@@ -260,14 +260,14 @@ fi
 
 ## 4b. Add Skill Marketplace
 
-Check if the NanoClaw skills marketplace is configured:
+Check if the NanoTars skills marketplace is configured:
 
 ```bash
 grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null && echo "MARKETPLACE: configured" || echo "MARKETPLACE: not configured"
 ```
 
 **If marketplace is configured**, tell the user:
-> The NanoClaw skills marketplace is available. After setup, you can add optional capabilities like weather, email, search, smart home, and more.
+> The NanoTars skills marketplace is available. After setup, you can add optional capabilities like weather, email, search, smart home, and more.
 >
 > Browse available plugins:
 > - `/plugin` Discover tab in Claude Code
@@ -281,7 +281,7 @@ grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null && echo "MARKETPLACE
 > You can install plugins at any time after setup completes.
 
 **If NOT configured** and the user wants integrations:
-> NanoClaw ships with no plugins installed — you add only what you need from the skills marketplace.
+> NanoTars ships with no plugins installed — you add only what you need from the skills marketplace.
 >
 > To enable the marketplace:
 > ```
@@ -299,7 +299,7 @@ grep -q "nanoclaw-skills" .claude/settings.json 2>/dev/null && echo "MARKETPLACE
 
 **USER ACTION REQUIRED**
 
-NanoClaw uses channel plugins to connect to messaging platforms. Discover what's available.
+NanoTars uses channel plugins to connect to messaging platforms. Discover what's available.
 
 ### 5a. Discover channels
 
@@ -316,8 +316,8 @@ for f in plugins/channels/*/plugin.json; do
 done
 ```
 
-Available channels (not yet installed) are in the NanoClaw skills marketplace. If no channels are installed:
-> Channel plugins are available from the NanoClaw skills marketplace:
+Available channels (not yet installed) are in the NanoTars skills marketplace. If no channels are installed:
+> Channel plugins are available from the NanoTars skills marketplace:
 > - **discord** — Discord (servers + DMs)
 > - **telegram** — Telegram (bot API)
 > - **whatsapp** — WhatsApp via Baileys
@@ -433,7 +433,7 @@ Replace `CHOSEN_NAME` with the trigger word the user chose above (without the `@
 > - Can see messages from ALL other registered groups
 > - Can manage and delete tasks across all groups
 > - Can write to global memory that all groups can read
-> - Has read-write access to the entire NanoClaw project
+> - Has read-write access to the entire NanoTars project
 >
 > **Recommendation:** Use a private/DM chat (just you and the bot) as your main channel. This ensures only you have admin control.
 >
@@ -446,7 +446,7 @@ Replace `CHOSEN_NAME` with the trigger word the user chose above (without the `@
 
 If they choose option 3, ask a follow-up:
 
-> You've chosen a group with other people. This means everyone in that group will have admin privileges over NanoClaw.
+> You've chosen a group with other people. This means everyone in that group will have admin privileges over NanoTars.
 >
 > Are you sure you want to proceed? The other members will be able to:
 > - Read messages from your other registered chats
@@ -559,7 +559,7 @@ mkdir -p groups/main/logs
 ## 7. Configure External Directory Access (Mount Allowlist)
 
 Ask the user:
-> Do you want the agent to be able to access any directories **outside** the NanoClaw project?
+> Do you want the agent to be able to access any directories **outside** the NanoTars project?
 >
 > Examples: Git repositories, project folders, documents you want Claude to work on.
 >
@@ -568,8 +568,8 @@ Ask the user:
 If **no**, create an empty allowlist to make this explicit:
 
 ```bash
-mkdir -p ~/.config/nanoclaw
-cat > ~/.config/nanoclaw/mount-allowlist.json << 'EOF'
+mkdir -p ~/.config/nanotars
+cat > ~/.config/nanotars/mount-allowlist.json << 'EOF'
 {
   "allowedRoots": [],
   "blockedPatterns": [],
@@ -612,13 +612,13 @@ Ask the user:
 Create the allowlist file based on their answers:
 
 ```bash
-mkdir -p ~/.config/nanoclaw
+mkdir -p ~/.config/nanotars
 ```
 
 Then write the JSON file. Example for a user who wants `~/projects` (read-write) and `~/docs` (read-only) with non-main read-only:
 
 ```bash
-cat > ~/.config/nanoclaw/mount-allowlist.json << 'EOF'
+cat > ~/.config/nanotars/mount-allowlist.json << 'EOF'
 {
   "allowedRoots": [
     {
@@ -641,7 +641,7 @@ EOF
 Verify the file:
 
 ```bash
-cat ~/.config/nanoclaw/mount-allowlist.json
+cat ~/.config/nanotars/mount-allowlist.json
 ```
 
 Tell the user:
@@ -652,7 +652,7 @@ Tell the user:
 > **Security notes:**
 > - Sensitive paths (`.ssh`, `.gnupg`, `.aws`, credentials) are always blocked
 > - This config file is stored outside the project, so agents cannot modify it
-> - Changes require restarting the NanoClaw service
+> - Changes require restarting the NanoTars service
 >
 > To grant a group access to an external directory, update its config in the database:
 > ```bash
@@ -683,13 +683,13 @@ NODE_PATH=$(which node)
 PROJECT_PATH=$(pwd)
 HOME_PATH=$HOME
 
-cat > ~/Library/LaunchAgents/com.nanoclaw.plist << EOF
+cat > ~/Library/LaunchAgents/com.nanotars.plist << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.nanoclaw</string>
+    <string>com.nanotars</string>
     <key>ProgramArguments</key>
     <array>
         <string>${NODE_PATH}</string>
@@ -709,9 +709,9 @@ cat > ~/Library/LaunchAgents/com.nanoclaw.plist << EOF
         <string>${HOME_PATH}</string>
     </dict>
     <key>StandardOutPath</key>
-    <string>${PROJECT_PATH}/logs/nanoclaw.log</string>
+    <string>${PROJECT_PATH}/logs/nanotars.log</string>
     <key>StandardErrorPath</key>
-    <string>${PROJECT_PATH}/logs/nanoclaw.error.log</string>
+    <string>${PROJECT_PATH}/logs/nanotars.error.log</string>
 </dict>
 </plist>
 EOF
@@ -726,12 +726,12 @@ Build and start the service:
 ```bash
 npm run build
 mkdir -p logs
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl load ~/Library/LaunchAgents/com.nanotars.plist
 ```
 
 Verify it's running:
 ```bash
-launchctl list | grep nanoclaw
+launchctl list | grep nanotars
 ```
 
 ### 8b. Linux (systemd)
@@ -742,9 +742,9 @@ Generate the systemd unit file:
 NODE_PATH=$(which node)
 PROJECT_PATH=$(pwd)
 
-sudo tee /etc/systemd/system/nanoclaw.service << EOF
+sudo tee /etc/systemd/system/nanotars.service << EOF
 [Unit]
-Description=NanoClaw Agent
+Description=NanoTars Agent
 After=network.target docker.service
 Requires=docker.service
 
@@ -758,8 +758,8 @@ RestartSec=10
 Environment=HOME=${HOME}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:${HOME}/.local/bin
 EnvironmentFile=-${PROJECT_PATH}/.env
-StandardOutput=append:${PROJECT_PATH}/logs/nanoclaw.log
-StandardError=append:${PROJECT_PATH}/logs/nanoclaw.error.log
+StandardOutput=append:${PROJECT_PATH}/logs/nanotars.log
+StandardError=append:${PROJECT_PATH}/logs/nanotars.error.log
 
 [Install]
 WantedBy=multi-user.target
@@ -776,13 +776,13 @@ Build and start the service:
 npm run build
 mkdir -p logs
 sudo systemctl daemon-reload
-sudo systemctl enable nanoclaw
-sudo systemctl start nanoclaw
+sudo systemctl enable nanotars
+sudo systemctl start nanotars
 ```
 
 Verify it's running:
 ```bash
-systemctl status nanoclaw
+systemctl status nanotars
 ```
 
 ## 9. Test
@@ -794,7 +794,7 @@ Tell the user (using the assistant name they configured):
 
 Check the logs:
 ```bash
-tail -f logs/nanoclaw.log
+tail -f logs/nanotars.log
 ```
 
 The user should receive a response in their registered channel.
@@ -803,7 +803,7 @@ The user should receive a response in their registered channel.
 
 ### General
 
-**Service not starting**: Check `logs/nanoclaw.error.log`
+**Service not starting**: Check `logs/nanotars.error.log`
 
 **Container agent fails with "Claude Code process exited with code 1"**:
 - Ensure the container runtime is running:
@@ -816,31 +816,31 @@ The user should receive a response in their registered channel.
 - Main channel doesn't require a prefix — all messages are processed
 - Personal/solo chats with `requiresTrigger: false` also don't need a prefix
 - Check that the chat JID is in the database: `sqlite3 store/messages.db "SELECT mg.platform_id, mg.channel_type, ag.folder, ag.name FROM agent_groups ag LEFT JOIN messaging_group_agents mga ON mga.agent_group_id = ag.id LEFT JOIN messaging_groups mg ON mg.id = mga.messaging_group_id"`
-- Check `logs/nanoclaw.log` for errors
+- Check `logs/nanotars.log` for errors
 
 **Unload service**:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl unload ~/Library/LaunchAgents/com.nanotars.plist
 ```
 
 **Restart service (systemd)**:
 ```bash
-sudo systemctl restart nanoclaw
+sudo nanotars restart
 ```
 
 **Stop service (systemd)**:
 ```bash
-sudo systemctl stop nanoclaw
+sudo systemctl stop nanotars
 ```
 
 **View logs (systemd)**:
 ```bash
-journalctl -u nanoclaw -f
+journalctl -u nanotars -f
 ```
 
 ### WhatsApp-Specific
 
-**Messages sent but not received by NanoClaw (DMs)**:
+**Messages sent but not received by NanoTars (DMs)**:
 - WhatsApp may use LID (Linked Identity) JIDs for DMs instead of phone numbers
 - Check logs for `Translated LID to phone JID` — if missing, the LID isn't being resolved
 - The `translateJid` method in `plugins/channels/whatsapp/index.js` uses `sock.signalRepository.lidMapping.getPNForLID()` to resolve LIDs
@@ -849,7 +849,7 @@ journalctl -u nanoclaw -f
 **WhatsApp disconnected**:
 - The service will show a macOS notification
 - Run `node plugins/channels/whatsapp/auth.js` to re-authenticate
-- Restart the service: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
+- Restart the service: `nanotars restart`
 
 ### Other Channels
 

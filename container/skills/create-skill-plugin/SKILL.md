@@ -5,7 +5,7 @@ description: Create a new skill plugin from chat. Walks through requirements and
 
 # Create Skill Plugin
 
-Create a new NanoClaw plugin from chat. Use when the user asks for a new capability, integration, or tool.
+Create a new NanoTars plugin from chat. Use when the user asks for a new capability, integration, or tool.
 
 ## What you can create from chat
 
@@ -18,7 +18,7 @@ Two archetypes are allowed:
 
 If the user's request would need any of these, refuse the chat path and tell them to run `/create-skill-plugin` on the host:
 
-- A long-lived background process in NanoClaw (HTTP servers, polling loops, message middleware) → archetype 3, host-process hook
+- A long-lived background process in NanoTars (HTTP servers, polling loops, message middleware) → archetype 3, host-process hook
 - Code that observes or modifies what the agent does in every turn (tool-use loggers, conversation summarizers) → archetype 4, container hook
 - System packages installed in the container image (ffmpeg, ImageMagick) → needs `Dockerfile.partial` and rebuild
 - Anything requiring `npm install` of plugin-local node_modules → needs `dependencies: true`

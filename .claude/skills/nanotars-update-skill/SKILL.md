@@ -1,11 +1,11 @@
 ---
 name: nanotars-update-skill
-description: Sync improved local plugins to the NanoClaw skills marketplace and create a PR. Detects which plugins changed, shows a diff, and handles the git workflow. Triggers on "update skill", "sync plugin to marketplace", "publish update".
+description: Sync improved local plugins to the NanoTars skills marketplace and create a PR. Detects which plugins changed, shows a diff, and handles the git workflow. Triggers on "update skill", "sync plugin to marketplace", "publish update".
 ---
 
 # Update Plugin in Marketplace
 
-Syncs changes from locally installed plugins to the NanoClaw skills marketplace at `TerrifiedBug/nanotars-skills` via a pull request.
+Syncs changes from locally installed plugins to the NanoTars skills marketplace at `TerrifiedBug/nanotars-skills` via a pull request.
 
 Use `/nanotars-publish-skill` for **new** plugins. Use this skill for **updating** existing marketplace plugins.
 

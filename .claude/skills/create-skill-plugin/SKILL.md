@@ -1,7 +1,7 @@
 ---
 name: create-skill-plugin
 description: >
-  Create a new NanoClaw skill plugin from an idea. Guides through design choices and
+  Create a new NanoTars skill plugin from an idea. Guides through design choices and
   generates a complete add-skill-* installation skill. Triggers on "create skill plugin",
   "create plugin", "new plugin", "make a plugin", "build a plugin".
 ---
@@ -10,7 +10,7 @@ description: >
 
 ## Overview
 
-This skill creates new NanoClaw plugins through guided conversation. The user describes what they want in plain language — a new integration, automation, tool, or capability — and this skill figures out the right architecture, asks clarifying questions, and produces a complete `add-skill-*` installation skill ready to be committed upstream.
+This skill creates new NanoTars plugins through guided conversation. The user describes what they want in plain language — a new integration, automation, tool, or capability — and this skill figures out the right architecture, asks clarifying questions, and produces a complete `add-skill-*` installation skill ready to be committed upstream.
 
 You are the plugin system expert. Your job is to translate the user's idea into a working plugin without exposing internal details. Keep questions simple and focused on what the user wants the plugin to *do*, not how the plugin system works under the hood. Never surface implementation concepts like hook types, mount strategies, or container internals in user-facing questions — handle those decisions yourself based on what the plugin needs.
 
@@ -42,7 +42,7 @@ Based on the user's answers, determine which archetype(s) apply using this decis
 
 - The agent just needs instructions to call a public API with curl/fetch → **skill-only**
 - There is an MCP server available for the service → **MCP integration**
-- Something needs to run as a background process in NanoClaw (HTTP server, polling loop, message transformer) → **host process hook**
+- Something needs to run as a background process in NanoTars (HTTP server, polling loop, message transformer) → **host process hook**
 - Something needs to observe or react to what the agent does during conversations (logging, memory, analytics) → **container hook**
 
 Most plugins combine archetypes. For example:
@@ -91,7 +91,7 @@ When explaining what a plugin does, translate internal concepts into simple lang
 |---|---|
 | Skill-only plugin | "The agent will use web requests to do this" |
 | MCP integration | "This service has a ready-made connector the agent can use" |
-| Host hook (onStartup/onShutdown) | "This needs a background service running alongside NanoClaw" |
+| Host hook (onStartup/onShutdown) | "This needs a background service running alongside NanoTars" |
 | Host hook (onInboundMessage) | "This processes messages before the agent sees them" |
 | Container hook | "This observes what the agent does during conversations" |
 | containerEnvVars | "The agent needs credentials to connect to this service" |
@@ -129,7 +129,7 @@ Hard constraints on what this skill can and cannot touch.
 
 ### Escalation:
 
-- If the user's idea requires changes to NanoClaw source code — explain clearly: "This would need changes to NanoClaw's core code, which is beyond what a plugin can do."
+- If the user's idea requires changes to NanoTars source code — explain clearly: "This would need changes to NanoTars's core code, which is beyond what a plugin can do."
 - If the idea requires npm dependencies — don't run `npm install`. Instead, document it as a manual prerequisite in the generated add-skill-* SKILL.md (like how add-channel-telegram documents `npm install grammy`).
 - If the idea requires system packages in the Docker image (e.g., ffmpeg) — generate a `Dockerfile.partial` in the plugin's `files/` directory. The generated install skill should include `./container/build.sh` as a step.
 
@@ -152,7 +152,7 @@ This skill generates the following file tree:
         └── {event-name}.js         # Container SDK hooks (if needed)
 ```
 
-- **`files/`** contains the actual plugin — everything the agent or NanoClaw needs at runtime. When the generated `add-skill-*` skill runs, this entire directory is copied to `plugins/{name}/`.
+- **`files/`** contains the actual plugin — everything the agent or NanoTars needs at runtime. When the generated `add-skill-*` skill runs, this entire directory is copied to `plugins/{name}/`.
 - **`SKILL.md`** contains the installation instructions — what runs when someone invokes `/add-skill-{name}`. It handles env vars, copying files, rebuilding, and verification.
 - Only **`plugin.json`** is always present. Everything else is included based on the plugin's needs. A simple skill-only plugin might have just `plugin.json` and a `container-skills/SKILL.md`. A complex integration might include all of the above.
 
@@ -188,7 +188,7 @@ See `plugins/calendar/Dockerfile.partial` for a real example (installs `gogcli` 
 
 ## Generated SKILL.md Template
 
-This is the template for the `add-skill-*` SKILL.md that this skill produces. It follows the pattern used by existing NanoClaw installation skills. Replace all `{placeholders}` with actual values when generating a real skill.
+This is the template for the `add-skill-*` SKILL.md that this skill produces. It follows the pattern used by existing NanoTars installation skills. Replace all `{placeholders}` with actual values when generating a real skill.
 
 ```markdown
 ---
@@ -202,19 +202,19 @@ description: {description}. Triggers on "{trigger phrases}".
 
 ## Preflight
 
-Before installing, verify NanoClaw is set up:
+Before installing, verify NanoTars is set up:
 
 \`\`\`bash
 [ -d node_modules ] && echo "DEPS: ok" || echo "DEPS: missing"
 docker image inspect nanoclaw-agent:latest &>/dev/null && echo "IMAGE: ok" || echo "IMAGE: not built"
-(grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f ~/.claude/.credentials.json ]) && echo "AUTH: ok" || echo "AUTH: missing"
+if grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f "$HOME/.claude/.credentials.json" ]; then echo "AUTH: ok"; else echo "AUTH: missing"; fi
 \`\`\`
 
 If any check fails, tell the user to run `/nanotars-setup` first and stop.
 
 ## Prerequisites
 
-- NanoClaw must be set up and running (`/nanotars-setup`)
+- NanoTars must be set up and running (`/nanotars-setup`)
 {Additional prerequisites if needed — e.g., npm packages, API key signup}
 
 ## Install
@@ -246,7 +246,7 @@ If any check fails, tell the user to run `/nanotars-setup` first and stop.
 5. Rebuild and restart:
    ```bash
    npm run build
-   systemctl restart nanoclaw  # or launchctl on macOS
+   nanotars restart  # or launchctl on macOS
    ```
 
 ## Verify
@@ -447,7 +447,7 @@ curl -s -X POST "${SERVICE_URL_VAR}/api/{resource}" \
 ```
 
 **Notes:**
-- `mcp.json` uses `${ENV_VAR}` syntax for variable substitution — NanoClaw expands these from the container environment at runtime
+- `mcp.json` uses `${ENV_VAR}` syntax for variable substitution — NanoTars expands these from the container environment at runtime
 - The `mcpServers` key maps server names to their config; the server name becomes the MCP tool prefix (`mcp__{server-name}`)
 - `containerEnvVars` lists the env var names; the actual values come from `.env` and are injected into the container
 - Always include a curl fallback in the skill so the agent can function if MCP is misconfigured
@@ -456,7 +456,7 @@ curl -s -X POST "${SERVICE_URL_VAR}/api/{resource}" \
 
 ### Archetype 3: Host Process Hook
 
-**When to use:** Something needs to run as a long-lived process or react to events in the NanoClaw main process — HTTP servers, polling loops, message transformers, startup/shutdown lifecycle. Code runs in Node.js on the host, NOT inside agent containers.
+**When to use:** Something needs to run as a long-lived process or react to events in the NanoTars main process — HTTP servers, polling loops, message transformers, startup/shutdown lifecycle. Code runs in Node.js on the host, NOT inside agent containers.
 
 **Files:** `plugin.json` + `index.js` + optionally `container-skills/SKILL.md`
 
@@ -702,7 +702,7 @@ If a plugin stores data on the host that agents need to read inside their contai
 }
 ```
 
-- **`hostPath`** — relative to the NanoClaw project root (resolved to absolute at load time). Must exist on disk.
+- **`hostPath`** — relative to the NanoTars project root (resolved to absolute at load time). Must exist on disk.
 - **`containerPath`** — absolute path inside the container where the directory is mounted read-only.
 
 Use this when the agent needs access to files that persist across container invocations (e.g., OAuth tokens saved by a CLI tool, cached API responses). The mount is read-only inside the container.
@@ -735,7 +735,7 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
 
 Source: `src/plugin-loader.ts`
 
-1. On startup, NanoClaw scans `plugins/` for directories containing `plugin.json`
+1. On startup, NanoTars scans `plugins/` for directories containing `plugin.json`
 2. Each manifest is parsed and validated
 3. If `hooks` are declared, `index.js` is dynamically imported and hook functions are extracted
 4. All plugins are registered in a PluginRegistry
@@ -752,7 +752,7 @@ Source: `src/plugin-loader.ts`
 - **MCP configs** (via `${VAR_NAME}` substitution in mcp.json)
 - **Container hooks** (via `ctx.env.VAR_NAME` in register function)
 
-Host hooks access env vars directly via `process.env.VAR_NAME` (they run in the main NanoClaw process).
+Host hooks access env vars directly via `process.env.VAR_NAME` (they run in the main NanoTars process).
 
 **Per-group overrides:** If `groups/{folder}/.env` exists, its values take precedence over the global `.env` for that group's containers only. This allows different groups to use different credentials for the same plugin (e.g., personal Gmail in one group, work Gmail in another). The global `.env` remains the default for all groups that don't have a per-group override.
 
@@ -780,7 +780,7 @@ If this plugin is already installed and you want **different credentials for a s
    echo '{VAR_NAME}={value}' >> groups/work/.env
    \`\`\`
 
-5. Restart NanoClaw for the override to take effect.
+5. Restart NanoTars for the override to take effect.
 ```
 
 **When to include this section in a generated skill:**
@@ -808,7 +808,7 @@ Container hooks from `plugins/{name}/hooks/` are mounted into the container and 
 
 ## Publishing to Marketplace
 
-After testing the skill locally with `/add-skill-{name}`, you can publish it to the NanoClaw skills marketplace:
+After testing the skill locally with `/add-skill-{name}`, you can publish it to the NanoTars skills marketplace:
 
 ```
 /nanotars-publish-skill {name}

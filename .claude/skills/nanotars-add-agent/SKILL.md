@@ -8,7 +8,7 @@ description: >
 
 # Add Agent to Group
 
-This skill creates persistent agent definitions for NanoClaw groups. Each agent gets a configuration file (`agent.json`) plus identity and instructions that the agent-runner auto-discovers and registers as SDK `subagent_type` options via Agent Teams.
+This skill creates persistent agent definitions for NanoTars groups. Each agent gets a configuration file (`agent.json`) plus identity and instructions that the agent-runner auto-discovers and registers as SDK `subagent_type` options via Agent Teams.
 
 Agent definitions are just files — no core code changes, no database changes.
 

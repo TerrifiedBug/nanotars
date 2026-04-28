@@ -1,7 +1,7 @@
 ---
 name: create-channel-plugin
 description: >
-  Create a new NanoClaw channel plugin from scratch. Guides through design choices and
+  Create a new NanoTars channel plugin from scratch. Guides through design choices and
   generates a complete channel plugin ready to install. Triggers on "create channel plugin",
   "new channel plugin", "make a channel", "build a channel plugin".
 ---
@@ -10,7 +10,7 @@ description: >
 
 ## Overview
 
-This skill creates new NanoClaw channel plugins through guided conversation. The user describes which messaging platform they want to connect, and this skill generates a complete, working channel plugin following the established pattern (WhatsApp reference implementation).
+This skill creates new NanoTars channel plugins through guided conversation. The user describes which messaging platform they want to connect, and this skill generates a complete, working channel plugin following the established pattern (WhatsApp reference implementation).
 
 You are the channel plugin expert. Your job is to translate the user's idea into a working channel plugin without exposing internal architecture details. Keep questions focused on what the user wants — platform credentials, chat behavior, naming — not on how the plugin system works under the hood.
 
@@ -94,8 +94,8 @@ Before generating:
 |---|---|
 | Channel interface | "The bot connects to [platform] and receives/sends messages" |
 | ownsJid() | "Each channel has its own chat ID format so messages route correctly" |
-| ChannelPluginConfig | "The plugin gets callbacks to deliver messages into NanoClaw" |
-| onChannel hook | "The plugin creates a bot instance when NanoClaw starts" |
+| ChannelPluginConfig | "The plugin gets callbacks to deliver messages into NanoTars" |
+| onChannel hook | "The plugin creates a bot instance when NanoTars starts" |
 | auth.js | "A setup script to authenticate with [platform]" |
 
 ### Anti-Patterns
@@ -126,7 +126,7 @@ Before generating:
 
 ### Escalation:
 
-- If the platform requires core code changes: "This would need changes to NanoClaw's core code, which is beyond what a plugin can do."
+- If the platform requires core code changes: "This would need changes to NanoTars's core code, which is beyond what a plugin can do."
 - If npm dependencies needed: document as prerequisite in the installation skill
 - If container image changes needed (system packages): use `Dockerfile.partial` in the plugin directory — it's automatically merged during `container/build.sh`
 
@@ -166,7 +166,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends some-package &&
 USER node
 ```
 
-The build script scans `plugins/*/Dockerfile.partial` and `plugins/*/*/Dockerfile.partial`, inserting their contents before the final `USER node` line. Build context is the project root, so COPY paths are relative to the NanoClaw directory.
+The build script scans `plugins/*/Dockerfile.partial` and `plugins/*/*/Dockerfile.partial`, inserting their contents before the final `USER node` line. Build context is the project root, so COPY paths are relative to the NanoTars directory.
 
 When to use:
 - The channel library requires native binaries (e.g., `sharp` for image processing)
@@ -406,7 +406,7 @@ export async function onChannel(ctx, config) {
 
 12. **Mention Translation** (important for group triggers): If the platform encodes @mentions using internal IDs (phone numbers, user IDs) instead of display names, translate bot mentions to `@{assistantName}` in the message content before passing to `onMessage`. The orchestrator's trigger pattern matches against the display name (e.g. `@TARS`), not internal IDs. Example: WhatsApp uses LID numbers (`@280217272750304`), which must be translated to `@TARS`.
 
-13. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoClaw's env loader. Guard with early return if missing.
+13. **Credentials**: Read from `process.env` inside `onChannel` — values come from `.env` via NanoTars's env loader. Guard with early return if missing.
 
 ### auth.js Template (when needed)
 
@@ -456,23 +456,23 @@ description: Add {Platform} as a messaging channel. Triggers on "add {name}", "{
 
 # Add {Platform} Channel
 
-Adds {Platform} as a messaging channel to NanoClaw.
+Adds {Platform} as a messaging channel to NanoTars.
 
 ## Preflight
 
-Before installing, verify NanoClaw is set up:
+Before installing, verify NanoTars is set up:
 
 \`\`\`bash
 [ -d node_modules ] && echo "DEPS: ok" || echo "DEPS: missing"
 docker image inspect nanoclaw-agent:latest &>/dev/null && echo "IMAGE: ok" || echo "IMAGE: not built"
-(grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f ~/.claude/.credentials.json ]) && echo "AUTH: ok" || echo "AUTH: missing"
+if grep -q "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .env 2>/dev/null || [ -f "$HOME/.claude/.credentials.json" ]; then echo "AUTH: ok"; else echo "AUTH: missing"; fi
 \`\`\`
 
 If any check fails, tell the user to run `/nanotars-setup` first and stop.
 
 ## Prerequisites
 
-- NanoClaw must be set up and running (`/nanotars-setup`)
+- NanoTars must be set up and running (`/nanotars-setup`)
 {- Platform-specific prerequisites (bot creation, API keys, etc.)}
 
 ## Install
@@ -507,7 +507,7 @@ If any check fails, tell the user to run `/nanotars-setup` first and stop.
 
 6. Rebuild and restart:
    ```bash
-   npm run build && systemctl restart nanoclaw
+   npm run build && nanotars restart
    ```
 
 ## Register a Chat
@@ -516,7 +516,7 @@ After the channel connects, use `/nanotars-add-group` to register a group/chat o
 
 ## Verify
 
-- Check logs: `tail -20 logs/nanoclaw.log | grep '{name}'`
+- Check logs: `tail -20 logs/nanotars.log | grep '{name}'`
 - Send a test message and confirm agent responds
 
 ## Troubleshooting
@@ -529,7 +529,7 @@ After the channel connects, use `/nanotars-add-group` to register a group/chat o
 
 To remove the {Platform} channel:
 
-1. **Stop NanoClaw**
+1. **Stop NanoTars**
 
 2. **Cancel affected tasks:**
    ```bash
@@ -549,7 +549,7 @@ To remove the {Platform} channel:
 
 5. **Remove credentials from `.env`**
 
-6. **Restart NanoClaw** — group folders and message history are preserved.
+6. **Restart NanoTars** — group folders and message history are preserved.
 ```
 
 ## Reference: Existing Channel Plugins
@@ -577,7 +577,7 @@ To remove the {Platform} channel:
 
 ## Publishing to Marketplace
 
-After testing the channel plugin locally with `/add-channel-{name}`, you can publish it to the NanoClaw skills marketplace:
+After testing the channel plugin locally with `/add-channel-{name}`, you can publish it to the NanoTars skills marketplace:
 
 ```
 /nanotars-publish-skill {name}

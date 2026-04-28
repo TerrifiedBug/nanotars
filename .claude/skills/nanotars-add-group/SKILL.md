@@ -1,7 +1,7 @@
 ---
 name: nanotars-add-group
 description: >
-  Add a channel group to NanoClaw. Discovers installed channel plugins, guides through
+  Add a channel group to NanoTars. Discovers installed channel plugins, guides through
   group registration (admin or regular), and handles channel-specific auth setup.
   Triggers on "add channel", "add channel group", "register group", "add whatsapp group",
   "add telegram group", "add discord group", "new group", "connect channel".
@@ -9,7 +9,7 @@ description: >
 
 # Add Channel Group
 
-This skill adds a new group (chat) to an existing channel plugin in NanoClaw. It discovers which channel plugins are installed, presents them to the user, and walks through group registration — including whether the group should be the admin (main) channel or a regular group.
+This skill adds a new group (chat) to an existing channel plugin in NanoTars. It discovers which channel plugins are installed, presents them to the user, and walks through group registration — including whether the group should be the admin (main) channel or a regular group.
 
 This is NOT for creating new channel plugins from scratch — use `/create-channel-plugin` for that.
 
@@ -118,15 +118,15 @@ This step varies by channel. The approach depends on the channel plugin.
 WhatsApp groups are discoverable. Check if the service is running and the channel is connected:
 
 ```bash
-# Check if nanoclaw is running
-pgrep -f 'node.*nanoclaw' > /dev/null && echo "RUNNING" || echo "STOPPED"
+# Check if nanotars is running
+pgrep -f 'node.*nanotars' > /dev/null && echo "RUNNING" || echo "STOPPED"
 ```
 
 If running, the agent can discover WhatsApp groups via IPC. But since we're in Claude Code (not inside a container), we need to guide the user:
 
 > "For WhatsApp groups, I need the group's JID. Here's how to get it:
 >
-> **Option A**: If the group has already messaged while NanoClaw was running, I can look it up:
+> **Option A**: If the group has already messaged while NanoTars was running, I can look it up:
 > ```bash
 > sqlite3 store/messages.db "SELECT jid, name, last_message_time FROM chats WHERE jid LIKE '%@g.us' ORDER BY last_message_time DESC LIMIT 20"
 > ```
@@ -246,7 +246,7 @@ If they have `auth.js`, run it. If not, check for credential env vars and guide 
 ### Step 7: Restart and Verify
 
 ```bash
-npm run build && systemctl restart nanoclaw
+npm run build && nanotars restart
 ```
 
 Wait a few seconds, then verify:
@@ -254,7 +254,7 @@ Wait a few seconds, then verify:
 ```bash
 # Check service is running
 sleep 3
-pgrep -f 'node.*nanoclaw' > /dev/null && echo "SERVICE_RUNNING" || echo "SERVICE_FAILED"
+pgrep -f 'node.*nanotars' > /dev/null && echo "SERVICE_RUNNING" || echo "SERVICE_FAILED"
 
 # Verify group is registered
 sqlite3 -header -column store/messages.db "
@@ -266,7 +266,7 @@ sqlite3 -header -column store/messages.db "
 "
 
 # Check logs for channel connection
-tail -20 logs/nanoclaw.log | grep -i '{channel}'
+tail -20 logs/nanotars.log | grep -i '{channel}'
 ```
 
 Tell the user:
@@ -307,7 +307,7 @@ sqlite3 store/messages.db "
 " 2>/dev/null
 
 # Is the service running?
-pgrep -f 'node.*nanoclaw' > /dev/null && echo "RUNNING" || echo "STOPPED"
+pgrep -f 'node.*nanotars' > /dev/null && echo "RUNNING" || echo "STOPPED"
 ```
 
 ## Multi-Instance Support
@@ -324,7 +324,7 @@ A user might want multiple groups on the same channel (e.g., two WhatsApp groups
 - **Channel not connected**: If the channel plugin exists but isn't connected (e.g., WhatsApp auth expired), guide through re-authentication before registering
 - **Duplicate folder**: If the user picks a folder name that already exists, warn and suggest alternatives
 - **Invalid JID**: Validate JID format matches the channel's convention before registering
-- **Service not running**: If nanoclaw isn't running, register the group in the DB and tell the user to start the service
+- **Service not running**: If nanotars isn't running, register the group in the DB and tell the user to start the service
 
 ## Quick Reference: JID Formats
 
