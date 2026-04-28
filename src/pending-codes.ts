@@ -302,9 +302,14 @@ export async function consumePendingCode(
     let registered: PairingRegistration | null = null;
     let registrationError: string | undefined;
     try {
+      // record.channel may be 'any' (channel-agnostic /register-group code) —
+      // that's a routing wildcard for the pending-code lookup, not a channel
+      // identity for the resulting wiring. The wiring needs the concrete
+      // channel the consume came from so resolveAgentsForInbound(channel, jid)
+      // can find it on subsequent inbound traffic.
       registered = registerForIntent({
         intent: record.intent,
-        channel: record.channel,
+        channel: input.channel,
         platformId: input.platformId,
         name: input.name ?? null,
         isGroup: input.isGroup ?? false,
