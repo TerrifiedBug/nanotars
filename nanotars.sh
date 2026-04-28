@@ -32,13 +32,14 @@ usage() {
 Usage: bash nanotars.sh <command>
 
 Commands:
-  start            Start the nanotars service
-  stop             Stop the nanotars service
-  restart          Restart the nanotars service
-  status           Show service + dependency status
-  logs             Tail logs/nanotars.log
-  pair-main        Issue a 4-digit pairing code for the main control chat
-  auth <channel>   Run channel-specific auth (dispatches to plugins/channels/<channel>/auth.js)
+  start                  Start the nanotars service
+  stop                   Stop the nanotars service
+  restart [--no-build]   Build (npm run build) and restart the service.
+                         Pass --no-build to skip the build step.
+  status                 Show service + dependency status
+  logs                   Tail logs/nanotars.log
+  pair-main              Issue a 4-digit pairing code for the main control chat
+  auth <channel>         Run channel-specific auth (dispatches to plugins/channels/<channel>/auth.js)
 EOF
 }
 
@@ -90,6 +91,25 @@ cmd_stop() {
 }
 
 cmd_restart() {
+  # Default: rebuild before restarting so a code edit + `nanotars restart`
+  # always picks up the change. Pass --no-build to skip — useful when
+  # restarting is the only thing you wanted (crashed service, env tweak).
+  local build=1
+  for arg in "$@"; do
+    if [ "$arg" = "--no-build" ]; then
+      build=0
+    fi
+  done
+
+  if [ "$build" = "1" ]; then
+    if [ -f "$PROJECT_ROOT/package.json" ] && [ -d "$PROJECT_ROOT/node_modules" ]; then
+      log_info "building (tsc — pass --no-build to skip)"
+      ( cd "$PROJECT_ROOT" && npm run build )
+    else
+      log_warn "skipping build — package.json or node_modules missing"
+    fi
+  fi
+
   case "$SERVICE_MANAGER" in
     launchd)
       launchctl kickstart -k "gui/$(id -u)/${LABEL_LAUNCHD}"
@@ -202,7 +222,7 @@ cmd_logs() {
 case "${1:-}" in
   start)     cmd_start ;;
   stop)      cmd_stop ;;
-  restart)   cmd_restart ;;
+  restart)   shift; cmd_restart "$@" ;;
   status)    cmd_status ;;
   logs)      cmd_logs ;;
   pair-main) shift; cmd_pair_main "$@" ;;
