@@ -232,16 +232,24 @@ If any check fails, tell the user to run `/nanotars-setup` first and stop.
    cp -r ${CLAUDE_PLUGIN_ROOT}/files/ plugins/{name}/
    ```
 
-4. **Plugin Configuration:**
-   Ask the user to confirm or customize which channels and groups can use this plugin.
-   - Read current `channels` and `groups` from `plugins/{name}/plugin.json` (defaults: `["*"]`)
-   - For sensitive plugins (personal data, physical systems, private accounts):
-     "This plugin can {capability}. Which groups should have access?" → set `"groups": ["folder1", "folder2"]`
-     "Which channel types should have access?" → set `"channels": ["whatsapp", "discord"]` or leave `["*"]`
-   - For non-sensitive plugins:
-     "Defaults give all groups and channels access. Want to restrict to specific ones instead?"
-     If yes: collect and set specific values. If no: keep `["*"]`.
-   - Update `plugins/{name}/plugin.json` with the chosen values.
+4. **Plugin Configuration — always prompt, don't default silently:**
+
+   Every install MUST ask the operator about group scoping before setting it. Never silently default to `["*"]` (all groups, all channels). Use `AskUserQuestion` so the answer lands in the conversation transcript and Claude doesn't bias toward "leave defaults".
+
+   - First, list available groups so the operator can pick by name:
+     ```bash
+     ls -1d groups/*/ | sed 's|groups/||;s|/||'
+     ```
+   - Then ask using `AskUserQuestion` (single message, multi-select):
+     > Which groups should be able to use this plugin?
+     > 1. **All groups** — accessible to every group (sets `"groups": ["*"]`)
+     > 2. **Specific groups** — pick one or more from the list above
+   - If the user picks "Specific groups", follow up with:
+     > Which channel types?
+     > 1. All channel types (`["*"]`)
+     > 2. Specific types (e.g. `whatsapp`, `telegram`, `discord`)
+   - For sensitive plugins (personal data, physical systems, private accounts) recommend "Specific groups" upfront with a one-line reason.
+   - Update `plugins/{name}/plugin.json` with the chosen values; never skip the question.
 
 5. Rebuild and restart:
    ```bash

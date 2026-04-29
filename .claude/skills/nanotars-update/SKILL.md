@@ -116,7 +116,7 @@ Bucket the fork changed files:
 Check for marketplace plugin updates by matching installed plugin names to the marketplace cache.
 
 If no marketplace cache exists at `~/.claude/plugins/marketplaces/nanotars-skills/`, tell the user:
-> Marketplace not synced locally. Run `/plugin marketplace update nanoclaw-skills` to sync.
+> Marketplace not synced locally. Run `/plugin marketplace update nanotars-skills` to sync.
 
 Then skip plugin scanning entirely.
 

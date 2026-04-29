@@ -68,22 +68,43 @@ MARKETPLACE=~/.claude/plugins/marketplaces/nanotars-skills
 
 If the user passed a plugin name argument (e.g., `calendar`), restrict scanning to that one. Otherwise scan everything under `$NANOTARS/plugins/` and `$NANOTARS/plugins/channels/`.
 
-For each plugin directory, find the marketplace counterpart:
-- Skill plugins: `$MARKETPLACE/plugins/nanotars-{name}/`
-- Channel plugins: `$MARKETPLACE/plugins/nanotars-{name}/` (same — channel plugins live alongside skill plugins in the marketplace)
+For each local plugin, find the marketplace counterpart by **matching `plugin.json.name`**, not directory name. Directories diverge (e.g. local `gif-search/` ↔ marketplace `nanotars-giphy/`) but the canonical identity is the `name` field inside `plugin.json`.
 
-If no marketplace counterpart, skip with a note (this is a local-only plugin → use `/nanotars-publish-skill` instead).
+```bash
+# Build a map of marketplace plugins keyed by their plugin.json name.
+declare -A MARKET_BY_NAME
+for d in "$MARKETPLACE/plugins/"nanotars-*/; do
+  pj="$d/files/plugin.json"
+  [ -f "$pj" ] || continue
+  n=$(jq -r '.name // empty' "$pj")
+  [ -n "$n" ] && MARKET_BY_NAME["$n"]="${d%/}"
+done
 
-Detect changes from **both sources**:
+# For each local plugin (`{name}` is the local directory name), resolve
+# its marketplace dir by plugin.json `name`, then fall back to the
+# `nanotars-{name}` directory convention.
+declare -A MARKET_DIRS
+LOCAL_NAME=$(jq -r '.name' "$NANOTARS/plugins/{name}/plugin.json")
+RESOLVED="${MARKET_BY_NAME[$LOCAL_NAME]:-}"
+if [ -z "$RESOLVED" ] && [ -d "$MARKETPLACE/plugins/nanotars-{name}" ]; then
+  RESOLVED="$MARKETPLACE/plugins/nanotars-{name}"
+fi
+MARKET_DIRS[{name}]="$RESOLVED"
+MARKET_DIR="$RESOLVED"
+```
+
+If no marketplace counterpart is found via either lookup, skip with a note (this is a local-only plugin → use `/nanotars-publish-skill` instead). Track resolved paths in `MARKET_DIRS` so later steps (commit/stage) can reference each plugin's marketplace dir without re-resolving.
+
+Once `MARKET_DIR` is resolved for each plugin, detect changes from **both sources**.
 
 **Source A — runtime files** (local install vs marketplace `files/`):
 
 ```bash
 diff -rq -x node_modules -x package-lock.json -x plugin.json \
-  $NANOTARS/plugins/{name}/ $MARKETPLACE/plugins/nanotars-{name}/files/
+  "$NANOTARS/plugins/{name}/" "$MARKET_DIR/files/"
 # plus a content-only plugin.json diff (ignoring scoping fields):
-jq 'del(.channels, .groups, .version)' $NANOTARS/plugins/{name}/plugin.json > /tmp/local-pj.json
-jq 'del(.channels, .groups, .version)' $MARKETPLACE/plugins/nanotars-{name}/files/plugin.json > /tmp/market-pj.json
+jq 'del(.channels, .groups, .version)' "$NANOTARS/plugins/{name}/plugin.json" > /tmp/local-pj.json
+jq 'del(.channels, .groups, .version)' "$MARKET_DIR/files/plugin.json" > /tmp/market-pj.json
 diff /tmp/local-pj.json /tmp/market-pj.json
 ```
 
@@ -91,7 +112,8 @@ diff /tmp/local-pj.json /tmp/market-pj.json
 
 ```bash
 cd $MARKETPLACE
-git status --porcelain plugins/nanotars-{name}/ 2>/dev/null
+MARKET_REL=$(realpath --relative-to="$MARKETPLACE" "$MARKET_DIR")
+git status --porcelain "$MARKET_REL/" 2>/dev/null
 ```
 
 If both sources are empty for a plugin, mark it unchanged.
@@ -130,21 +152,21 @@ Uncommitted install-skill edits travel into the new branch automatically (git ca
 
 ## Step 4: Sync runtime files into the marketplace tree
 
-For each selected plugin, copy runtime files into `$MARKETPLACE/plugins/nanotars-{name}/files/`. **No `--delete`** — the marketplace may have files we don't carry locally.
+For each selected plugin, copy runtime files into `$MARKET_DIR/files/`. **No `--delete`** — the marketplace may have files we don't carry locally.
 
 ```bash
 rsync -av \
   --exclude node_modules \
   --exclude package-lock.json \
   --exclude plugin.json \
-  $NANOTARS/plugins/{name}/ $MARKETPLACE/plugins/nanotars-{name}/files/
+  "$NANOTARS/plugins/{name}/" "$MARKET_DIR/files/"
 ```
 
 Merge `plugin.json` separately, preserving the marketplace's `version`, `channels`, and `groups` (operator scoping must not leak into the marketplace, and the version is auto-bumped by CI):
 
 ```bash
-MARKET_PJ=$MARKETPLACE/plugins/nanotars-{name}/files/plugin.json
-LOCAL_PJ=$NANOTARS/plugins/{name}/plugin.json
+MARKET_PJ="$MARKET_DIR/files/plugin.json"
+LOCAL_PJ="$NANOTARS/plugins/{name}/plugin.json"
 jq -s '.[0] as $m | .[1] | .version = $m.version | .channels = $m.channels | .groups = $m.groups' \
   "$MARKET_PJ" "$LOCAL_PJ" > "${MARKET_PJ}.tmp" && mv "${MARKET_PJ}.tmp" "$MARKET_PJ"
 ```
@@ -169,12 +191,13 @@ If anything matches, show the matched lines and confirm with the operator before
 
 ## Step 6: Commit, push, PR
 
-Stage only the directories of the selected plugins (don't sweep up unrelated dirty files):
+Stage only the directories of the selected plugins (don't sweep up unrelated dirty files). Use the resolved `MARKET_DIR` for each selected plugin — local-name → marketplace-dir is not always a simple `nanotars-{name}` prefix (e.g. local `gif-search` ↔ marketplace `nanotars-giphy`).
 
 ```bash
 cd $MARKETPLACE
 for name in {selected_plugins}; do
-  git add "plugins/nanotars-${name}/"
+  market_rel=$(realpath --relative-to="$MARKETPLACE" "${MARKET_DIRS[$name]}")
+  git add "$market_rel/"
 done
 ```
 

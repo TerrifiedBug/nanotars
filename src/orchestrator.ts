@@ -709,7 +709,23 @@ export class MessageOrchestrator {
     if (idleTimer) clearTimeout(idleTimer);
     if (typingInterval) clearInterval(typingInterval);
 
-    if (output === 'error' || hadError) {
+    // `hadError` flips on ANY mid-stream `result.status === 'error'` callback,
+    // even when the SDK recovers and the final container status is success
+    // (e.g. an inner tool failed but the agent retried with a different
+    // approach). Trust the final `output` status as authoritative — only
+    // treat the turn as failed when runAgent itself returned 'error'. Without
+    // this, a successful approval-card resume that finished silently
+    // (outputSentToUser=false) would still trigger the generic "Error
+    // processing your message" reply on the user side, even though the
+    // requested action actually completed.
+    if (hadError && output !== 'error') {
+      this.deps.logger.warn(
+        { group: group.name, outputSentToUser },
+        'Mid-stream error during agent run but final status was success; skipping user-facing error message',
+      );
+    }
+
+    if (output === 'error') {
       if (lastTriggerMessageId && this.deps.react) {
         // 🤡 — Telegram only allows a fixed set of reaction emojis for bot
         // accounts (no ❌). 🤡 is on the allowlist and reads as "this didn't
