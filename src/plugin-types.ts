@@ -111,6 +111,14 @@ export interface ChannelPluginConfig {
     code: string;
     channel: string;
     sender?: string | null;
+    /**
+     * Canonical `<channel>:<handle>` identity of the sender (e.g.
+     * `telegram:8236653927`, `whatsapp:14155551234`). Required for the
+     * intent='main' bootstrap path to grant the first-pair user the owner
+     * role and seed `user_dms`. When omitted, pairing still completes but
+     * no role is seeded — operator has to /grant manually.
+     */
+    senderUserId?: string | null;
     platformId: string;
     isGroup?: boolean;
     name?: string | null;

@@ -17,6 +17,8 @@ import {
   consumePendingCode,
   getPendingCodeStatus,
 } from '../pending-codes.js';
+import { listOwners, grantRole, isOwner } from '../permissions/user-roles.js';
+import { ensureUser } from '../permissions/users.js';
 
 let tmpDir: string;
 let storeFile: string;
@@ -321,6 +323,152 @@ describe('consumePendingCode → entity-model registration', () => {
       expect(wirings).toHaveLength(1);
       expect(wirings[0].id).toBe('pre-wire');
     }
+  });
+});
+
+describe("consumePendingCode → intent='main' first-pair owner bootstrap", () => {
+  beforeEach(() => {
+    _initTestDatabase();
+  });
+
+  it('grants owner role + seeds user_dms when first user pairs main from a DM', async () => {
+    createAgentGroup({ name: 'Main', folder: 'main' });
+    const { code } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+
+    expect(listOwners()).toHaveLength(0);
+
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      sender: 'danny',
+      senderUserId: 'telegram:42',
+      platformId: 'tg:42',
+      isGroup: false,
+      name: 'Danny DM',
+    });
+
+    expect(result.matched).toBe(true);
+    if (!result.matched) return;
+    expect(result.registered).not.toBeNull();
+
+    expect(isOwner('telegram:42')).toBe(true);
+
+    const dm = getDb()
+      .prepare(`SELECT * FROM user_dms WHERE user_id = ? AND channel_type = ?`)
+      .get('telegram:42', 'telegram') as { messaging_group_id: string } | undefined;
+    expect(dm).toBeDefined();
+    expect(dm!.messaging_group_id).toBe(result.registered!.messaging_group_id);
+  });
+
+  it('grants owner role but does NOT seed user_dms when first pair lands in a group chat', async () => {
+    createAgentGroup({ name: 'Main', folder: 'main' });
+    const { code } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      senderUserId: 'telegram:99',
+      platformId: 'tg:group-99',
+      isGroup: true,
+      name: 'Op group',
+    });
+
+    expect(result.matched).toBe(true);
+    expect(isOwner('telegram:99')).toBe(true);
+
+    const dm = getDb()
+      .prepare(`SELECT * FROM user_dms WHERE user_id = ?`)
+      .get('telegram:99');
+    expect(dm).toBeUndefined();
+  });
+
+  it('does not double-grant when an owner already exists', async () => {
+    createAgentGroup({ name: 'Main', folder: 'main' });
+    ensureUser({ id: 'telegram:firstowner', kind: 'telegram' });
+    grantRole({ user_id: 'telegram:firstowner', role: 'owner' });
+
+    const { code } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      senderUserId: 'telegram:newcomer',
+      platformId: 'tg:7',
+      isGroup: false,
+    });
+
+    expect(result.matched).toBe(true);
+    expect(isOwner('telegram:firstowner')).toBe(true);
+    expect(isOwner('telegram:newcomer')).toBe(false);
+    expect(listOwners()).toHaveLength(1);
+
+    const dm = getDb()
+      .prepare(`SELECT * FROM user_dms WHERE user_id = ?`)
+      .get('telegram:newcomer');
+    expect(dm).toBeUndefined();
+  });
+
+  it('skips bootstrap (no role/dm) when senderUserId is omitted but pairing still succeeds', async () => {
+    createAgentGroup({ name: 'Main', folder: 'main' });
+    const { code } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      platformId: 'tg:5',
+      isGroup: false,
+    });
+
+    expect(result.matched).toBe(true);
+    expect(result.registered).not.toBeNull();
+    expect(listOwners()).toHaveLength(0);
+  });
+
+  it("does not run bootstrap for non-'main' intents", async () => {
+    const ag2 = createAgentGroup({ name: 'Coder', folder: 'coder' });
+    const { code } = await createPendingCode({
+      channel: 'telegram',
+      intent: { kind: 'agent_group', target: ag2.id },
+    });
+
+    const result = await consumePendingCode({
+      code,
+      channel: 'telegram',
+      senderUserId: 'telegram:200',
+      platformId: 'tg:200',
+      isGroup: false,
+    });
+
+    expect(result.matched).toBe(true);
+    expect(listOwners()).toHaveLength(0);
+    const dm = getDb()
+      .prepare(`SELECT * FROM user_dms WHERE user_id = ?`)
+      .get('telegram:200');
+    expect(dm).toBeUndefined();
+  });
+
+  it('idempotent: re-pairing main after owner exists is a no-op for roles/dm', async () => {
+    createAgentGroup({ name: 'Main', folder: 'main' });
+    const { code: code1 } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+    await consumePendingCode({
+      code: code1,
+      channel: 'telegram',
+      senderUserId: 'telegram:42',
+      platformId: 'tg:42',
+      isGroup: false,
+    });
+
+    const { code: code2 } = await createPendingCode({ channel: 'telegram', intent: 'main' });
+    await consumePendingCode({
+      code: code2,
+      channel: 'telegram',
+      senderUserId: 'telegram:other',
+      platformId: 'tg:42',
+      isGroup: false,
+    });
+
+    expect(listOwners()).toHaveLength(1);
+    expect(isOwner('telegram:42')).toBe(true);
+    expect(isOwner('telegram:other')).toBe(false);
   });
 });
 

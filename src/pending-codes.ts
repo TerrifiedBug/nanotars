@@ -32,7 +32,10 @@ import {
   getMessagingGroup,
   getWiring,
 } from './db/agent-groups.js';
+import { getDb } from './db/init.js';
 import { logger } from './logger.js';
+import { grantRole, listOwners } from './permissions/user-roles.js';
+import { ensureUser } from './permissions/users.js';
 import type { AgentGroup, MessagingGroup, MessagingGroupAgent } from './types.js';
 
 export type PairingIntent = string | Record<string, unknown>;
@@ -80,6 +83,14 @@ export interface ConsumePendingCodeInput {
   code: string;
   channel: string;
   sender?: string | null;
+  /**
+   * Canonical `<channel>:<handle>` identity of the sender. Required for the
+   * intent='main' bootstrap path to grant the consuming user the owner role
+   * and seed `user_dms`. Channel plugins build this from their per-channel
+   * handle (Telegram: `telegram:<from.id>`, WhatsApp: `whatsapp:<phone>`).
+   * When omitted, registration still succeeds but no role/DM is seeded.
+   */
+  senderUserId?: string | null;
   platformId: string;
   isGroup?: boolean;
   name?: string | null;
@@ -340,6 +351,22 @@ export async function consumePendingCode(
         },
         'Paired chat registered in entity model',
       );
+
+      // intent='main' first-pair bootstrap: when no owner exists yet, the
+      // consuming user becomes the global owner AND (for DMs) gets a
+      // user_dms row pointing at the messaging_group they just paired in.
+      // Without this, every approval-card path returns hasApprover:false /
+      // no-DM-target on a fresh install and operators have to hand-craft
+      // SQL inserts to unblock approvals.
+      if (record.intent === 'main') {
+        bootstrapOwnerForMainPair({
+          channel: input.channel,
+          senderUserId: input.senderUserId ?? null,
+          senderDisplay: input.sender ?? null,
+          messagingGroupId: registered.messaging_group_id,
+          isGroup: input.isGroup ?? false,
+        });
+      }
     }
 
     return {
@@ -350,6 +377,73 @@ export async function consumePendingCode(
       registration_error: registrationError,
     };
   });
+}
+
+/**
+ * Grant the consuming user the global owner role on first main-pair, and
+ * (for DMs) seed user_dms so approval-card delivery can reach them. No-op
+ * when an owner already exists or `senderUserId` is missing — older channel
+ * plugins that don't pass the canonical id will skip this path and the
+ * operator can fall back to /grant + manual user_dms insert.
+ *
+ * Idempotent: re-running on an already-bootstrapped install is a no-op via
+ * `listOwners().length === 0` guard plus INSERT OR IGNORE.
+ */
+function bootstrapOwnerForMainPair(args: {
+  channel: string;
+  senderUserId: string | null;
+  senderDisplay: string | null;
+  messagingGroupId: string;
+  isGroup: boolean;
+}): void {
+  if (!args.senderUserId) {
+    logger.warn(
+      { channel: args.channel, isGroup: args.isGroup },
+      'pair-main consumed without senderUserId — skipping owner bootstrap (older plugin?)',
+    );
+    return;
+  }
+  if (listOwners().length > 0) return;
+
+  try {
+    ensureUser({
+      id: args.senderUserId,
+      kind: args.channel,
+      display_name: args.senderDisplay ?? null,
+    });
+    grantRole({
+      user_id: args.senderUserId,
+      role: 'owner',
+      granted_by: args.senderUserId,
+    });
+
+    if (!args.isGroup) {
+      const now = new Date().toISOString();
+      getDb()
+        .prepare(
+          `INSERT OR IGNORE INTO user_dms (user_id, channel_type, messaging_group_id, resolved_at) VALUES (?, ?, ?, ?)`,
+        )
+        .run(args.senderUserId, args.channel, args.messagingGroupId, now);
+    }
+
+    logger.info(
+      {
+        user_id: args.senderUserId,
+        channel: args.channel,
+        seededUserDm: !args.isGroup,
+      },
+      'pair-main bootstrap: granted owner role to first user',
+    );
+  } catch (err) {
+    logger.warn(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        user_id: args.senderUserId,
+        channel: args.channel,
+      },
+      'pair-main bootstrap failed — owner not granted, operator may need /grant',
+    );
+  }
 }
 
 /**
