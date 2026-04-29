@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -382,6 +383,36 @@ function discoverPluginDirs(rootDir: string): string[] {
 }
 
 /** Discover and load all plugins from the plugins/ directory */
+/**
+ * If a plugin declares `dependencies: true` and has a package.json but no
+ * node_modules/, run `npm install --omit=dev` once before loading. Honours
+ * the contract documented in install skills ("the plugin loader handles npm
+ * install automatically on first startup"). Failures are logged and the
+ * plugin is skipped — the host stays up.
+ */
+function ensureDependencies(pluginDir: string, pluginName: string): boolean {
+  const pkgJson = path.join(pluginDir, 'package.json');
+  const nodeModules = path.join(pluginDir, 'node_modules');
+  if (!fs.existsSync(pkgJson) || fs.existsSync(nodeModules)) return true;
+
+  logger.info({ plugin: pluginName, dir: pluginDir }, 'Installing plugin dependencies (first run)');
+  try {
+    execSync('npm install --omit=dev --no-audit --no-fund', {
+      cwd: pluginDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 5 * 60 * 1000,
+    });
+    logger.info({ plugin: pluginName }, 'Plugin dependencies installed');
+    return true;
+  } catch (err) {
+    logger.error(
+      { plugin: pluginName, dir: pluginDir, err },
+      'Failed to install plugin dependencies — plugin will be skipped',
+    );
+    return false;
+  }
+}
+
 export async function loadPlugins(pluginsDir?: string): Promise<PluginRegistry> {
   const registry = new PluginRegistry();
   const dir = pluginsDir || path.join(process.cwd(), 'plugins');
@@ -393,6 +424,10 @@ export async function loadPlugins(pluginsDir?: string): Promise<PluginRegistry> 
     try {
       const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       const manifest = parseManifest(raw);
+
+      if (manifest.dependencies && !ensureDependencies(pluginDir, manifest.name)) {
+        continue;
+      }
 
       let hooks: PluginHooks = {};
 
