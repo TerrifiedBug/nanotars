@@ -57,6 +57,7 @@ import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { formatMessages, routeOutbound, routeOutboundFile, stripInternalTags } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
+import { auditEnvScope } from './env-scope-audit.js';
 import { logger } from './logger.js';
 import { startApprovalExpiryPoll, stopApprovalExpiryPoll } from './permissions/approval-expiry.js';
 import { registerAddMcpServerHandler } from './permissions/add-mcp-server.js';
@@ -266,6 +267,10 @@ async function main(): Promise<void> {
   // Load plugins (env vars, hooks, channels, MCP configs)
   plugins = await loadPlugins();
   setPluginRegistry(plugins);
+
+  // Surface env-scope drift (secrets in root .env that only a group-scoped
+  // plugin declares — those belong in groups/<group>/.env). Observation only.
+  auditEnvScope({ projectRoot: process.cwd(), groupsDir: GROUPS_DIR, plugins: plugins.loaded });
 
   // Load secret redaction AFTER plugins so publicEnvVars are available
   loadSecrets({ additionalSafeVars: plugins.getPublicEnvVars() });

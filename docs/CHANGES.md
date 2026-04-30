@@ -1036,3 +1036,36 @@ The Claude Agent SDK declares `hookSpecificOutput.additionalContext` in its Type
 Every TARS container spawn now appends ~10–12 KB of structured prior-session context to the system prompt — recent observations, session summaries, and decisions from the claude-mem worker DB. The agent enters each turn with cross-session memory in view rather than starting cold. Verified at 09:22 UTC: `Context fetched for system prompt: 11164 chars` / `Plugin system-prompt addition from claude-mem--post-tool-use.js: 11164 chars`. No more `/api/sessions/complete 404` noise on `Stop`.
 
 Marketplace consumers running stock agent-runner won't pick up Tier 3 (the new export is harmlessly ignored) until this fork change ships in a `/nanotars-update` cycle. Tier 1 (the lifecycle fixes) and Tier 2 (project namespace) take effect immediately on plugin install.
+
+---
+
+## 23. Env-Scope Drift Audit
+
+`src/env-scope-audit.ts` runs at host startup (after plugins are loaded, before secret-redaction is initialised) and surfaces a `logger.warn` for any secret in root `.env` that is declared by exactly one plugin scoped to specific groups (i.e. `manifest.groups != ["*"]`) and is not also present in any of those groups' per-group `.env` files. It's a pure observation — never mutates files — but the warning makes blast-radius drift visible to the operator on every `nanotars restart`.
+
+### Why this exists
+
+Per-group `.env` overlays root `.env` at container-spawn time (`container-mounts.ts:386-405`), and the env-var filter only injects what the matching plugin's `containerEnvVars` declares. So a secret in root that is declared only by `groups=["whatsapp-danny"]` plugin won't actually leak to the `main` group's container — the filter strips it. The drift is one of *trust scope* rather than runtime exposure: root `.env` is the broader-trust state on the host (read by the orchestrator, used as a fallback by every plugin loader), while per-group `.env` is restricted to the group's containers and host hooks. Moving group-scoped secrets out of root makes the operator's mental model match what actually ships into each container.
+
+The trigger was finding `EMAIL_ACCOUNTS` (used by `imap-read`, scoped to `groups=["whatsapp-danny"]`) sitting in root `.env` while every other whatsapp-danny-scoped secret had already been migrated to `groups/whatsapp-danny/.env`. One outlier; no automation to flag it. Shipping the audit closes the loop.
+
+### What the audit does NOT flag
+
+- Keys declared by zero plugins (host-only consumers like `OPENAI_API_KEY` for the transcription `onInboundMessage` hook). Host hooks read root `.env` directly; per-group state isn't applicable.
+- Keys declared by plugins with `groups=["*"]` (legitimately global — `claude-mem`, channel plugins like `telegram`).
+- Keys declared by multiple plugins (ambiguous — could belong to any of their group sets; manual review).
+- Keys missing from root *and* group `.env` — that's a different audit (broken plugin), not scoped here.
+
+### Net behavior
+
+On each `nanotars start | restart`, drift surfaces in the host log as:
+
+```
+WARN: env-scope drift: secret in root .env is declared only by a group-scoped plugin — moving it to the group .env shrinks blast radius
+  key: EMAIL_ACCOUNTS
+  plugin: imap-read
+  scopedGroups: ["whatsapp-danny"]
+  suggestedFile: groups/whatsapp-danny/.env
+```
+
+Operator sees the suggestion, moves the line, restart goes silent again.
