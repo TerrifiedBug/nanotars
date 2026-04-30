@@ -93,7 +93,23 @@ MARKET_DIRS[{name}]="$RESOLVED"
 MARKET_DIR="$RESOLVED"
 ```
 
-If no marketplace counterpart is found via either lookup, skip with a note (this is a local-only plugin → use `/nanotars-publish-skill` instead). Track resolved paths in `MARKET_DIRS` so later steps (commit/stage) can reference each plugin's marketplace dir without re-resolving.
+If no marketplace counterpart is found via either lookup, classify the plugin:
+
+- **Fork-bundled core plugin** — the plugin directory is git-tracked in the nanotars fork (e.g. `agent-browser`). These ship via the fork itself, not the marketplace. Skip silently — no publish needed, no warning.
+- **Local-only / unpublished** — not git-tracked. Skip with a note suggesting `/nanotars-publish-skill`.
+
+Detect via:
+```bash
+if git -C "$NANOTARS" ls-files --error-unmatch "plugins/{name}/plugin.json" >/dev/null 2>&1 || \
+   git -C "$NANOTARS" ls-files --error-unmatch "plugins/channels/{name}/plugin.json" >/dev/null 2>&1; then
+  # fork-bundled — skip silently
+  continue
+else
+  # local-only — emit "use /nanotars-publish-skill" hint
+fi
+```
+
+Track resolved paths in `MARKET_DIRS` so later steps (commit/stage) can reference each plugin's marketplace dir without re-resolving.
 
 Once `MARKET_DIR` is resolved for each plugin, detect changes from **both sources**.
 
