@@ -66,20 +66,35 @@ const PLUGIN_HOOKS_DIR = '/workspace/plugin-hooks';
 
 interface PluginHookModule {
   register(ctx: { groupFolder: string; env: Record<string, string | undefined> }): Record<string, Array<{ matcher?: string; hooks: HookCallback[] }>>;
+  // Optional async export. When present, the returned text is appended to the
+  // SDK's systemPrompt at session-construction time. Used by claude-mem to
+  // inject prior session context — the equivalent of upstream openclaw's
+  // `before_prompt_build` → `appendSystemContext` (the SDK's hook-level
+  // additionalContext is type-declared but not runtime-wired in headless
+  // container mode, so this is the only working injection path).
+  getSystemPromptAddition?(ctx: { groupFolder: string; env: Record<string, string | undefined> }): Promise<string | null | undefined> | string | null | undefined;
+}
+
+interface PluginContributions {
+  hooks: Record<string, Array<{ matcher?: string; hooks: HookCallback[] }>>;
+  systemPromptAdditions: string[];
 }
 
 /**
- * Discover and load plugin hook modules from /workspace/plugin-hooks/.
- * Each module exports a register() function that returns SDK hook entries.
+ * Discover and load plugin modules from /workspace/plugin-hooks/.
+ * Each module's register() returns SDK hook entries; an optional
+ * getSystemPromptAddition() returns text appended to the system prompt.
  */
-async function loadPluginHooks(
+async function loadPluginContributions(
   groupFolder: string,
   env: Record<string, string | undefined>,
-): Promise<Record<string, Array<{ matcher?: string; hooks: HookCallback[] }>>> {
+): Promise<PluginContributions> {
   const merged: Record<string, Array<{ matcher?: string; hooks: HookCallback[] }>> = {};
+  const systemPromptAdditions: string[] = [];
 
-  if (!fs.existsSync(PLUGIN_HOOKS_DIR)) return merged;
+  if (!fs.existsSync(PLUGIN_HOOKS_DIR)) return { hooks: merged, systemPromptAdditions };
 
+  const ctx = { groupFolder, env };
   const files = fs.readdirSync(PLUGIN_HOOKS_DIR).filter(f => f.endsWith('.js'));
   for (const file of files) {
     try {
@@ -88,18 +103,31 @@ async function loadPluginHooks(
         log(`Plugin hook ${file}: no register() export, skipping`);
         continue;
       }
-      const hooks = mod.register({ groupFolder, env });
+      const hooks = mod.register(ctx);
       for (const [event, entries] of Object.entries(hooks)) {
         if (!merged[event]) merged[event] = [];
         merged[event].push(...entries);
       }
       log(`Plugin hook loaded: ${file}`);
+
+      if (typeof mod.getSystemPromptAddition === 'function') {
+        try {
+          const addition = await mod.getSystemPromptAddition(ctx);
+          if (typeof addition === 'string' && addition.trim().length > 0) {
+            const trimmed = addition.trim();
+            systemPromptAdditions.push(trimmed);
+            log(`Plugin system-prompt addition from ${file}: ${trimmed.length} chars`);
+          }
+        } catch (err) {
+          log(`Plugin ${file} getSystemPromptAddition failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
     } catch (err) {
       log(`Failed to load plugin hook ${file}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  return merged;
+  return { hooks: merged, systemPromptAdditions };
 }
 
 // Capture secrets before removing them from process.env.
@@ -478,8 +506,10 @@ async function runQuery(
   // Global CLAUDE.md is reached via the workspace path:
   // groups/<folder>/CLAUDE.md @-imports .claude-shared.md → /workspace/global/CLAUDE.md.
   // The SDK auto-loads workspace CLAUDE.md, so injecting it again into the
-  // system prompt would double-load. Identity-only here.
-  const systemAppend = identity ?? '';
+  // system prompt would double-load. Identity here, plus plugin-contributed
+  // additions (see PluginHookModule.getSystemPromptAddition) appended below
+  // once plugin contributions are loaded.
+  let systemAppend = identity ?? '';
 
   // Discover additional directories mounted at /workspace/extra/*
   // These are passed to the SDK so their CLAUDE.md files are loaded automatically
@@ -497,8 +527,14 @@ async function runQuery(
     log(`Additional directories: ${extraDirs.join(', ')}`);
   }
 
-  // Load plugin-contributed SDK hooks
-  const pluginHooks = await loadPluginHooks(containerInput.groupFolder, sdkEnv);
+  // Load plugin-contributed SDK hooks AND system-prompt additions
+  const { hooks: pluginHooks, systemPromptAdditions } = await loadPluginContributions(
+    containerInput.groupFolder,
+    sdkEnv,
+  );
+  if (systemPromptAdditions.length > 0) {
+    systemAppend = [systemAppend, ...systemPromptAdditions].filter(Boolean).join('\n\n');
+  }
 
   // Build merged hooks: core hooks + plugin hooks
   const mergedHooks: Record<string, Array<{ matcher?: string; hooks: HookCallback[] }>> = {

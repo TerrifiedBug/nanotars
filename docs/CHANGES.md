@@ -1004,3 +1004,35 @@ Plugin mounts no longer fail silently. Operators are prompted before allowlist e
 ### What stayed `nanoclaw`
 
 Internal Docker artifacts kept the legacy name to avoid a container image rebuild + retag of running containers: image `nanoclaw-agent:latest`, install label `nanoclaw.install`, container name prefix `nanoclaw-{group}-{ts}`. These are invisible to skill workflows and renaming them is purely cosmetic, so out of scope.
+
+---
+
+## 22. Plugin System-Prompt Contributions
+
+Plugins can now contribute text that gets appended to the SDK's `systemPrompt` at session-construction time, in addition to the existing SDK hook events. Built for `claude-mem` to inject prior session context into every TARS turn (the equivalent of upstream openclaw's `before_prompt_build` → `appendSystemContext`), but generally available to any plugin that needs to surface stateful context the agent should see at every prompt build.
+
+### Why this exists
+
+The Claude Agent SDK declares `hookSpecificOutput.additionalContext` in its TypeScript types for `SessionStart` / `UserPromptSubmit` / similar events, but the bundled `sdk.mjs` runtime in headless container mode has zero references to either `additionalContext` or `SessionStart` firing — they're CLI-only features (Claude Code), not headless SDK features. Verified by grepping the bundled SDK source. The supported injection point that *does* work in headless mode is `systemPrompt.append`, already wired through `container/agent-runner/src/providers/claude.ts:126` via the `systemContext.instructions` channel. This change extends that channel to also collect from plugins.
+
+### What changed
+
+- **`container/agent-runner/src/index.ts`** — Extended the `PluginHookModule` interface with an optional `getSystemPromptAddition?(ctx)` async export. Renamed `loadPluginHooks` to `loadPluginContributions`, which now returns `{ hooks, systemPromptAdditions }`. Plugin-contributed strings are concatenated into `systemAppend` (the existing identity-only system-prompt suffix) before SDK construction. Backward-compatible — plugins without the export are unaffected.
+
+- **`plugins/claude-mem/hooks/post-tool-use.js` (v1.1.0)** — Concurrent rewrite mirroring upstream openclaw:
+  - Dropped the dead `/api/sessions/complete` POST on `Stop` (404 — endpoint never existed in the upstream worker; the worker self-completes when its SDK-agent generator drains).
+  - Dropped the `PreCompact` re-init (was creating duplicate prompt records per upstream guidance — the worker preserves session state across compaction independently).
+  - Added `memory_*` tool skip in `PostToolUse` (recursive observation guard).
+  - Added 1000-char truncation on `tool_response` to prevent oversized payloads.
+  - Drop observations with empty `cwd` rather than POSTing them (worker silently drops them anyway).
+  - 30-second prompt-init dedup guard keyed on `session_id|prompt[0..64]` to suppress double-init when the SDK retries or an IPC pipe-in fires within the same turn.
+  - New `getSystemPromptAddition(ctx)` export — fetches `${CLAUDE_MEM_URL}/api/context/inject?projects=nanotars`, caches for 5 minutes in-process, returns the markdown for `systemAppend`.
+  - Project namespace unified to `nanotars` (the worker normalises everything to a single project anyway, so per-group prefixing was decorative).
+
+- **`plugins/claude-mem/container-skills/SKILL.md`** — Aligned the agent's manual query examples to `project=nanotars` (matches what the hook writes) and added a note that prior context auto-injects at session start, so explicit search is only needed when the auto-injected slice doesn't cover the question.
+
+### Net behavior
+
+Every TARS container spawn now appends ~10–12 KB of structured prior-session context to the system prompt — recent observations, session summaries, and decisions from the claude-mem worker DB. The agent enters each turn with cross-session memory in view rather than starting cold. Verified at 09:22 UTC: `Context fetched for system prompt: 11164 chars` / `Plugin system-prompt addition from claude-mem--post-tool-use.js: 11164 chars`. No more `/api/sessions/complete 404` noise on `Stop`.
+
+Marketplace consumers running stock agent-runner won't pick up Tier 3 (the new export is harmlessly ignored) until this fork change ships in a `/nanotars-update` cycle. Tier 1 (the lifecycle fixes) and Tier 2 (project namespace) take effect immediately on plugin install.
