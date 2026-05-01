@@ -23,6 +23,14 @@ fi
 
 cd "$NANOTARS_INSTALL_DIR"
 
+TS_CLI="$NANOTARS_INSTALL_DIR/dist/cli/nanotars.js"
+
+if [ -f "$TS_CLI" ]; then
+  exec node "$TS_CLI" "$@"
+fi
+
+# Compatibility fallback for checkouts that have not been built yet. Once
+# setup.sh or `nanotars restart` runs, dist/cli/nanotars.js takes over.
 case "${1:-}" in
   "")
     exec claude
