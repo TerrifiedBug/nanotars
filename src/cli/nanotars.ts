@@ -16,6 +16,7 @@ import { agentsCommand, channelsCommand, groupsCommand, pluginsCommand, tasksCom
 import { doctorCommand, envCommand, logsCommand } from './commands/doctor.js';
 import { modelCommand } from './commands/model.js';
 import { mountsCommand } from './commands/mounts.js';
+import { daemonCommand, serviceCommand } from './commands/service.js';
 import { runPairMain } from './pair-main.js';
 
 const PROJECT_ROOT = process.cwd();
@@ -60,6 +61,7 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  users                  List or update user roles',
       '  doctor                 Structured health summary',
       '  env audit              Audit declared plugin env vars',
+      '  service                Install service files or run setup probe',
       '  setup                  Re-run setup.sh',
       '  help                   Show this help',
       '',
@@ -437,6 +439,10 @@ async function main(): Promise<number> {
       return doctorCommand(args, PROJECT_ROOT);
     case 'env':
       return envCommand(args, PROJECT_ROOT);
+    case 'service':
+      return serviceCommand(args, PROJECT_ROOT);
+    case 'daemon':
+      return daemonCommand(PROJECT_ROOT);
     case 'setup':
       return execReplacing('bash', ['./setup.sh', ...args]);
     case '-h':

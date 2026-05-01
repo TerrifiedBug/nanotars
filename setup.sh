@@ -162,14 +162,10 @@ run_quiet "container build (this can take a few minutes on first run)" bash "$PR
 # --- Service install + start ---
 
 log_step "Installing service"
-case "$PLATFORM" in
-  macos) bash "$PROJECT_ROOT/setup/service-launchd.sh" ;;
-  linux) bash "$PROJECT_ROOT/setup/service-systemd.sh" ;;
-  *)
-    log_error "Unsupported platform: $PLATFORM"
-    exit 1
-    ;;
-esac
+node "$PROJECT_ROOT/dist/cli/nanotars.js" service install || {
+  log_error "service install failed"
+  exit 1
+}
 
 # launchd's RunAtLoad=true and systemd-user's restart line both start the
 # service automatically. The nohup branch (root, WSL, no-systemd) writes a
