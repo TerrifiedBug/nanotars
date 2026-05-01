@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 
 import {
   planChannelMigration,
@@ -29,6 +30,8 @@ export async function groupsCommand(args: string[]): Promise<number> {
   initCliDatabase();
 
   switch (subcommand ?? 'list') {
+    case 'create':
+      return createGroup(subArgs);
     case 'list':
       return listGroups(json);
     case 'show':
@@ -61,6 +64,9 @@ export async function channelsCommand(
   switch (subcommand ?? 'list') {
     case 'list':
       return listChannels(projectRoot, json);
+    case 'clone':
+    case 'add-instance':
+      return cloneChannel(subArgs, projectRoot);
     case 'auth':
       process.stderr.write('channels auth: use `nanotars auth <channel>`\n');
       return 64;
@@ -255,6 +261,57 @@ function showGroup(args: string[], json: boolean): number {
   return 0;
 }
 
+function createGroup(args: string[]): number {
+  const folder = args[0];
+  if (!folder) {
+    process.stderr.write(
+      'groups create: usage: nanotars groups create <folder> [--name <name>] [--instructions <text>] --apply\n',
+    );
+    return 64;
+  }
+  if (!isSafeName(folder)) {
+    process.stderr.write(
+      `groups create: invalid folder '${folder}' (use letters, numbers, dash, or underscore)\n`,
+    );
+    return 64;
+  }
+  const existing = getAllAgentGroups().find((g) => g.folder === folder);
+  if (existing) {
+    process.stderr.write(`groups create: group already exists: ${folder}\n`);
+    return 1;
+  }
+  const name = readOption(args, '--name') ?? capitalise(folder);
+  const instructions = readOption(args, '--instructions');
+  const provider = readOption(args, '--provider') ?? 'claude';
+
+  process.stdout.write(`group: ${folder} (${name})\n`);
+  process.stdout.write(`provider: ${provider}\n`);
+  process.stdout.write(`directory: ${path.join(process.cwd(), 'groups', folder)}\n`);
+  if (!hasFlag(args, '--apply')) {
+    process.stdout.write('dry-run: pass --apply to create the group\n');
+    return 0;
+  }
+
+  try {
+    const group = createAgentGroup({
+      name,
+      folder,
+      agent_provider: provider,
+    });
+    initGroupFilesystem(group, { instructions });
+    process.stdout.write(`created group: ${folder}\n`);
+    process.stdout.write(
+      `run \`nanotars groups register-code ${folder}\` to pair a chat\n`,
+    );
+    return 0;
+  } catch (err) {
+    process.stderr.write(
+      `groups create: failed to create group '${folder}': ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 1;
+  }
+}
+
 async function registerCode(args: string[]): Promise<number> {
   const folder = args[0];
   if (!folder) {
@@ -359,6 +416,9 @@ async function migrateCode(args: string[], json: boolean): Promise<number> {
   );
   process.stdout.write(
     'When claimed, NanoTars will wire the existing group folder to the new chat, move scheduled tasks to the new chat id, update safe plugin channel scopes, and remove old source-channel bindings.\n',
+  );
+  process.stdout.write(
+    'After the destination chat confirms the claim, run `nanotars restart` so updated plugin channel scopes are loaded into new containers.\n',
   );
   process.stdout.write(`Code expires: ${result.expires_at ?? 'never'}\n`);
   return 0;
@@ -542,6 +602,97 @@ function listChannels(projectRoot: string, json: boolean): number {
     );
   }
   if (rows.length === 0) process.stdout.write('(none)\n');
+  return 0;
+}
+
+function cloneChannel(args: string[], projectRoot: string): number {
+  const sourceName = args[0];
+  const instanceName = args[1];
+  if (!sourceName || !instanceName) {
+    process.stderr.write(
+      'channels clone: usage: nanotars channels clone <source-channel> <new-channel> [--token-env <KEY>] [--pool-env <KEY>] [--jid-prefix <prefix>] [--no-install] [--replace] --apply\n',
+    );
+    return 64;
+  }
+  if (!isSafeName(instanceName)) {
+    process.stderr.write(
+      `channels clone: invalid channel name '${instanceName}' (use letters, numbers, dash, or underscore)\n`,
+    );
+    return 64;
+  }
+  if (sourceName === instanceName) {
+    process.stderr.write('channels clone: source and destination must differ\n');
+    return 64;
+  }
+
+  const source = resolvePlugin(projectRoot, sourceName, true);
+  if (!source) {
+    process.stderr.write(`channels clone: source channel not found: ${sourceName}\n`);
+    return 1;
+  }
+  const destDir = path.join(projectRoot, 'plugins', 'channels', instanceName);
+  const destManifestPath = path.join(destDir, 'plugin.json');
+  const existing = channelPluginExists(projectRoot, instanceName);
+  if ((existing || fs.existsSync(destDir)) && !hasFlag(args, '--replace')) {
+    process.stderr.write(
+      `channels clone: destination already exists: ${instanceName} (pass --replace to overwrite)\n`,
+    );
+    return 1;
+  }
+
+  const tokenEnv = readOption(args, '--token-env') ?? defaultChannelTokenEnv(instanceName);
+  const poolEnv = readOption(args, '--pool-env') ?? defaultChannelPoolEnv(instanceName);
+  const jidPrefix = readOption(args, '--jid-prefix');
+  const shouldInstall = !hasFlag(args, '--no-install');
+  const manifest = prepareClonedChannelManifest(source.manifest, {
+    instanceName,
+    tokenEnv,
+    poolEnv,
+    jidPrefix,
+  });
+
+  process.stdout.write(`source: ${source.name}\n`);
+  process.stdout.write(`destination: ${instanceName}\n`);
+  process.stdout.write(`directory: ${destDir}\n`);
+  process.stdout.write(
+    `token env: ${tokenEnv}${manifest.containerEnvVars?.includes(tokenEnv) ? '' : ' (not declared in containerEnvVars)'}\n`,
+  );
+  if (manifest.telegramBotPoolEnv) process.stdout.write(`pool env: ${poolEnv}\n`);
+  if (manifest.telegramJidPrefix) process.stdout.write(`jid prefix: ${manifest.telegramJidPrefix}\n`);
+  process.stdout.write(`install dependencies: ${shouldInstall ? 'yes' : 'no'}\n`);
+
+  if (!hasFlag(args, '--apply')) {
+    process.stdout.write('dry-run: pass --apply to create the channel instance\n');
+    return 0;
+  }
+
+  try {
+    fs.rmSync(destDir, { recursive: true, force: true });
+    copyDir(source.dir, destDir, { skip: new Set(['node_modules']) });
+    writeFileAtomic(destManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    if (shouldInstall && fs.existsSync(path.join(destDir, 'package.json'))) {
+      const install = spawnSync('npm', ['install'], {
+        cwd: destDir,
+        stdio: 'inherit',
+      });
+      if (install.error) throw install.error;
+      if ((install.status ?? 0) !== 0) {
+        process.stderr.write(
+          `channels clone: npm install failed in ${destDir}\n`,
+        );
+        return install.status ?? 1;
+      }
+    }
+  } catch (err) {
+    process.stderr.write(
+      `channels clone: failed to create '${instanceName}': ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 1;
+  }
+
+  process.stdout.write(`created channel instance: ${instanceName}\n`);
+  process.stdout.write(`run \`nanotars auth ${instanceName}\` to authenticate it\n`);
+  process.stdout.write('run `nanotars restart` to load the new channel\n');
   return 0;
 }
 
@@ -1074,6 +1225,45 @@ function removeAgent(args: string[], projectRoot: string): number {
   return 0;
 }
 
+function prepareClonedChannelManifest(
+  sourceManifest: Record<string, any>,
+  opts: {
+    instanceName: string;
+    tokenEnv: string;
+    poolEnv: string;
+    jidPrefix?: string;
+  },
+): Record<string, any> {
+  const manifest = { ...sourceManifest };
+  const sourceTokenEnv =
+    typeof sourceManifest.telegramBotTokenEnv === 'string'
+      ? sourceManifest.telegramBotTokenEnv
+      : undefined;
+  const sourcePoolEnv =
+    typeof sourceManifest.telegramBotPoolEnv === 'string'
+      ? sourceManifest.telegramBotPoolEnv
+      : undefined;
+
+  manifest.name = opts.instanceName;
+
+  const envVars = uniqueStrings(sourceManifest.containerEnvVars);
+  if (sourceTokenEnv && envVars.includes(sourceTokenEnv)) {
+    manifest.containerEnvVars = envVars.map((envVar) =>
+      envVar === sourceTokenEnv ? opts.tokenEnv : envVar,
+    );
+  } else if (envVars.length === 1 && /TOKEN$/i.test(envVars[0])) {
+    manifest.containerEnvVars = [opts.tokenEnv];
+  } else if (envVars.length > 0) {
+    manifest.containerEnvVars = envVars;
+  }
+
+  if (sourceTokenEnv) manifest.telegramBotTokenEnv = opts.tokenEnv;
+  if (sourcePoolEnv) manifest.telegramBotPoolEnv = opts.poolEnv;
+  if (opts.jidPrefix) manifest.telegramJidPrefix = opts.jidPrefix;
+
+  return manifest;
+}
+
 function readPluginManifests(
   dir: string,
   channelOnly: boolean,
@@ -1242,13 +1432,18 @@ function readAgentTemplates(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function copyDir(src: string, dest: string): void {
+function copyDir(
+  src: string,
+  dest: string,
+  opts: { skip?: Set<string> } = {},
+): void {
   fs.mkdirSync(dest, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (opts.skip?.has(entry.name)) continue;
     const from = path.join(src, entry.name);
     const to = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      copyDir(from, to);
+      copyDir(from, to, opts);
     } else if (entry.isFile()) {
       fs.copyFileSync(from, to);
     }
@@ -1264,6 +1459,18 @@ function writeFileAtomic(file: string, content: string): void {
 
 function capitalise(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function isSafeName(value: string): boolean {
+  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(value);
+}
+
+function defaultChannelTokenEnv(channelName: string): string {
+  return `${channelName.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_BOT_TOKEN`;
+}
+
+function defaultChannelPoolEnv(channelName: string): string {
+  return `${channelName.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_BOT_POOL`;
 }
 
 function channelAuthStatus(
@@ -1289,12 +1496,34 @@ function dryRunOnly(command: string, message: string): number {
 
 function groupsHelp(stream: NodeJS.WritableStream = process.stdout): void {
   stream.write(
-    'Usage: nanotars groups <list|show|register-code|migrate-code|delete> [--json]\n',
+    [
+      'Usage: nanotars groups <command> [--json]',
+      '',
+      'Commands:',
+      '  list',
+      '  show <folder>',
+      '  create <folder> [--name <name>] [--instructions <text>] --apply',
+      '  register-code <folder>',
+      '  migrate-code <folder> --from-channel <name> --to-channel <name> [--apply]',
+      '  delete <folder> [--apply]',
+      '',
+    ].join('\n'),
   );
 }
 
 function channelsHelp(stream: NodeJS.WritableStream = process.stdout): void {
-  stream.write('Usage: nanotars channels <list|auth|remove> [--json]\n');
+  stream.write(
+    [
+      'Usage: nanotars channels <command> [--json]',
+      '',
+      'Commands:',
+      '  list',
+      '  clone <source-channel> <new-channel> [--token-env <KEY>] [--pool-env <KEY>] [--jid-prefix <prefix>] [--no-install] [--replace] --apply',
+      '  auth <channel>        Alias guidance; prefer nanotars auth <channel>',
+      '  remove <channel> [--apply]',
+      '',
+    ].join('\n'),
+  );
 }
 
 function pluginsHelp(stream: NodeJS.WritableStream = process.stdout): void {

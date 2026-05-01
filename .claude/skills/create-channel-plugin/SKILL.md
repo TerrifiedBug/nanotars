@@ -45,9 +45,30 @@ All channel plugins follow the same archetype:
 - Optional `auth.js` for standalone authentication setup
 
 Determine internally:
-- **JID prefix**: Must be unique and non-overlapping. Convention: `{platform}:` prefix (e.g., `tg:123`, `dc:456`, `slack:C01ABC`)
+- **JID prefix**: Must be unique and non-overlapping. Convention: `{platform}:` prefix (e.g., `tg:123`, `dc:456`, `slack:C01ABC`) for singleton/default channels. If the same platform may be installed more than once with different credentials, make the prefix instance-aware (e.g., default `telegram` keeps `tg:123`, additional `telegram-personal` uses `telegram-personal:123`).
 - **Auth method**: Token-based (add to `.env`) or interactive (needs `auth.js`)
 - **npm dependency**: If needed, document as prerequisite (don't run `npm install`)
+
+### Instance-Aware Channel Design
+
+Channel plugins must support more than one installed instance when the platform
+allows multiple independent bot/app credentials. Do this even when generating
+the first/default instance:
+
+- Derive the runtime channel name from `plugin.json.name`, not from a hardcoded
+  class field alone.
+- Store auth status under `data/channels/{channelName}/auth-status.txt`.
+- Derive token env keys from the instance name unless the manifest overrides
+  them. Example: `telegram` -> `TELEGRAM_BOT_TOKEN`,
+  `telegram-personal` -> `TELEGRAM_PERSONAL_BOT_TOKEN`.
+- Register any module-level delivery adapters, callback handlers, or singleton
+  state per channel name. Do not let the second instance overwrite the first.
+- Use instance-aware platform IDs/JIDs for non-default instances so outbound
+  routing cannot select the wrong bot.
+- The generated add-channel skill should document how to create a second
+  instance by copying the template to `plugins/channels/{instance}/`, updating
+  `plugin.json.name`, authenticating with `nanotars auth {instance}`, and using
+  that instance name in `nanotars migrate-channel --to-channel {instance}`.
 
 ### Phase 3: Fill in Details
 

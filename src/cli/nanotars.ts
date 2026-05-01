@@ -56,8 +56,8 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  mounts                 Manage container mount allowlist',
       '  db                     Database stats, integrity, and maintenance',
       '  dashboard              Start/status/stop the local monitoring dashboard',
-      '  groups                 List/show/register group wiring',
-      '  channels               List installed channel plugins',
+      '  groups                 List, create, pair, migrate, or delete groups',
+      '  channels               List, clone, auth, or remove channel plugins',
       '  plugins                List installed plugins',
       '  agents                 List, add, or remove group subagents',
       '  tasks                  List or cancel scheduled tasks',
@@ -309,7 +309,12 @@ async function auth(args: string[]): Promise<number> {
     info(`is the channel plugin installed? Try /add-channel-${channel}`);
     return 1;
   }
-  return execReplacing('node', [script, ...args.slice(1)]);
+  const code = await execReplacing('node', [script, ...args.slice(1)]);
+  if (code === 0) {
+    info(`authentication complete for ${channel}`);
+    info(`run 'nanotars restart' to load or refresh this channel`);
+  }
+  return code;
 }
 
 async function pairMain(args: string[]): Promise<number> {
