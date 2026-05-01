@@ -386,7 +386,7 @@ describe('task CRUD', () => {
 describe('schema_version', () => {
   it('creates version table with all migrations applied', () => {
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(18);
+    expect(versions.length).toBe(19);
     expect(versions[0].version).toBe('001_add_context_mode');
     expect(versions[5].version).toBe('006_add_task_script');
     expect(versions[6].version).toBe('007_add_engage_mode_axes');
@@ -401,6 +401,7 @@ describe('schema_version', () => {
     expect(versions[15].version).toBe('016_add_pending_sender_approvals');
     expect(versions[16].version).toBe('017_add_pending_channel_approvals');
     expect(versions[17].version).toBe('018_add_pending_questions');
+    expect(versions[18].version).toBe('019_add_runtime_containers');
   });
 
   it('is idempotent on re-init', () => {
@@ -458,12 +459,13 @@ describe('schema_version', () => {
     _initTestDatabaseFrom(partialDb);
 
     const versions = _getSchemaVersion();
-    expect(versions.length).toBe(18);
+    expect(versions.length).toBe(19);
     expect(versions.map((v) => v.version)).toEqual([
       '001_add_context_mode', '002_add_model', '003_add_channel', '004_add_is_bot_message', '005_add_reply_context', '006_add_task_script', '007_add_engage_mode_axes', '008_split_registered_groups', '009_drop_registered_groups',
       '010_add_users', '011_add_user_roles', '012_add_agent_group_members', '013_add_user_dms', '014_seed_sender_allowlist_to_members',
       '015_add_pending_approvals',
       '016_add_pending_sender_approvals', '017_add_pending_channel_approvals', '018_add_pending_questions',
+      '019_add_runtime_containers',
     ]);
   });
 });

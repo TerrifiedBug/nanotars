@@ -198,6 +198,39 @@ const PENDING_QUESTIONS_DDL = `
 const PHASE_4D_DDL =
   PENDING_SENDER_APPROVALS_DDL + PENDING_CHANNEL_APPROVALS_DDL + PENDING_QUESTIONS_DDL;
 
+/**
+ * Phase 6 foundation: runtime/container observability without changing the
+ * current queue or file-IPC architecture. This is the stable read model the
+ * future gateway/dashboard can consume before any two-DB IPC migration.
+ */
+const RUNTIME_CONTAINERS_DDL = `
+  CREATE TABLE IF NOT EXISTS runtime_containers (
+    run_id          TEXT PRIMARY KEY,
+    container_name  TEXT NOT NULL UNIQUE,
+    agent_group_id  TEXT REFERENCES agent_groups(id),
+    group_folder    TEXT NOT NULL,
+    group_name      TEXT,
+    chat_jid         TEXT,
+    task_id          TEXT,
+    reason           TEXT NOT NULL,
+    status           TEXT NOT NULL,
+    model            TEXT,
+    pid              INTEGER,
+    exit_code        INTEGER,
+    started_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
+    finished_at      TEXT,
+    heartbeat_at     TEXT,
+    current_tool     TEXT,
+    log_file         TEXT,
+    error            TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_runtime_containers_status_updated
+    ON runtime_containers(status, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_runtime_containers_group_updated
+    ON runtime_containers(group_folder, updated_at);
+`;
+
 let db: Database.Database;
 
 export function getDb(): Database.Database {
@@ -286,6 +319,7 @@ export function createSchema(database: Database.Database): void {
   database.exec(RBAC_DDL);
   database.exec(APPROVALS_DDL);
   database.exec(PHASE_4D_DDL);
+  database.exec(RUNTIME_CONTAINERS_DDL);
 
   runMigrations(database);
 }
@@ -602,6 +636,12 @@ const MIGRATIONS: Array<{ name: string; up: (db: Database.Database) => void }> =
       db.exec(PENDING_QUESTIONS_DDL);
     },
   },
+  {
+    name: '019_add_runtime_containers',
+    up: (db) => {
+      db.exec(RUNTIME_CONTAINERS_DDL);
+    },
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {
@@ -712,4 +752,3 @@ export function backupDatabase(): void {
     logger.error({ err }, 'Database backup failed');
   }
 }
-

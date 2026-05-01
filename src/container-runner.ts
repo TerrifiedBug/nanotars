@@ -23,6 +23,7 @@ import {
 import { buildVolumeMounts, getHomeDir, readSecrets, VolumeMount } from './container-mounts.js';
 import * as containerRuntime from './container-runtime.js';
 import { getAgentGroupById, updateAgentGroupContainerConfig } from './db/agent-groups.js';
+import { finishRuntimeContainer, recordRuntimeContainerStart, touchRuntimeContainer } from './db/runtime.js';
 import { generateAgentGroupDockerfile } from './image-build.js';
 import { logger } from './logger.js';
 import { redactSecrets } from './secret-redact.js';
@@ -95,11 +96,13 @@ function resolveFromParser(
   groupName: string,
   errorContext: string,
   onSuccess?: () => void,
+  onError?: (err: unknown) => void,
 ): void {
   parser.settled().then(() => {
     onSuccess?.();
     resolve({ status: 'success', result: null, newSessionId: parser.newSessionId });
   }).catch((err) => {
+    onError?.(err);
     logger.error({ group: groupName, err }, errorContext);
     resolve({ status: 'error', result: null, error: String(err) });
   });
@@ -322,6 +325,18 @@ export async function runContainerAgent(
     // Create log file and stream early so stdout is written to disk, not RAM
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const logFile = path.join(logsDir, `container-${timestamp}.log`);
+    const runtimeRow = recordRuntimeContainerStart({
+      container_name: containerName,
+      agent_group_id: group.id,
+      group_folder: group.folder,
+      group_name: group.name,
+      chat_jid: input.chatJid,
+      task_id: input.taskId ?? null,
+      reason: input.isScheduledTask ? 'scheduled_task' : 'message',
+      model: effectiveModel,
+      pid: container.pid ?? null,
+      log_file: logFile,
+    });
     const logStream = fs.createWriteStream(logFile, { flags: 'w' });
     let stdoutSize = 0;
 
@@ -362,6 +377,7 @@ export async function runContainerAgent(
     // Reset the timeout whenever there's activity (streaming output)
     const resetTimeout = () => {
       clearTimeout(timeout);
+      touchRuntimeContainer(runtimeRow.run_id);
       timeout = setTimeout(killOnTimeout, timeoutMs);
     };
 
@@ -420,6 +436,12 @@ export async function runContainerAgent(
       // visible on the host and vice versa.
 
       if (timedOut) {
+        finishRuntimeContainer({
+          run_id: runtimeRow.run_id,
+          status: parser?.hadOutput ? 'completed' : 'timeout',
+          exit_code: code,
+          error: parser?.hadOutput ? null : `Container timed out after ${configTimeout}ms`,
+        });
         // Append timeout metadata to the existing log file
         fs.appendFileSync(logFile, [
           `\n=== Container Run Log (TIMEOUT) ===`,
@@ -439,7 +461,19 @@ export async function runContainerAgent(
             { group: group.name, containerName, duration, code },
             'Container timed out after output (idle cleanup)',
           );
-          resolveFromParser(parser, resolve, group.name, 'Output chain error after timeout');
+          resolveFromParser(
+            parser,
+            resolve,
+            group.name,
+            'Output chain error after timeout',
+            undefined,
+            (err) => finishRuntimeContainer({
+              run_id: runtimeRow.run_id,
+              status: 'failed',
+              exit_code: code,
+              error: `Output chain error after timeout: ${err instanceof Error ? err.message : String(err)}`,
+            }),
+          );
           return;
         }
 
@@ -521,6 +555,12 @@ export async function runContainerAgent(
 
       if (code !== 0) {
         const stdout = rawStdout;
+        finishRuntimeContainer({
+          run_id: runtimeRow.run_id,
+          status: 'failed',
+          exit_code: code,
+          error: `Container exited with code ${code}: ${redactSecrets(stderr.slice(-200))}`,
+        });
         logger.error(
           {
             group: group.name,
@@ -544,10 +584,22 @@ export async function runContainerAgent(
       // Streaming mode: wait for output chain to settle, return completion marker
       if (parser) {
         resolveFromParser(parser, resolve, group.name, 'Output chain error on exit', () => {
+          finishRuntimeContainer({
+            run_id: runtimeRow.run_id,
+            status: 'completed',
+            exit_code: code,
+          });
           logger.info(
             { group: group.name, duration, newSessionId: parser.newSessionId },
             'Container completed (streaming mode)',
           );
+        }, (err) => {
+          finishRuntimeContainer({
+            run_id: runtimeRow.run_id,
+            status: 'failed',
+            exit_code: code,
+            error: `Output chain error on exit: ${err instanceof Error ? err.message : String(err)}`,
+          });
         });
         return;
       }
@@ -584,6 +636,12 @@ export async function runContainerAgent(
 
         resolve(output);
       } catch (err) {
+        finishRuntimeContainer({
+          run_id: runtimeRow.run_id,
+          status: 'failed',
+          exit_code: code,
+          error: `Failed to parse container output: ${err instanceof Error ? err.message : String(err)}`,
+        });
         logger.error(
           {
             group: group.name,
@@ -605,6 +663,11 @@ export async function runContainerAgent(
     container.on('error', (err) => {
       clearTimeout(timeout);
       logStream.end();
+      finishRuntimeContainer({
+        run_id: runtimeRow.run_id,
+        status: 'spawn_error',
+        error: err.message,
+      });
       logger.error({ group: group.name, containerName, error: err }, 'Container spawn error');
       resolve({
         status: 'error',

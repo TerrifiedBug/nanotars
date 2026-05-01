@@ -6,6 +6,8 @@ export { createTask, getTaskById, getTasksForGroup, getAllTasks, updateTask, del
 export { getRouterState, setRouterState, getSession, setSession, getAllSessions, isValidGroupFolder } from './state.js';
 export { recordUnregisteredSender, listUnregisteredSenders, clearUnregisteredSender } from './unregistered-senders.js';
 export type { UnregisteredSenderRow } from './unregistered-senders.js';
+export { finishRuntimeContainer, getRuntimeSummary, listRuntimeContainers, recordRuntimeContainerStart, touchRuntimeContainer } from './runtime.js';
+export type { RuntimeContainerRow, RuntimeContainerStatus } from './runtime.js';
 export {
   getAgentGroupById,
   getAgentGroupByFolder,

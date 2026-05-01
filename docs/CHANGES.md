@@ -15,6 +15,11 @@ This document describes all changes made in this fork compared to the upstream [
 - `nanotars service install` is the single service setup path. It writes launchd, systemd-user, or nohup service files from typed TypeScript renderers.
 - `nanotars status` now runs the TypeScript service probe directly instead of delegating to `setup/probe.sh`.
 
+### Phase 6 runtime snapshot foundation
+
+- Added `runtime_containers` as a non-invasive runtime read model for container runs. The current runner records start, heartbeat/update, completion, timeout, failure, and spawn-error metadata without changing file IPC or queue behavior.
+- Added `nanotars runtime status|containers --json` as the first gateway/dashboard-ready snapshot surface.
+
 ## Table of Contents
 
 1. [Plugin Architecture](#1-plugin-architecture) — The biggest change
