@@ -76,7 +76,7 @@ npm run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
 ```
 
-Service management (preferred — using the wrapper installed by setup.sh):
+Service management:
 ```bash
 nanotars start | stop | restart | status | logs
 ```

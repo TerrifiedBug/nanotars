@@ -11,7 +11,7 @@ Run all commands automatically. Only pause when user action is required (channel
 
 ## 0a. Read onboarding selections (if present)
 
-`setup.sh` may have already collected the user's name + initial channel picks during shell-side onboarding. If `data/onboarding.json` exists, load it and use those values as defaults — don't re-ask.
+Legacy installs may have `data/onboarding.json` from the old shell-side onboarding flow. If it exists, load it and use those values as defaults — don't re-ask.
 
 ```bash
 if [ -f data/onboarding.json ]; then
@@ -654,128 +654,16 @@ Tell the user:
 
 ## 8. Configure Background Service
 
-Detect the platform to determine which service manager to use:
-
-```bash
-if [ "$(uname)" = "Darwin" ]; then
-  echo "SERVICE_TYPE: launchd"
-elif command -v systemctl >/dev/null 2>&1; then
-  echo "SERVICE_TYPE: systemd"
-else
-  echo "SERVICE_TYPE: unknown"
-fi
-```
-
-### 8a. macOS (launchd)
-
-Generate the plist file with correct paths automatically:
-
-```bash
-NODE_PATH=$(which node)
-PROJECT_PATH=$(pwd)
-HOME_PATH=$HOME
-
-cat > ~/Library/LaunchAgents/com.nanotars.plist << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.nanotars</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${NODE_PATH}</string>
-        <string>${PROJECT_PATH}/dist/index.js</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>${PROJECT_PATH}</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:${HOME_PATH}/.local/bin</string>
-        <key>HOME</key>
-        <string>${HOME_PATH}</string>
-    </dict>
-    <key>StandardOutPath</key>
-    <string>${PROJECT_PATH}/logs/nanotars.log</string>
-    <key>StandardErrorPath</key>
-    <string>${PROJECT_PATH}/logs/nanotars.error.log</string>
-</dict>
-</plist>
-EOF
-
-echo "Created launchd plist with:"
-echo "  Node: ${NODE_PATH}"
-echo "  Project: ${PROJECT_PATH}"
-```
-
-Build and start the service:
+The TypeScript CLI owns service generation. Do not write launchd plists, systemd units, or nohup launchers by hand.
 
 ```bash
 npm run build
 mkdir -p logs
-launchctl load ~/Library/LaunchAgents/com.nanotars.plist
+node dist/cli/nanotars.js service install
+node dist/cli/nanotars.js status
 ```
 
-Verify it's running:
-```bash
-launchctl list | grep nanotars
-```
-
-### 8b. Linux (systemd)
-
-Generate the systemd unit file:
-
-```bash
-NODE_PATH=$(which node)
-PROJECT_PATH=$(pwd)
-
-sudo tee /etc/systemd/system/nanotars.service << EOF
-[Unit]
-Description=NanoTars Agent
-After=network.target docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-KillMode=process
-ExecStart=${NODE_PATH} ${PROJECT_PATH}/dist/index.js
-WorkingDirectory=${PROJECT_PATH}
-Restart=always
-RestartSec=10
-Environment=HOME=${HOME}
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:${HOME}/.local/bin
-EnvironmentFile=-${PROJECT_PATH}/.env
-StandardOutput=append:${PROJECT_PATH}/logs/nanotars.log
-StandardError=append:${PROJECT_PATH}/logs/nanotars.error.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-echo "Created systemd service with:"
-echo "  Node: ${NODE_PATH}"
-echo "  Project: ${PROJECT_PATH}"
-```
-
-Build and start the service:
-
-```bash
-npm run build
-mkdir -p logs
-sudo systemctl daemon-reload
-sudo systemctl enable nanotars
-sudo systemctl start nanotars
-```
-
-Verify it's running:
-```bash
-systemctl status nanotars
-```
+`service install` automatically chooses launchd on macOS, systemd-user on Linux when available, and a nohup launcher for root/WSL-style hosts.
 
 ## 9. Test
 
@@ -812,22 +700,22 @@ The user should receive a response in their registered channel.
 
 **Unload service**:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.nanotars.plist
+nanotars stop
 ```
 
-**Restart service (systemd)**:
+**Restart service**:
 ```bash
-sudo nanotars restart
+nanotars restart
 ```
 
-**Stop service (systemd)**:
+**Stop service**:
 ```bash
-sudo systemctl stop nanotars
+nanotars stop
 ```
 
-**View logs (systemd)**:
+**View logs**:
 ```bash
-journalctl -u nanotars -f
+nanotars logs
 ```
 
 ### WhatsApp-Specific

@@ -61,8 +61,7 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  users                  List or update user roles',
       '  doctor                 Structured health summary',
       '  env audit              Audit declared plugin env vars',
-      '  service                Install service files or run setup probe',
-      '  setup                  Re-run setup.sh',
+      '  service                Install service files or run health probe',
       '  help                   Show this help',
       '',
     ].join('\n'),
@@ -148,7 +147,7 @@ async function startService(): Promise<number> {
   switch (serviceManager()) {
     case 'launchd':
       if (!fs.existsSync(PLIST_PATH)) {
-        error(`${PLIST_PATH} not found - run setup.sh first`);
+        error(`${PLIST_PATH} not found - run 'nanotars service install' first`);
         return 1;
       }
       if (run('launchctl', ['load', PLIST_PATH], { allowFailure: true }) !== 0) {
@@ -160,7 +159,7 @@ async function startService(): Promise<number> {
       break;
     case 'nohup':
       if (!fs.existsSync(WRAPPER_PATH)) {
-        error(`${WRAPPER_PATH} not found - run setup.sh first`);
+        error(`${WRAPPER_PATH} not found - run 'nanotars service install' first`);
         return 1;
       }
       run('bash', [WRAPPER_PATH]);
@@ -240,36 +239,7 @@ async function restartService(args: string[]): Promise<number> {
 }
 
 async function statusService(): Promise<number> {
-  switch (serviceManager()) {
-    case 'launchd':
-      if (spawnSync('launchctl', ['list'], { encoding: 'utf8' }).stdout.includes(LABEL_LAUNCHD)) {
-        info(`launchd: ${LABEL_LAUNCHD} loaded`);
-      } else {
-        warn(`launchd: ${LABEL_LAUNCHD} not loaded`);
-      }
-      break;
-    case 'systemd-user':
-      if (spawnSync('systemctl', ['--user', 'is-active', UNIT_NAME], { stdio: 'ignore' }).status === 0) {
-        info(`systemd-user: ${UNIT_NAME} active`);
-      } else {
-        warn(`systemd-user: ${UNIT_NAME} not active`);
-      }
-      break;
-    case 'nohup':
-      if (fs.existsSync(PIDFILE) && isRunning(Number(fs.readFileSync(PIDFILE, 'utf8').trim()))) {
-        info(`nohup: PID ${fs.readFileSync(PIDFILE, 'utf8').trim()} running`);
-      } else {
-        warn('nohup: not running');
-      }
-      break;
-  }
-
-  const probe = path.join(PROJECT_ROOT, 'setup', 'probe.sh');
-  if (fs.existsSync(probe)) {
-    process.stdout.write('\n');
-    run('bash', [probe], { allowFailure: true });
-  }
-  return 0;
+  return serviceCommand(['probe'], PROJECT_ROOT);
 }
 
 async function tailLogs(): Promise<number> {
@@ -443,8 +413,6 @@ async function main(): Promise<number> {
       return serviceCommand(args, PROJECT_ROOT);
     case 'daemon':
       return daemonCommand(PROJECT_ROOT);
-    case 'setup':
-      return execReplacing('bash', ['./setup.sh', ...args]);
     case '-h':
     case '--help':
     case 'help':

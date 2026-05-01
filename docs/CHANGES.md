@@ -6,6 +6,15 @@ This document describes all changes made in this fork compared to the upstream [
 
 ---
 
+## Recent Implementation Notes
+
+### Node-first install and TS-owned service setup
+
+- Removed the legacy shell setup entrypoints (`setup.sh`, `setup/`, and `nanotars.sh`) to avoid two competing install paths.
+- NanoTars now requires Node.js 20+ before install; dependency install, build, container build, and service installation are driven through the repository and `dist/cli/nanotars.js`.
+- `nanotars service install` is the single service setup path. It writes launchd, systemd-user, or nohup service files from typed TypeScript renderers.
+- `nanotars status` now runs the TypeScript service probe directly instead of delegating to `setup/probe.sh`.
+
 ## Table of Contents
 
 1. [Plugin Architecture](#1-plugin-architecture) — The biggest change

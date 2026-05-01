@@ -8,33 +8,27 @@
 
 ## Install
 
-**One-liner (macOS or Linux):**
+NanoTars requires Node.js 20+ before install. Install Node with your OS package manager, `nvm`, `fnm`, or the official installer, then run the single Node-first install flow:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TerrifiedBug/nanotars/v1-archive/setup.sh | bash
-```
-
-This clones into `$HOME/nanotars` (override with `NANOTARS_DIR`), installs Node 22 + pnpm + verifies Docker, builds host + agent container, writes a launchd plist (macOS) / systemd-user unit (Linux) / nohup wrapper (root or WSL), and starts the service.
-
-Running as root (homelab, dedicated VM, root container)? Just run it — no flag needed. The service install detects root and uses a nohup wrapper instead of launchd/systemd-user.
-
-**Manual install:**
-
-```bash
-git clone -b v1-archive https://github.com/TerrifiedBug/nanotars.git
+git clone https://github.com/TerrifiedBug/nanotars.git
 cd nanotars
-bash setup.sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run build
+./container/build.sh
+node dist/cli/nanotars.js service install
 ```
 
-(Same `setup.sh` as the curl one-liner — it detects whether it's piped from curl, and clones on first run only.)
+The service install writes a launchd plist on macOS, a systemd-user unit on Linux when available, or a nohup wrapper for root/WSL-style hosts.
 
 **After install — manage the service:**
 
 ```bash
-bash nanotars.sh status     # health snapshot
-bash nanotars.sh logs       # tail logs (or show error log if main is empty)
-bash nanotars.sh restart    # restart
-bash nanotars.sh stop       # stop
+node dist/cli/nanotars.js status     # health snapshot
+node dist/cli/nanotars.js logs       # tail logs (or show error log if main is empty)
+node dist/cli/nanotars.js restart    # restart
+node dist/cli/nanotars.js stop       # stop
 ```
 
 **Bootstrap your first agent:**
@@ -171,12 +165,13 @@ cd nanotars
 claude
 ```
 
-Then run `/nanotars-setup`. Claude handles dependencies, authentication, container build, and service configuration.
+Then run `/nanotars-setup`. Claude handles authentication, channel wiring, container build, and service configuration.
 
 ## Requirements
 
 - macOS or Linux
 - Node.js 20+
+- pnpm 9+
 - [Claude Code](https://claude.ai/download)
 - [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
 - **Optional:** ffmpeg for video/GIF thumbnail extraction
