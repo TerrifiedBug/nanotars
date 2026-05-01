@@ -11,6 +11,11 @@ import fs from 'fs';
 import path from 'path';
 import process from 'process';
 
+import { dbCommand } from './commands/db.js';
+import { channelsCommand, groupsCommand, pluginsCommand, tasksCommand, usersCommand } from './commands/inventory.js';
+import { doctorCommand, envCommand, logsCommand } from './commands/doctor.js';
+import { modelCommand } from './commands/model.js';
+import { mountsCommand } from './commands/mounts.js';
 import { runPairMain } from './pair-main.js';
 
 const PROJECT_ROOT = process.cwd();
@@ -44,6 +49,16 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  logs                   Tail logs/nanotars.log',
       '  pair-main [--channel]  Issue a pairing code for the main control chat',
       '  auth <channel>         Run channel-specific auth.js',
+      '  model                  Get, set, or reset the agent model override',
+      '  mounts                 Manage container mount allowlist',
+      '  db                     Database stats, integrity, and maintenance',
+      '  groups                 List/show/register group wiring',
+      '  channels               List installed channel plugins',
+      '  plugins                List installed plugins',
+      '  tasks                  List or cancel scheduled tasks',
+      '  users                  List or update user roles',
+      '  doctor                 Structured health summary',
+      '  env audit              Audit declared plugin env vars',
       '  setup                  Re-run setup.sh',
       '  help                   Show this help',
       '',
@@ -386,11 +401,36 @@ async function main(): Promise<number> {
     case 'status':
       return statusService();
     case 'logs':
+      if (args[0] === 'errors') return logsCommand(args, PROJECT_ROOT);
       return tailLogs();
     case 'pair-main':
       return pairMain(args);
     case 'auth':
       return auth(args);
+    case 'model':
+      return modelCommand(args, PROJECT_ROOT);
+    case 'mounts':
+    case 'mount':
+      return mountsCommand(args);
+    case 'db':
+    case 'database':
+      return dbCommand(args, PROJECT_ROOT);
+    case 'groups':
+      return groupsCommand(args);
+    case 'channels':
+      if (args[0] === 'auth') return auth(args.slice(1));
+      return channelsCommand(args, PROJECT_ROOT);
+    case 'plugins':
+    case 'plugin':
+      return pluginsCommand(args, PROJECT_ROOT);
+    case 'tasks':
+      return tasksCommand(args);
+    case 'users':
+      return usersCommand(args);
+    case 'doctor':
+      return doctorCommand(args, PROJECT_ROOT);
+    case 'env':
+      return envCommand(args, PROJECT_ROOT);
     case 'setup':
       return execReplacing('bash', ['./setup.sh', ...args]);
     case '-h':

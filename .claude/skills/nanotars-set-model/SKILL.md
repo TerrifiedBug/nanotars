@@ -12,30 +12,36 @@ triggers:
 
 # Set Default Model
 
-Changes the Claude model for agent containers. Takes effect on the next agent turn (no restart or rebuild needed).
+Use the typed NanoTars CLI. Do not write `store/claude-model` directly.
 
-## Available Models
+## Show Current Model
 
-| Model | ID |
-|-------|-----|
-| Sonnet 4.5 (default) | `claude-sonnet-4-5` |
-| Opus 4.6 | `claude-opus-4-6` |
-| Haiku 4.5 | `claude-haiku-4-5` |
-
-## Steps
-
-1. Ask the user which model they want (if not already specified)
-2. Write the model ID to the store file:
-   ```bash
-   echo "MODEL_ID" > store/claude-model
-   ```
-3. Verify the file:
-   ```bash
-   cat store/claude-model
-   ```
-4. Tell the user the model is set. It takes effect on the next agent turn — no restart needed.
-
-To revert to the SDK default (Sonnet), delete the file:
 ```bash
-rm store/claude-model
+nanotars model get
+```
+
+## Set Model
+
+Ask which model the operator wants if they did not specify one.
+
+Supported shortcuts:
+
+| Shortcut | Model ID |
+|---|---|
+| `sonnet` | `claude-sonnet-4-5` |
+| `opus` | `claude-opus-4-6` |
+| `haiku` | `claude-haiku-4-5` |
+
+Run:
+
+```bash
+nanotars model set <model>
+```
+
+The change takes effect on the next agent turn. No restart is required.
+
+## Reset
+
+```bash
+nanotars model reset
 ```

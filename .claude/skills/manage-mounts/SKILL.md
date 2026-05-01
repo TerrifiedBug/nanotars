@@ -5,101 +5,64 @@ description: Configure which host directories nanotars agent containers can acce
 
 # Manage Mounts
 
-Configure which host directories nanotars agent containers can access. The mount allowlist lives at `~/.config/nanotars/mount-allowlist.json` (outside the project root, so agents cannot tamper with it from inside their containers).
+Use the typed NanoTars CLI. Do not hand-edit `~/.config/nanotars/mount-allowlist.json`.
 
-## Show current config
+The allowlist controls additional host directories that agent containers may mount. It lives outside the project root so agents cannot modify it from inside containers.
 
-```bash
-cat ~/.config/nanotars/mount-allowlist.json 2>/dev/null || echo "No mount allowlist configured (additional mounts will be BLOCKED)"
-```
-
-If the file exists, present each `allowedRoots` entry to the user with its `path`, `allowReadWrite` flag, and optional `description`. Report `nonMainReadOnly` (whether non-main groups are forced read-only) and the additional `blockedPatterns` (on top of the built-in defaults: `.ssh`, `.gnupg`, `.aws`, `credentials`, `.env`, `id_rsa`, etc. — see `src/mount-security.ts:24-45`).
-
-## Add an allowed root
-
-Ask the user:
-
-1. The host path (absolute, or starting with `~/`).
-2. Whether the agent needs read-write access (default: read-only).
-3. An optional one-line description.
-
-Validate the path exists:
+## Show Current Config
 
 ```bash
-realpath "<expanded-path>" >/dev/null 2>&1 && echo "exists" || echo "missing"
+nanotars mounts list
 ```
 
-If the path doesn't exist, ask the user whether to add it anyway (mount validation will reject it at runtime, but adding it pre-creation is sometimes intentional).
+## Add An Allowed Root
 
-Read the current config, splice in a new `allowedRoots` entry:
+Ask for:
+
+- host path
+- read-only or read-write access; default to read-only
+- optional description
+
+Then run:
 
 ```bash
-mkdir -p ~/.config/nanotars
-node -e '
-  const fs = require("fs");
-  const path = "/root/.config/nanotars/mount-allowlist.json".replace("/root", process.env.HOME);
-  const cfg = fs.existsSync(path)
-    ? JSON.parse(fs.readFileSync(path, "utf8"))
-    : { allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true };
-  cfg.allowedRoots.push({ path: "<USER-PATH>", allowReadWrite: <true|false>, description: "<USER-DESC-OR-OMIT>" });
-  fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
-  console.log(JSON.stringify(cfg, null, 2));
-'
+nanotars mounts add <path> [--rw] [--description "<text>"]
 ```
 
-Replace the `<USER-PATH>`, `<true|false>`, `<USER-DESC-OR-OMIT>` placeholders. If the user didn't provide a description, omit the `description` key entirely.
-
-## Add a blocked pattern
-
-Ask which path component the user wants to block (e.g., `password`, `secrets`). Append to `blockedPatterns`:
+Examples:
 
 ```bash
-node -e '
-  const fs = require("fs");
-  const path = require("path").join(process.env.HOME, ".config/nanotars/mount-allowlist.json");
-  const cfg = JSON.parse(fs.readFileSync(path, "utf8"));
-  if (!cfg.blockedPatterns.includes("<PATTERN>")) cfg.blockedPatterns.push("<PATTERN>");
-  fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
-'
+nanotars mounts add ~/projects --description "Project checkouts"
+nanotars mounts add /srv/shared --rw --description "Shared working data"
 ```
 
-## Remove an entry
-
-Read the current config, ask which entry to remove (1-indexed), splice and write:
+## Add A Blocked Pattern
 
 ```bash
-node -e '
-  const fs = require("fs");
-  const path = require("path").join(process.env.HOME, ".config/nanotars/mount-allowlist.json");
-  const cfg = JSON.parse(fs.readFileSync(path, "utf8"));
-  cfg.allowedRoots.splice(<INDEX>, 1);  // or cfg.blockedPatterns.splice(<INDEX>, 1)
-  fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
-'
+nanotars mounts block <pattern>
 ```
 
-## Reset to empty (no additional mounts allowed)
+## Remove Entries
+
+Use the 1-based indexes shown by `nanotars mounts list`.
 
 ```bash
-mkdir -p ~/.config/nanotars
-echo '{"allowedRoots":[],"blockedPatterns":[],"nonMainReadOnly":true}' > ~/.config/nanotars/mount-allowlist.json
+nanotars mounts remove <index>
+nanotars mounts remove-block <index>
 ```
 
-This is the safest default — no host directories accessible to agents beyond the workspace.
+## Reset
 
-## After changes
+```bash
+nanotars mounts reset
+```
 
-Mount-security caches the allowlist in memory per host process. Restart the service so the new config is picked up:
+This resets to the safest default: no additional host directories are allowed.
 
-- **macOS:** `nanotars restart`
-- **Linux (systemd):** `nanotars restart`
-- **Foreground dev:** Stop and re-run `npm run dev`
+## After Changes
 
-The change takes effect for new container spawns after the restart; already-running containers continue to use the old allowlist.
+Mount-security is cached by the host process. Restart NanoTars so new containers pick up the config:
 
-## Security model
-
-- The allowlist file is **outside the project root**, so an agent inside a container cannot modify it — they don't have a mount that reaches `~/.config/nanotars/`.
-- Built-in `blockedPatterns` (`.ssh`, `.gnupg`, `credentials`, `.env`, etc.) are always applied even when not listed in the user config — see `src/mount-security.ts:24-45`.
-- `nonMainReadOnly: true` (the default) forces non-main groups to read-only mounts regardless of `allowReadWrite`. Main group can mount read-write where the root permits.
-
-For the full security model, see `docs/SECURITY.md`.
+```bash
+nanotars restart
+```

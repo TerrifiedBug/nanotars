@@ -11,79 +11,48 @@ triggers:
 
 # Database Maintenance
 
-Runs maintenance operations on the NanoTars SQLite database at `store/messages.db`.
+Use the typed NanoTars CLI. Do not run raw `sqlite3` maintenance snippets from this skill.
 
-> **Boundary note:** CLAUDE.md forbids skills from querying entity-model tables (`agent_groups`, `messaging_groups`, `messaging_group_agents`, `users`, `user_roles`, etc.) via raw `sqlite3` because schema migrations silently break them. This skill is the one deliberate exception — its SQL is schema-stable maintenance: `PRAGMA integrity_check`, `ANALYZE`, `VACUUM`, and age-based `DELETE FROM messages | task_run_logs` (both append-only application data, not entity-model). Don't expand this skill to query entity-model tables — add an IPC action / slash command to core if you need that surface.
+The CLI owns backup, integrity check, pruning, `ANALYZE`, and `VACUUM` behavior for `store/messages.db`.
 
-## Step 1: Backup
+## Read-Only Checks
 
-Always back up before maintenance:
-
-```bash
-cp store/messages.db "store/backups/messages-$(date +%Y%m%d-%H%M%S).db"
-ls -la store/backups/
-```
-
-Keep only the 3 most recent backups:
+Show row counts and file size:
 
 ```bash
-ls -1t store/backups/messages-*.db | tail -n +4 | xargs rm -f 2>/dev/null
-echo "Backups retained: $(ls store/backups/messages-*.db 2>/dev/null | wc -l)"
+nanotars db stats
 ```
 
-## Step 2: Report statistics
+Run integrity check:
 
 ```bash
-sqlite3 store/messages.db << 'SQL'
-.mode column
-.headers on
-SELECT 'Messages' as table_name, COUNT(*) as row_count FROM messages
-UNION ALL SELECT 'Chats', COUNT(*) FROM chats
-UNION ALL SELECT 'Scheduled Tasks', COUNT(*) FROM scheduled_tasks
-UNION ALL SELECT 'Task Run Logs', COUNT(*) FROM task_run_logs
-UNION ALL SELECT 'Sessions', COUNT(*) FROM sessions;
-SQL
-
-echo ""
-echo "Database file size:"
-ls -lh store/messages.db
+nanotars db integrity
 ```
 
-## Step 3: Integrity check
+Preview maintenance without changing anything:
 
 ```bash
-sqlite3 store/messages.db "PRAGMA integrity_check;"
+nanotars db maintenance
 ```
 
-Expected output: `ok`. If errors, report them and stop — do not proceed with VACUUM on a corrupt database.
+## Apply Maintenance
 
-## Step 4: Prune old data
+Ask the operator to confirm retention windows before applying. Defaults are:
 
-Ask the user how many days of data to retain (default: 90 days for messages, 30 days for task logs).
+- messages: retain 90 days
+- task run logs: retain 30 days
+- backups: retain 3 latest backups
+
+Run:
 
 ```bash
-# Prune old task run logs (default 30 days)
-DELETED=$(sqlite3 store/messages.db "DELETE FROM task_run_logs WHERE run_at < datetime('now', '-30 days'); SELECT changes();")
-echo "Deleted ${DELETED} old task run logs"
-
-# Prune old messages (default 90 days) — ask before running
-DELETED=$(sqlite3 store/messages.db "DELETE FROM messages WHERE timestamp < datetime('now', '-90 days'); SELECT changes();")
-echo "Deleted ${DELETED} old messages"
+nanotars db maintenance --apply
 ```
 
-## Step 5: Optimize
+Custom retention:
 
 ```bash
-sqlite3 store/messages.db "ANALYZE;"
-sqlite3 store/messages.db "VACUUM;"
-echo "Database optimized"
+nanotars db maintenance --apply --message-days 90 --task-log-days 30 --backup-retention 3
 ```
 
-## Step 6: Report final state
-
-Re-run the statistics from Step 2 to show before/after comparison.
-
-```bash
-echo "Maintenance complete."
-ls -lh store/messages.db
-```
+The apply path creates a SQLite backup first, then prunes old append-only data, runs `ANALYZE`, and runs `VACUUM`.
