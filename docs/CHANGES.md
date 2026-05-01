@@ -20,6 +20,11 @@ This document describes all changes made in this fork compared to the upstream [
 - Added `runtime_containers` as a non-invasive runtime read model for container runs. The current runner records start, heartbeat/update, completion, timeout, failure, and spawn-error metadata without changing file IPC or queue behavior.
 - Added `nanotars runtime status|containers --json` as the first gateway/dashboard-ready snapshot surface.
 
+### Core dashboard daemon
+
+- Added `nanotars dashboard start|status|stop|restart|snapshot` as a core TypeScript CLI surface. The dashboard binds to `0.0.0.0:3100` by default, generates `data/dashboard.secret` when needed, and serves a localhost/VPN-friendly monitoring UI backed by the existing DB, logs, scheduled tasks, plugins, and `runtime_containers` snapshot.
+- Added authenticated task controls for pause/resume/delete/run-now from the dashboard API. No Phase 6 IPC architecture changes are required for this slice.
+
 ## Table of Contents
 
 1. [Plugin Architecture](#1-plugin-architecture) — The biggest change

@@ -12,6 +12,7 @@ import path from 'path';
 import process from 'process';
 
 import { dbCommand } from './commands/db.js';
+import { dashboardCommand } from './commands/dashboard.js';
 import { agentsCommand, channelsCommand, groupsCommand, pluginsCommand, tasksCommand, usersCommand } from './commands/inventory.js';
 import { doctorCommand, envCommand, logsCommand } from './commands/doctor.js';
 import { modelCommand } from './commands/model.js';
@@ -53,6 +54,7 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  model                  Get, set, or reset the agent model override',
       '  mounts                 Manage container mount allowlist',
       '  db                     Database stats, integrity, and maintenance',
+      '  dashboard              Start/status/stop the local monitoring dashboard',
       '  groups                 List/show/register group wiring',
       '  channels               List installed channel plugins',
       '  plugins                List installed plugins',
@@ -402,6 +404,8 @@ async function main(): Promise<number> {
     case 'db':
     case 'database':
       return dbCommand(args, PROJECT_ROOT);
+    case 'dashboard':
+      return dashboardCommand(args, PROJECT_ROOT);
     case 'groups':
       return groupsCommand(args);
     case 'channels':
