@@ -82,6 +82,7 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
     name: raw.name,
     description: typeof raw.description === 'string' ? raw.description : undefined,
     containerEnvVars: parseStringArray(raw.containerEnvVars),
+    hostEnvVars: parseStringArray(raw.hostEnvVars),
     publicEnvVars: parseStringArray(raw.publicEnvVars),
     hooks: parseStringArray(raw.hooks),
     containerHooks: parseStringArray(raw.containerHooks),

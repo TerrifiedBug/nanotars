@@ -72,6 +72,7 @@ export interface CreateSkillPluginPluginJson {
   description: string;
   version: string;
   containerEnvVars?: string[];
+  hostEnvVars?: string[];
   publicEnvVars?: string[];
   channels: string[];
   groups: string[];

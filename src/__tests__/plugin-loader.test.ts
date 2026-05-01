@@ -65,6 +65,7 @@ describe('parseManifest', () => {
   it('defaults optional fields', () => {
     const manifest = parseManifest({ name: 'test' });
     expect(manifest.containerEnvVars).toEqual([]);
+    expect(manifest.hostEnvVars).toEqual([]);
     expect(manifest.publicEnvVars).toEqual([]);
     expect(manifest.hooks).toEqual([]);
     expect(manifest.containerHooks).toEqual([]);
@@ -78,6 +79,15 @@ describe('parseManifest', () => {
       publicEnvVars: ['FRESHRSS_URL'],
     });
     expect(manifest.publicEnvVars).toEqual(['FRESHRSS_URL']);
+  });
+
+  it('parses hostEnvVars field without adding them to container env vars', () => {
+    const manifest = parseManifest({
+      name: 'transcription',
+      hostEnvVars: ['OPENAI_API_KEY'],
+    });
+    expect(manifest.hostEnvVars).toEqual(['OPENAI_API_KEY']);
+    expect(collectContainerEnvVars([{ manifest, dir: '', hooks: {} } as any])).not.toContain('OPENAI_API_KEY');
   });
 
   it('parses containerHooks field', () => {

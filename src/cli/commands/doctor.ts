@@ -56,8 +56,9 @@ export async function envCommand(args: string[], projectRoot: string): Promise<n
   const declared = new Set<string>();
   for (const manifestPath of manifests) {
     try {
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as { containerEnvVars?: string[] };
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as { containerEnvVars?: string[]; hostEnvVars?: string[] };
       for (const name of manifest.containerEnvVars ?? []) declared.add(name);
+      for (const name of manifest.hostEnvVars ?? []) declared.add(name);
     } catch {
       // Ignore malformed manifests here; plugin loader/debug commands surface them.
     }

@@ -233,6 +233,7 @@ const pluginJsonShape = z
     description: z.string(),
     version: z.string(),
     containerEnvVars: z.array(z.string()).optional(),
+    hostEnvVars: z.array(z.string()).optional(),
     publicEnvVars: z.array(z.string()).optional(),
     channels: z.array(z.string()).default(['*']),
     groups: z.array(z.string()).default(['*']),

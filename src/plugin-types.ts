@@ -8,6 +8,8 @@ export interface PluginManifest {
   description?: string;
   /** Env var names from .env to pass into agent containers */
   containerEnvVars?: string[];
+  /** Env var names read by host-side plugin hooks, not passed into agent containers */
+  hostEnvVars?: string[];
   /** Env vars whose values are safe to appear in outbound messages (exempt from secret redaction) */
   publicEnvVars?: string[];
   /** Hook functions this plugin exports */
