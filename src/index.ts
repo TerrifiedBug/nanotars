@@ -129,7 +129,7 @@ function acquirePidLock(): void {
   process.on('exit', removeLock);
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   acquirePidLock();
   ensureContainerRuntime();
   initDatabase();
@@ -278,9 +278,14 @@ async function main(): Promise<void> {
   // Load sender allowlist for drop-mode filtering
   const senderAllowlistCfg = loadSenderAllowlist();
 
+  // Some channel SDK handles are unref'd internally. Keep the host process
+  // explicitly alive under nohup/systemd where stdin is not an active handle.
+  const hostKeepAlive = setInterval(() => {}, 60 * 60 * 1000);
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    clearInterval(hostKeepAlive);
     stopApprovalExpiryPoll();
     stopOneCLIBridge();
     await plugins.shutdown();

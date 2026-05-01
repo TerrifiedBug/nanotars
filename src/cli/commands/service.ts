@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import process from 'process';
@@ -31,34 +31,14 @@ export function serviceCommand(args: string[], projectRoot: string): number {
 }
 
 export function daemonCommand(projectRoot: string): Promise<number> {
-  return new Promise((resolve) => {
-    loadDotEnv(path.join(projectRoot, '.env'));
-    const child = spawn(process.execPath, [path.join(projectRoot, 'dist', 'index.js')], {
-      cwd: projectRoot,
-      stdio: 'inherit',
-      env: process.env,
+  loadDotEnv(path.join(projectRoot, '.env'));
+  return import('../../index.js')
+    .then((host) => host.main())
+    .then(() => 0)
+    .catch((error: unknown) => {
+      process.stderr.write(`[error] daemon: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+      return 1;
     });
-    let settled = false;
-    const finish = (code: number) => {
-      if (settled) return;
-      settled = true;
-      resolve(code);
-    };
-    const forward = (signal: NodeJS.Signals) => {
-      if (!child.killed) child.kill(signal);
-    };
-    process.once('SIGINT', forward);
-    process.once('SIGTERM', forward);
-    child.once('error', (error) => {
-      process.stderr.write(`[error] daemon: ${error.message}\n`);
-      finish(127);
-    });
-    child.once('exit', (code, signal) => {
-      process.removeListener('SIGINT', forward);
-      process.removeListener('SIGTERM', forward);
-      finish(code ?? (signal ? 1 : 0));
-    });
-  });
 }
 
 function installService(projectRoot: string): number {

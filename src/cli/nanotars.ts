@@ -24,7 +24,6 @@ const PROJECT_ROOT = process.cwd();
 const LABEL_LAUNCHD = 'com.nanotars';
 const PLIST_PATH = path.join(process.env.HOME ?? '', 'Library', 'LaunchAgents', `${LABEL_LAUNCHD}.plist`);
 const UNIT_NAME = 'nanotars';
-const WRAPPER_PATH = path.join(PROJECT_ROOT, 'start-nanotars.sh');
 const PIDFILE = path.join(PROJECT_ROOT, 'nanotars.pid');
 
 type ServiceManager = 'launchd' | 'systemd-user' | 'nohup';
@@ -160,11 +159,7 @@ async function startService(): Promise<number> {
       run('systemctl', ['--user', 'start', UNIT_NAME]);
       break;
     case 'nohup':
-      if (!fs.existsSync(WRAPPER_PATH)) {
-        error(`${WRAPPER_PATH} not found - run 'nanotars service install' first`);
-        return 1;
-      }
-      run('bash', [WRAPPER_PATH]);
+      startNohup();
       break;
   }
   info('started');
@@ -202,6 +197,23 @@ function stopNohup(): void {
     }
   }
   fs.rmSync(PIDFILE, { force: true });
+}
+
+function startNohup(): void {
+  fs.mkdirSync(path.join(PROJECT_ROOT, 'logs'), { recursive: true });
+  stopNohup();
+
+  const out = fs.openSync(path.join(PROJECT_ROOT, 'logs', 'nanotars.log'), 'a');
+  const err = fs.openSync(path.join(PROJECT_ROOT, 'logs', 'nanotars.error.log'), 'a');
+  const child = spawn(process.execPath, [path.join(PROJECT_ROOT, 'dist', 'cli', 'nanotars.js'), 'daemon'], {
+    cwd: PROJECT_ROOT,
+    detached: true,
+    stdio: ['ignore', out, err],
+    env: process.env,
+  });
+  fs.writeFileSync(PIDFILE, String(child.pid));
+  child.unref();
+  process.stdout.write(`Starting nanotars...\nnanotars started (PID ${child.pid})\nLogs: tail -f ${path.join(PROJECT_ROOT, 'logs', 'nanotars.log')}\n`);
 }
 
 function isRunning(pid: number): boolean {
