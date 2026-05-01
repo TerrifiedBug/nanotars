@@ -59,6 +59,8 @@ Ask:
 
 > "Should this be available in all groups, or just this one?"
 
+For location-specific, household-specific, private-account, or otherwise unpublished personal plugins, recommend "just this one" and set `pluginJson.private = true`.
+
 Set `groups`:
 - "all groups" → `["*"]`
 - "just this one" → `["<your current group folder>"]` (you know your folder from the system prompt)
@@ -194,7 +196,7 @@ Call the MCP tools directly. Examples:
 ## After submission
 
 The host validates the spec, queues an admin approval card, and on approve:
-1. Writes `plugins/<name>/`
+1. Writes `plugins/<name>/`, or `plugins/private/<name>/` when `pluginJson.private = true`
 2. Writes `.claude/skills/add-skill-<name>/`
 3. Appends env vars (if any) to root `.env` or per-group `.env` based on scope
 4. Restarts your container
@@ -207,6 +209,7 @@ If the admin rejects, you'll get a system message — apologize to the user and 
 
 - You are NOT allowed to set `pluginJson.hooks`, `pluginJson.containerHooks`, or `pluginJson.dependencies = true`. The host will reject any of those.
 - You are NOT allowed to install plugins for a different group. `groups` must be `["*"]` (global) or `["<your current group folder>"]` (just this one).
+- Set `pluginJson.private = true` for local-only plugins that should never be published or synced upstream.
 - Reserved env var names cannot be set: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ASSISTANT_NAME`, `CLAUDE_MODEL`, `PATH`, `HOME`, `USER`, `SHELL`, `PWD`. Reserved prefixes also blocked: `NANOCLAW_`, `LD_`, `DYLD_`, `NODE_`.
 
 If the user pushes for something outside these rules, tell them what the boundary is and offer the host workflow as the alternative.

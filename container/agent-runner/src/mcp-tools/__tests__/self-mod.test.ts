@@ -309,6 +309,25 @@ describe('buildCreateSkillPluginPayload', () => {
     expect(result.payload.timestamp).toBe('2026-04-27T12:00:00.000Z');
   });
 
+  it('accepts private local-only plugin flag', () => {
+    const result = buildCreateSkillPluginPayload(
+      skillOnlyInput({
+        pluginJson: {
+          name: 'weather',
+          description: 'Look up weather forecasts',
+          version: '1.0.0',
+          private: true,
+          channels: ['*'],
+          groups: ['main'],
+        },
+      }),
+      baseCtx,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.pluginJson.private).toBe(true);
+  });
+
   it('happy path: mcp archetype with mcpJson and env vars', () => {
     const result = buildCreateSkillPluginPayload(
       skillOnlyInput({

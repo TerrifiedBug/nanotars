@@ -42,6 +42,8 @@ Read the SKILL.md frontmatter to extract `name` and `description`.
 
 If `files/plugin.json` exists, read it to verify the runtime manifest has required fields (`name`, `description`, `containerEnvVars`, `hooks`). This file is the **runtime plugin manifest** — it will be copied as-is to the marketplace `files/` directory.
 
+If `files/plugin.json` contains `"private": true`, refuse to publish. Private/local-only plugins are deployment-specific and must not be copied to the shared marketplace.
+
 ## Step 3: Test Locally
 
 Before publishing, verify the skill works:
@@ -53,6 +55,8 @@ Before publishing, verify the skill works:
 Ask the user: **"Have you tested this skill locally? It should run to completion and create a working plugin."**
 
 If they haven't tested, recommend doing so before publishing. Do not block if they choose to skip.
+
+Before continuing, also check whether the tested runtime plugin lives under `plugins/private/{SHORT_NAME}/` or its manifest has `"private": true`. If so, stop and explain that private plugins are local-only.
 
 ## Step 4: Clone or Locate Marketplace Repo
 
@@ -117,6 +121,8 @@ cp -r ".claude/skills/${SKILL_DIR}/files" "$PLUGIN_DIR/files"
 ```
 
 This copies the runtime plugin manifest (`files/plugin.json`), container skills, hooks, scripts, MCP configs, `Dockerfile.partial`, and any other template files as-is. These are the actual files that get installed into `plugins/` when a user runs the skill.
+
+Never copy a runtime manifest with `"private": true`; this should have been refused in Step 2.
 
 ## Step 6: Update marketplace.json
 

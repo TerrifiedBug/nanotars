@@ -13,8 +13,8 @@
  * Flow:
  *   1. Resolve the calling agent group from `groupFolder`.
  *   2. Validate the full payload (every rule from the spec).
- *   3. Filesystem-uniqueness: refuse if plugins/{name}/ or
- *      .claude/skills/add-skill-{name}/ already exists.
+ *   3. Filesystem-uniqueness: refuse if plugins/{name}/,
+ *      plugins/private/{name}/, or .claude/skills/add-skill-{name}/ already exists.
  *   4. Call `requestApproval({ action: 'create_skill_plugin', ... })`.
  *   5. On admin click, `applyDecision` writes files + restarts the
  *      originating group's container (Task 5).
@@ -73,6 +73,7 @@ export interface CreateSkillPluginPluginJson {
   version: string;
   containerEnvVars?: string[];
   hostEnvVars?: string[];
+  private?: boolean;
   publicEnvVars?: string[];
   channels: string[];
   groups: string[];
@@ -153,9 +154,13 @@ export function validateCreateSkillPluginPayload(
     return { ok: false, error: `groups must be ["*"] or ["${task.groupFolder}"]` };
   }
   // Filesystem uniqueness — relative to projectRoot
-  const pluginDir = path.join(projectRoot, 'plugins', task.name);
-  if (fs.existsSync(pluginDir)) {
+  const publicPluginDir = path.join(projectRoot, 'plugins', task.name);
+  if (fs.existsSync(publicPluginDir)) {
     return { ok: false, error: `plugins/${task.name}/ already exists` };
+  }
+  const privatePluginDir = path.join(projectRoot, 'plugins', 'private', task.name);
+  if (fs.existsSync(privatePluginDir)) {
+    return { ok: false, error: `plugins/private/${task.name}/ already exists` };
   }
   const skillDir = path.join(projectRoot, '.claude', 'skills', `add-skill-${task.name}`);
   if (fs.existsSync(skillDir)) {
@@ -238,7 +243,10 @@ async function writePluginFiles(
   ctx: { projectRoot: string },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { projectRoot } = ctx;
-  const pluginDir = path.join(projectRoot, 'plugins', task.name);
+  const isPrivate = task.pluginJson.private === true;
+  const pluginDir = isPrivate
+    ? path.join(projectRoot, 'plugins', 'private', task.name)
+    : path.join(projectRoot, 'plugins', task.name);
   const skillDir = path.join(projectRoot, '.claude', 'skills', `add-skill-${task.name}`);
   const skillFilesDir = path.join(skillDir, 'files');
   const groups = task.pluginJson.groups ?? ['*'];
@@ -326,6 +334,7 @@ export function registerCreateSkillPluginHandler(deps?: CreateSkillPluginDeps): 
       const envVarValues = (payload.envVarValues as Record<string, string> | undefined) ?? {};
       const channels = pluginJson.channels?.join(', ') ?? '*';
       const groups = pluginJson.groups?.join(', ') ?? '*';
+      const privacy = pluginJson.private === true ? 'private/local-only' : 'publishable';
 
       const credLines = Object.entries(envVarValues).map(([k, v]) => {
         const masked = v.length <= 4 ? '****' : `${v.slice(0, 2)}****${v.slice(-2)}`;
@@ -344,6 +353,7 @@ export function registerCreateSkillPluginHandler(deps?: CreateSkillPluginDeps): 
           `TARS wants to install a new plugin: "${name}"\n\n` +
           `Description: ${description}\n\n` +
           `Archetype: ${archetype}\n` +
+          `Visibility: ${privacy}\n` +
           `Channels: [${channels}]   Groups: [${groups}]\n\n` +
           `${credsBlock}\n\nRestart: per-group container only`,
         options: [

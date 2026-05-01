@@ -96,6 +96,32 @@ describe('applyDecision approved (skill-only, no creds)', () => {
     expect(fs.readFileSync(skillMdPath, 'utf8')).toContain('Weather');
   });
 
+  it('writes private plugins under plugins/private/{name}', async () => {
+    const { approvalId } = await setupAndQueue({
+      pluginJson: {
+        name: 'weather',
+        description: 'Look up weather forecasts',
+        version: '1.0.0',
+        private: true,
+        channels: ['*'],
+        groups: ['main'],
+      },
+    });
+    await applyDecisionForTest(approvalId, 'approved');
+
+    const privatePluginJsonPath = path.join(
+      tmpProjectRoot,
+      'plugins',
+      'private',
+      'weather',
+      'plugin.json',
+    );
+    expect(fs.existsSync(privatePluginJsonPath)).toBe(true);
+    expect(fs.existsSync(path.join(tmpProjectRoot, 'plugins', 'weather'))).toBe(false);
+    const json = JSON.parse(fs.readFileSync(privatePluginJsonPath, 'utf8'));
+    expect(json.private).toBe(true);
+  });
+
   it('writes .claude/skills/add-skill-{name}/SKILL.md and files/ tree', async () => {
     const { approvalId } = await setupAndQueue();
     await applyDecisionForTest(approvalId, 'approved');

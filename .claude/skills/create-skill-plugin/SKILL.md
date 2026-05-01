@@ -14,7 +14,7 @@ This skill creates new NanoTars plugins through guided conversation. The user de
 
 You are the plugin system expert. Your job is to translate the user's idea into a working plugin without exposing internal details. Keep questions simple and focused on what the user wants the plugin to *do*, not how the plugin system works under the hood. Never surface implementation concepts like hook types, mount strategies, or container internals in user-facing questions — handle those decisions yourself based on what the plugin needs.
 
-The output of this skill is always a self-contained `add-skill-*` skill directory (with its own `SKILL.md`) that, when invoked, installs and configures the plugin end-to-end.
+The output of this skill is always a self-contained `add-skill-*` skill directory (with its own `SKILL.md`) that, when invoked, installs and configures the plugin end-to-end. Public plugins can later be published; private/local plugins must stay local.
 
 ## Conversational Flow
 
@@ -62,6 +62,7 @@ Ask about specifics based on the archetype(s) you determined. Again, **one quest
 - **For all plugins:** "What should I call this plugin?" — suggest a name based on the conversation (e.g., "How about `add-skill-weather`?")
 - **For all plugins:** Add a mandatory **Plugin Configuration** step to the generated installation SKILL.md. This step asks the user to confirm or customize the `"channels"` and `"groups"` fields in `plugin.json`:
   - **Sensitive plugins** (personal data, physical systems, private accounts): ask explicitly which channels and groups should have access.
+  - **Private/local plugins** (location-specific, household-specific, unpublished personal automations): install to `plugins/private/{name}/` and set `"private": true` in `plugin.json`.
   - **Non-sensitive plugins** (weather, search, trains): show that defaults are `["*"]` (all channels, all groups) and ask for a quick confirmation — "These defaults give all groups access. Want to restrict to specific groups or channels instead?"
 
 ### Phase 4: Confirm and Generate
@@ -124,6 +125,7 @@ Hard constraints on what this skill can and cannot touch.
 
 - `.claude/skills/add-skill-{name}/` — the installation skill being generated (the entire purpose of this skill)
 - `plugins/{name}/Dockerfile.partial` — optional, for system packages needed inside the container
+- `plugins/private/{name}/Dockerfile.partial` — optional, same as above for private/local plugins
 - `.env` — adding environment variable values, but ONLY with explicit user confirmation
 - `plugins/{name}/` — but ONLY via the `cp -r` install step when the generated add-skill-* skill is run, never directly
 
@@ -140,8 +142,8 @@ This skill generates the following file tree:
 ```
 .claude/skills/add-skill-{name}/
 ├── SKILL.md                        # Installation skill (invoked via /add-skill-{name})
-└── files/                          # Template files, copied to plugins/{name}/ on install
-    ├── plugin.json                 # Plugin manifest (always present)
+└── files/                          # Template files, copied to plugins/{name}/ or plugins/private/{name}/ on install
+    ├── plugin.json                 # Plugin manifest (always present; includes "private": true for local-only plugins)
     ├── container-skills/
     │   ├── SKILL.md                # Agent-facing instructions (if needed)
     │   └── scripts/                # Standalone scripts called by the agent (if needed)
@@ -152,7 +154,7 @@ This skill generates the following file tree:
         └── {event-name}.js         # Container SDK hooks (if needed)
 ```
 
-- **`files/`** contains the actual plugin — everything the agent or NanoTars needs at runtime. When the generated `add-skill-*` skill runs, this entire directory is copied to `plugins/{name}/`.
+- **`files/`** contains the actual plugin — everything the agent or NanoTars needs at runtime. When the generated `add-skill-*` skill runs, this entire directory is copied to `plugins/{name}/` or, for private plugins, `plugins/private/{name}/`.
 - **`SKILL.md`** contains the installation instructions — what runs when someone invokes `/add-skill-{name}`. It handles env vars, copying files, rebuilding, and verification.
 - Only **`plugin.json`** is always present. Everything else is included based on the plugin's needs. A simple skill-only plugin might have just `plugin.json` and a `container-skills/SKILL.md`. A complex integration might include all of the above.
 
@@ -221,7 +223,7 @@ If any check fails, tell the user to run `/nanotars-setup` first and stop.
 
 1. Check current state:
    ```bash
-   [ -d plugins/{name} ] && echo "PLUGIN_EXISTS" || echo "NEED_PLUGIN"
+   if [ -d plugins/{name} ] || [ -d plugins/private/{name} ]; then echo "PLUGIN_EXISTS"; else echo "NEED_PLUGIN"; fi
    ```
    If plugin exists, skip to Verify.
 
@@ -231,6 +233,7 @@ If any check fails, tell the user to run `/nanotars-setup` first and stop.
    ```bash
    cp -r ${CLAUDE_PLUGIN_ROOT}/files/ plugins/{name}/
    ```
+   For private/local plugins, copy to `plugins/private/{name}/` instead.
 
 4. **Plugin Configuration — always prompt, don't default silently:**
 
@@ -728,6 +731,7 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
   "name": "string (required) — plugin identifier, used for directory and logging",
   "description": "string — human-readable description",
   "version": "string — semver version (e.g. \"1.0.0\"). Used by /nanotars-update to detect plugin updates",
+  "private": "boolean — true for local-only plugins that must never be published or synced upstream",
   "containerEnvVars": ["string — env var NAMES from .env to pass into agent containers"],
   "publicEnvVars": ["string — subset of containerEnvVars whose values are safe to appear in chat (exempt from secret redaction). Defaults to [] — all values redacted. Use for non-secret config like URLs."],
   "hooks": ["string — host-side hook function names exported from index.js. Valid: onStartup, onShutdown, onInboundMessage, onChannel"],
@@ -743,7 +747,7 @@ Concise technical cheat sheet for generating plugins. Complements the archetype 
 
 Source: `src/plugin-loader.ts`
 
-1. On startup, NanoTars scans `plugins/` for directories containing `plugin.json`
+1. On startup, NanoTars scans `plugins/` and one category level such as `plugins/private/` for directories containing `plugin.json`
 2. Each manifest is parsed and validated
 3. If `hooks` are declared, `index.js` is dynamically imported and hook functions are extracted
 4. All plugins are registered in a PluginRegistry
@@ -817,6 +821,8 @@ Container hooks from `plugins/{name}/hooks/` are mounted into the container and 
 ## Publishing to Marketplace
 
 After testing the skill locally with `/add-skill-{name}`, you can publish it to the NanoTars skills marketplace:
+
+Do not publish plugins with `"private": true` or plugins installed under `plugins/private/`.
 
 ```
 /nanotars-publish-skill {name}

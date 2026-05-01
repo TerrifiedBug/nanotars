@@ -330,6 +330,7 @@ export async function main(): Promise<void> {
       description: p.manifest.description,
       version: p.manifest.version,
       channelPlugin: !!p.manifest.channelPlugin,
+      private: p.manifest.private,
       groups: p.manifest.groups,
       channels: p.manifest.channels,
       dir: p.dir,

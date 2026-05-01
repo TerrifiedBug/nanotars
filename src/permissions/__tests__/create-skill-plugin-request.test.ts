@@ -145,6 +145,18 @@ describe('handleCreateSkillPluginRequest', () => {
     expect(approvalId).toBeUndefined();
   });
 
+  it('rejects when plugins/private/{name}/ already exists (uniqueness)', async () => {
+    const ag = await setupGroupWithApprover();
+    fs.mkdirSync(path.join(tmpProjectRoot, 'plugins', 'private', 'weather'), {
+      recursive: true,
+    });
+    const approvalId = await handleCreateSkillPluginRequest(
+      validTask({ groupFolder: ag.folder }),
+      'telegram',
+    );
+    expect(approvalId).toBeUndefined();
+  });
+
   it('rejects when .claude/skills/add-skill-{name}/ already exists', async () => {
     const ag = await setupGroupWithApprover();
     fs.mkdirSync(path.join(tmpProjectRoot, '.claude', 'skills', 'add-skill-weather'), {

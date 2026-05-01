@@ -30,6 +30,7 @@ Only `plugin.json` is required. Everything else is optional depending on what th
 | `description` | `string` | No | Human-readable description |
 | `containerEnvVars` | `string[]` | No | Env var names from `.env` to pass into agent containers |
 | `hostEnvVars` | `string[]` | No | Env var names read by host-side plugin hooks. These are documented/audited but are not passed into agent containers. |
+| `private` | `boolean` | No | Local-only plugin flag. Private plugins still load locally, but publish/update workflows must skip them. Use with `plugins/private/{name}/` for deployment-specific plugins. |
 | `publicEnvVars` | `string[]` | No | Subset of `containerEnvVars` whose values are safe to appear in outbound messages (exempt from secret redaction). Defaults to `[]` — all values redacted by default. |
 | `hooks` | `string[]` | No | Host-side hook function names exported by `index.js` |
 | `containerHooks` | `string[]` | No | JS files (relative paths) loaded as SDK hooks inside containers |

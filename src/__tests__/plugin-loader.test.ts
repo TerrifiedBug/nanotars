@@ -66,6 +66,7 @@ describe('parseManifest', () => {
     const manifest = parseManifest({ name: 'test' });
     expect(manifest.containerEnvVars).toEqual([]);
     expect(manifest.hostEnvVars).toEqual([]);
+    expect(manifest.private).toBe(false);
     expect(manifest.publicEnvVars).toEqual([]);
     expect(manifest.hooks).toEqual([]);
     expect(manifest.containerHooks).toEqual([]);
@@ -88,6 +89,14 @@ describe('parseManifest', () => {
     });
     expect(manifest.hostEnvVars).toEqual(['OPENAI_API_KEY']);
     expect(collectContainerEnvVars([{ manifest, dir: '', hooks: {} } as any])).not.toContain('OPENAI_API_KEY');
+  });
+
+  it('parses private plugin flag', () => {
+    const manifest = parseManifest({
+      name: 'binzone',
+      private: true,
+    });
+    expect(manifest.private).toBe(true);
   });
 
   it('parses containerHooks field', () => {
@@ -445,6 +454,28 @@ describe('parseManifest agentProvider fields (Phase 5A)', () => {
       agentProviderName: 123 as unknown as string,
     });
     expect(manifest.agentProviderName).toBeUndefined();
+  });
+});
+
+describe('loadPlugins private plugin discovery', () => {
+  it('loads plugins from plugins/private and marks them private', async () => {
+    const { loadPlugins } = await import('../plugin-loader.js');
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-loader-private-'));
+    try {
+      const pluginDir = path.join(tmpRoot, 'private', 'binzone');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(pluginDir, 'plugin.json'),
+        JSON.stringify({ name: 'binzone', version: '1.0.0' }),
+      );
+
+      const registry = await loadPlugins(tmpRoot);
+      expect(registry.loaded).toHaveLength(1);
+      expect(registry.loaded[0].manifest.name).toBe('binzone');
+      expect(registry.loaded[0].manifest.private).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });
 

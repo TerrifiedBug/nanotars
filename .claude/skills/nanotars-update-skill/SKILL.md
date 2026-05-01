@@ -66,7 +66,11 @@ NANOTARS=~/nanotars
 MARKETPLACE=~/.claude/plugins/marketplaces/nanotars-skills
 ```
 
-If the user passed a plugin name argument (e.g., `calendar`), restrict scanning to that one. Otherwise scan everything under `$NANOTARS/plugins/` and `$NANOTARS/plugins/channels/`.
+If the user passed a plugin name argument (e.g., `calendar`), restrict scanning to that one. Otherwise scan everything under `$NANOTARS/plugins/` and `$NANOTARS/plugins/channels/`, excluding private plugins.
+
+Private/local-only plugins are never synced upstream. Skip a plugin when either condition is true:
+- its path is under `$NANOTARS/plugins/private/`
+- its `plugin.json` has `"private": true`
 
 For each local plugin, find the marketplace counterpart by **matching `plugin.json.name`**, not directory name. Directories diverge (e.g. local `gif-search/` ↔ marketplace `nanotars-giphy/`) but the canonical identity is the `name` field inside `plugin.json`.
 
@@ -84,18 +88,27 @@ done
 # its marketplace dir by plugin.json `name`, then fall back to the
 # `nanotars-{name}` directory convention.
 declare -A MARKET_DIRS
-LOCAL_NAME=$(jq -r '.name' "$NANOTARS/plugins/{name}/plugin.json")
+declare -A LOCAL_DIRS
+LOCAL_DIR="$NANOTARS/plugins/{name}"
+LOCAL_PJ="$LOCAL_DIR/plugin.json"
+if [ "$(jq -r '.private // false' "$LOCAL_PJ")" = "true" ] || [[ "$LOCAL_DIR" == "$NANOTARS/plugins/private/"* ]]; then
+  # private/local-only — skip without publish hint
+  continue
+fi
+LOCAL_NAME=$(jq -r '.name' "$LOCAL_PJ")
 RESOLVED="${MARKET_BY_NAME[$LOCAL_NAME]:-}"
 if [ -z "$RESOLVED" ] && [ -d "$MARKETPLACE/plugins/nanotars-{name}" ]; then
   RESOLVED="$MARKETPLACE/plugins/nanotars-{name}"
 fi
 MARKET_DIRS[{name}]="$RESOLVED"
+LOCAL_DIRS[{name}]="$LOCAL_DIR"
 MARKET_DIR="$RESOLVED"
 ```
 
 If no marketplace counterpart is found via either lookup, classify the plugin:
 
 - **Fork-bundled core plugin** — the plugin directory is git-tracked in the nanotars fork (e.g. `agent-browser`). These ship via the fork itself, not the marketplace. Skip silently — no publish needed, no warning.
+- **Private / local-only** — under `plugins/private/` or `plugin.json.private == true`. Skip with a note that private plugins are intentionally not synced.
 - **Local-only / unpublished** — not git-tracked. Skip with a note suggesting `/nanotars-publish-skill`.
 
 Detect via:
@@ -103,6 +116,9 @@ Detect via:
 if git -C "$NANOTARS" ls-files --error-unmatch "plugins/{name}/plugin.json" >/dev/null 2>&1 || \
    git -C "$NANOTARS" ls-files --error-unmatch "plugins/channels/{name}/plugin.json" >/dev/null 2>&1; then
   # fork-bundled — skip silently
+  continue
+elif [ "$(jq -r '.private // false' "$LOCAL_PJ")" = "true" ]; then
+  # private/local-only — skip silently or note "private"
   continue
 else
   # local-only — emit "use /nanotars-publish-skill" hint
@@ -117,9 +133,9 @@ Once `MARKET_DIR` is resolved for each plugin, detect changes from **both source
 
 ```bash
 diff -rq -x node_modules -x package-lock.json -x plugin.json \
-  "$NANOTARS/plugins/{name}/" "$MARKET_DIR/files/"
+  "$LOCAL_DIR/" "$MARKET_DIR/files/"
 # plus a content-only plugin.json diff (ignoring scoping fields):
-jq 'del(.channels, .groups, .version)' "$NANOTARS/plugins/{name}/plugin.json" > /tmp/local-pj.json
+jq 'del(.channels, .groups, .version, .private)' "$LOCAL_PJ" > /tmp/local-pj.json
 jq 'del(.channels, .groups, .version)' "$MARKET_DIR/files/plugin.json" > /tmp/market-pj.json
 diff /tmp/local-pj.json /tmp/market-pj.json
 ```
@@ -175,15 +191,15 @@ rsync -av \
   --exclude node_modules \
   --exclude package-lock.json \
   --exclude plugin.json \
-  "$NANOTARS/plugins/{name}/" "$MARKET_DIR/files/"
+  "$LOCAL_DIR/" "$MARKET_DIR/files/"
 ```
 
 Merge `plugin.json` separately, preserving the marketplace's `version`, `channels`, and `groups` (operator scoping must not leak into the marketplace, and the version is auto-bumped by CI):
 
 ```bash
 MARKET_PJ="$MARKET_DIR/files/plugin.json"
-LOCAL_PJ="$NANOTARS/plugins/{name}/plugin.json"
-jq -s '.[0] as $m | .[1] | .version = $m.version | .channels = $m.channels | .groups = $m.groups' \
+LOCAL_PJ="$LOCAL_DIR/plugin.json"
+jq -s '.[0] as $m | .[1] | del(.private) | .version = $m.version | .channels = $m.channels | .groups = $m.groups' \
   "$MARKET_PJ" "$LOCAL_PJ" > "${MARKET_PJ}.tmp" && mv "${MARKET_PJ}.tmp" "$MARKET_PJ"
 ```
 

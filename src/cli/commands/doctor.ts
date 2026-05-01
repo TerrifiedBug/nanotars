@@ -130,8 +130,18 @@ function findPluginManifests(projectRoot: string): string[] {
     if (!fs.existsSync(root)) continue;
     for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      const manifest = path.join(root, entry.name, 'plugin.json');
-      if (fs.existsSync(manifest)) out.push(manifest);
+      const entryPath = path.join(root, entry.name);
+      const manifest = path.join(entryPath, 'plugin.json');
+      if (fs.existsSync(manifest)) {
+        out.push(manifest);
+        continue;
+      }
+      if (root.endsWith(`${path.sep}channels`)) continue;
+      for (const sub of fs.readdirSync(entryPath, { withFileTypes: true })) {
+        if (!sub.isDirectory()) continue;
+        const nestedManifest = path.join(entryPath, sub.name, 'plugin.json');
+        if (fs.existsSync(nestedManifest)) out.push(nestedManifest);
+      }
     }
   }
   return [...new Set(out)];

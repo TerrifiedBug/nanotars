@@ -10,6 +10,8 @@ export interface PluginManifest {
   containerEnvVars?: string[];
   /** Env var names read by host-side plugin hooks, not passed into agent containers */
   hostEnvVars?: string[];
+  /** Local-only plugin; publish/update tooling must not sync it upstream */
+  private?: boolean;
   /** Env vars whose values are safe to appear in outbound messages (exempt from secret redaction) */
   publicEnvVars?: string[];
   /** Hook functions this plugin exports */
@@ -166,7 +168,7 @@ export interface PluginContext {
   getChannelStatus(): Array<{ name: string; connected: boolean }>;
 
   /** Installed plugin metadata */
-  getInstalledPlugins(): Array<{ name: string; description?: string; version?: string; channelPlugin: boolean; groups?: string[]; channels?: string[]; dir: string }>;
+  getInstalledPlugins(): Array<{ name: string; description?: string; version?: string; channelPlugin: boolean; private?: boolean; groups?: string[]; channels?: string[]; dir: string }>;
 
   /** Task CRUD (delegates to db.ts) */
   getAllTasks(): ScheduledTask[];

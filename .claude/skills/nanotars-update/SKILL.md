@@ -123,6 +123,7 @@ Then skip plugin scanning entirely.
 ### Marketplace plugins (name-convention matching)
 
 For each directory under `plugins/` and `plugins/channels/`:
+0. Skip private/local-only plugins when the path is under `plugins/private/` or `plugin.json` contains `"private": true`; these are deployment-specific and intentionally not marketplace-managed.
 1. Extract the directory name (e.g., `weather` from `plugins/weather/`, `whatsapp` from `plugins/channels/whatsapp/`)
 2. Check if the marketplace cache has a matching plugin:
    `~/.claude/plugins/marketplaces/nanotars-skills/plugins/nanotars-{name}/files/`

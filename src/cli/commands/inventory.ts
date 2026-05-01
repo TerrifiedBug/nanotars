@@ -93,6 +93,9 @@ export async function pluginsCommand(
   switch (subcommand ?? 'list') {
     case 'list':
       return listPlugins(projectRoot, json);
+    case 'inspect':
+    case 'show':
+      return inspectPlugin(subArgs, projectRoot, json);
     case 'remove':
       return removePlugin(subArgs, projectRoot);
     case '-h':
@@ -730,6 +733,9 @@ function listPlugins(projectRoot: string, json: boolean): number {
       path.join(plugin.dir, 'container-skills'),
     ),
     envVars: plugin.manifest.containerEnvVars ?? [],
+    private:
+      plugin.manifest.private === true ||
+      path.basename(path.dirname(plugin.dir)) === 'private',
   }));
   if (json) {
     printJson(rows);
@@ -737,10 +743,59 @@ function listPlugins(projectRoot: string, json: boolean): number {
   }
   for (const row of rows) {
     process.stdout.write(
-      `${row.type.padEnd(7)} ${row.name} version=${row.version ?? 'unknown'} channels=${row.channels.join(',')} groups=${row.groups.join(',')}\n`,
+      `${row.type.padEnd(7)} ${row.name}${row.private ? ' [private]' : ''} version=${row.version ?? 'unknown'} channels=${row.channels.join(',')} groups=${row.groups.join(',')}\n`,
     );
   }
   if (rows.length === 0) process.stdout.write('(none)\n');
+  return 0;
+}
+
+function inspectPlugin(
+  args: string[],
+  projectRoot: string,
+  json: boolean,
+): number {
+  const name = args.find((arg) => !arg.startsWith('-'));
+  if (!name) {
+    process.stderr.write('plugins inspect: missing plugin name\n');
+    return 64;
+  }
+  const resolved = resolvePlugin(projectRoot, name, false);
+  if (!resolved) {
+    process.stderr.write(`plugins inspect: plugin not found: ${name}\n`);
+    return 1;
+  }
+  const row = {
+    ...resolved,
+    channels: resolved.manifest.channels ?? ['*'],
+    groups: resolved.manifest.groups ?? ['*'],
+    private: resolved.private,
+    hasDockerfilePartial: fs.existsSync(
+      path.join(resolved.dir, 'Dockerfile.partial'),
+    ),
+    hasMcp: fs.existsSync(path.join(resolved.dir, 'mcp.json')),
+    hasContainerSkills: fs.existsSync(
+      path.join(resolved.dir, 'container-skills'),
+    ),
+    envVars: resolved.manifest.containerEnvVars ?? [],
+    hostEnvVars: resolved.manifest.hostEnvVars ?? [],
+  };
+  if (json) {
+    printJson(row);
+    return 0;
+  }
+  process.stdout.write(`name: ${row.name}\n`);
+  process.stdout.write(`type: ${row.type}\n`);
+  process.stdout.write(`version: ${row.version ?? 'unknown'}\n`);
+  process.stdout.write(`private: ${row.private ? 'yes' : 'no'}\n`);
+  process.stdout.write(`directory: ${row.dir}\n`);
+  process.stdout.write(`channels: ${row.channels.join(',')}\n`);
+  process.stdout.write(`groups: ${row.groups.join(',')}\n`);
+  process.stdout.write(`container env vars: ${row.envVars.length ? row.envVars.join(', ') : '(none)'}\n`);
+  process.stdout.write(`host env vars: ${row.hostEnvVars.length ? row.hostEnvVars.join(', ') : '(none)'}\n`);
+  process.stdout.write(`container skills: ${row.hasContainerSkills ? 'yes' : 'no'}\n`);
+  process.stdout.write(`mcp: ${row.hasMcp ? 'yes' : 'no'}\n`);
+  process.stdout.write(`Dockerfile.partial: ${row.hasDockerfilePartial ? 'yes' : 'no'}\n`);
   return 0;
 }
 
@@ -1273,6 +1328,7 @@ function readPluginManifests(
   dir: string;
   version: string | null;
   manifest: Record<string, any>;
+  private: boolean;
 }> {
   if (!fs.existsSync(dir)) return [];
   const out: Array<{
@@ -1281,11 +1337,29 @@ function readPluginManifests(
     dir: string;
     version: string | null;
     manifest: Record<string, any>;
+    private: boolean;
   }> = [];
+
+  const candidateDirs: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    if (entry.name === 'channels' && !channelOnly) continue;
-    const pluginDir = path.join(dir, entry.name);
+    if (channelOnly) {
+      candidateDirs.push(path.join(dir, entry.name));
+      continue;
+    }
+    if (entry.name === 'channels') continue;
+    const entryPath = path.join(dir, entry.name);
+    if (fs.existsSync(path.join(entryPath, 'plugin.json'))) {
+      candidateDirs.push(entryPath);
+      continue;
+    }
+    for (const sub of fs.readdirSync(entryPath, { withFileTypes: true })) {
+      if (!sub.isDirectory()) continue;
+      candidateDirs.push(path.join(entryPath, sub.name));
+    }
+  }
+
+  for (const pluginDir of candidateDirs) {
     const manifestPath = path.join(pluginDir, 'plugin.json');
     if (!fs.existsSync(manifestPath)) continue;
     try {
@@ -1296,11 +1370,17 @@ function readPluginManifests(
         manifest.channelPlugin === true || manifest.type === 'channel';
       if (channelOnly && !isChannel) continue;
       out.push({
-        name: typeof manifest.name === 'string' ? manifest.name : entry.name,
+        name:
+          typeof manifest.name === 'string'
+            ? manifest.name
+            : path.basename(pluginDir),
         type: isChannel ? 'channel' : 'plugin',
         dir: pluginDir,
         version: typeof manifest.version === 'string' ? manifest.version : null,
         manifest,
+        private:
+          manifest.private === true ||
+          path.basename(path.dirname(pluginDir)) === 'private',
       });
     } catch {
       continue;
@@ -1315,6 +1395,7 @@ function allPluginManifests(projectRoot: string): Array<{
   dir: string;
   version: string | null;
   manifest: Record<string, any>;
+  private: boolean;
 }> {
   return [
     ...readPluginManifests(path.join(projectRoot, 'plugins'), false).filter(
@@ -1527,7 +1608,7 @@ function channelsHelp(stream: NodeJS.WritableStream = process.stdout): void {
 }
 
 function pluginsHelp(stream: NodeJS.WritableStream = process.stdout): void {
-  stream.write('Usage: nanotars plugins <list|remove> [--json]\n');
+  stream.write('Usage: nanotars plugins <list|inspect|remove> [--json]\n');
 }
 
 function agentsHelp(stream: NodeJS.WritableStream = process.stdout): void {

@@ -58,7 +58,7 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  dashboard              Start/status/stop the local monitoring dashboard',
       '  groups                 List, create, pair, migrate, or delete groups',
       '  channels               List, clone, auth, or remove channel plugins',
-      '  plugins                List installed plugins',
+      '  plugins                List, inspect, or remove installed plugins',
       '  agents                 List, add, or remove group subagents',
       '  tasks                  List or cancel scheduled tasks',
       '  users                  List or update user roles',

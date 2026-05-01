@@ -83,6 +83,7 @@ export function parseManifest(raw: Record<string, unknown>): PluginManifest {
     description: typeof raw.description === 'string' ? raw.description : undefined,
     containerEnvVars: parseStringArray(raw.containerEnvVars),
     hostEnvVars: parseStringArray(raw.hostEnvVars),
+    private: raw.private === true,
     publicEnvVars: parseStringArray(raw.publicEnvVars),
     hooks: parseStringArray(raw.hooks),
     containerHooks: parseStringArray(raw.containerHooks),
@@ -425,6 +426,9 @@ export async function loadPlugins(pluginsDir?: string): Promise<PluginRegistry> 
     try {
       const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       const manifest = parseManifest(raw);
+      if (path.basename(path.dirname(pluginDir)) === 'private') {
+        manifest.private = true;
+      }
 
       if (manifest.dependencies && !ensureDependencies(pluginDir, manifest.name)) {
         continue;

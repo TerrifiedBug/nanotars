@@ -676,7 +676,8 @@ For host-process hooks (HTTP servers, polling loops) or container hooks (SDK
 observers), tell the user to run \`/create-skill-plugin\` on the host instead —
 those install paths require host-side review.
 
-After approval the host writes plugins/{name}/ + .claude/skills/add-skill-{name}/,
+After approval the host writes plugins/{name}/, or plugins/private/{name}/ when
+pluginJson.private is true, plus .claude/skills/add-skill-{name}/,
 optionally appends env var values to the appropriate .env, and restarts your
 container so the new plugin is loaded on next spawn.`,
   createSkillPluginInputSchema,
