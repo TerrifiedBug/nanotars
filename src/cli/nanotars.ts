@@ -12,7 +12,7 @@ import path from 'path';
 import process from 'process';
 
 import { dbCommand } from './commands/db.js';
-import { channelsCommand, groupsCommand, pluginsCommand, tasksCommand, usersCommand } from './commands/inventory.js';
+import { agentsCommand, channelsCommand, groupsCommand, pluginsCommand, tasksCommand, usersCommand } from './commands/inventory.js';
 import { doctorCommand, envCommand, logsCommand } from './commands/doctor.js';
 import { modelCommand } from './commands/model.js';
 import { mountsCommand } from './commands/mounts.js';
@@ -55,6 +55,7 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  groups                 List/show/register group wiring',
       '  channels               List installed channel plugins',
       '  plugins                List installed plugins',
+      '  agents                 List, add, or remove group subagents',
       '  tasks                  List or cancel scheduled tasks',
       '  users                  List or update user roles',
       '  doctor                 Structured health summary',
@@ -423,6 +424,11 @@ async function main(): Promise<number> {
     case 'plugins':
     case 'plugin':
       return pluginsCommand(args, PROJECT_ROOT);
+    case 'agents':
+    case 'agent':
+      return agentsCommand(args, PROJECT_ROOT);
+    case 'migrate-channel':
+      return groupsCommand(['migrate-code', ...args]);
     case 'tasks':
       return tasksCommand(args);
     case 'users':
