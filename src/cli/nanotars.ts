@@ -50,6 +50,7 @@ function usage(stream: NodeJS.WritableStream = process.stdout): void {
       '  status                 Show service + dependency status',
       '  logs                   Tail logs/nanotars.log',
       '  pair-main [--channel]  Issue a pairing code for the main control chat',
+      '  migrate-channel        Move a group folder to another channel',
       '  auth <channel>         Run channel-specific auth.js',
       '  model                  Get, set, or reset the agent model override',
       '  mounts                 Manage container mount allowlist',

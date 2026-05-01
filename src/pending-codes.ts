@@ -23,6 +23,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { applyChannelMigration } from './channel-migration.js';
 import { DATA_DIR, MAIN_GROUP_FOLDER } from './config.js';
 import {
   createMessagingGroup,
@@ -36,7 +37,11 @@ import { getDb } from './db/init.js';
 import { logger } from './logger.js';
 import { grantRole, listOwners } from './permissions/user-roles.js';
 import { ensureUser } from './permissions/users.js';
-import type { AgentGroup, MessagingGroup, MessagingGroupAgent } from './types.js';
+import type {
+  AgentGroup,
+  MessagingGroup,
+  MessagingGroupAgent,
+} from './types.js';
 
 export type PairingIntent = string | Record<string, unknown>;
 
@@ -264,7 +269,10 @@ export async function consumePendingCode(
       recordChannel === 'any' || recordChannel === input.channel;
 
     const record = store.pairings.find(
-      (r) => r.code === candidate && r.status === 'pending' && channelMatches(r.channel),
+      (r) =>
+        r.code === candidate &&
+        r.status === 'pending' &&
+        channelMatches(r.channel),
     );
 
     if (!record) {
@@ -282,7 +290,12 @@ export async function consumePendingCode(
       }
       if (invalidated) writeStore(store);
       logger.info(
-        { candidate, channel: input.channel, platformId: input.platformId, invalidated },
+        {
+          candidate,
+          channel: input.channel,
+          platformId: input.platformId,
+          invalidated,
+        },
         'Pending pairing code consume miss',
       );
       return { matched: false, invalidated };
@@ -301,7 +314,12 @@ export async function consumePendingCode(
     );
     writeStore(store);
     logger.info(
-      { code: record.code, channel: record.channel, platformId: input.platformId, intent: record.intent },
+      {
+        code: record.code,
+        channel: record.channel,
+        platformId: input.platformId,
+        intent: record.intent,
+      },
       'Pending pairing code consumed',
     );
 
@@ -477,7 +495,10 @@ function registerForIntent(args: {
 }): PairingRegistration {
   const ag = resolveAgentGroupForIntent(args.intent);
 
-  let mg: MessagingGroup | undefined = getMessagingGroup(args.channel, args.platformId);
+  let mg: MessagingGroup | undefined = getMessagingGroup(
+    args.channel,
+    args.platformId,
+  );
   if (!mg) {
     mg = createMessagingGroup({
       channel_type: args.channel,
@@ -524,85 +545,15 @@ function maybeApplyChannelMigration(args: {
     throw new Error('migrate_channel intent missing from_channel');
   }
   if (fromChannel === args.newMessagingGroup.channel_type) {
-    throw new Error(`migrate_channel destination matches source channel: ${fromChannel}`);
+    throw new Error(
+      `migrate_channel destination matches source channel: ${fromChannel}`,
+    );
   }
-
-  const db = getDb();
-  const oldRows = db
-    .prepare(
-      `
-      SELECT mg.id, mg.platform_id
-      FROM messaging_groups mg
-      JOIN messaging_group_agents w ON w.messaging_group_id = mg.id
-      WHERE mg.channel_type = ? AND w.agent_group_id = ?
-      `,
-    )
-    .all(fromChannel, args.agentGroup.id) as Array<{ id: string; platform_id: string }>;
-  if (oldRows.length === 0) return;
-
-  const oldIds = oldRows.map((row) => row.id);
-  const oldPlatformIds = oldRows.map((row) => row.platform_id);
-  const placeholders = oldIds.map(() => '?').join(',');
-  const platformPlaceholders = oldPlatformIds.map(() => '?').join(',');
-
-  const tx = db.transaction(() => {
-    if (platformPlaceholders) {
-      db.prepare(
-        `UPDATE scheduled_tasks
-         SET chat_jid = ?
-         WHERE group_folder = ? AND chat_jid IN (${platformPlaceholders})`,
-      ).run(args.newMessagingGroup.platform_id, args.agentGroup.folder, ...oldPlatformIds);
-    }
-
-    if (placeholders) {
-      for (const table of [
-        'pending_channel_approvals',
-        'pending_sender_approvals',
-        'user_dms',
-      ]) {
-        if (hasTable(table)) {
-          db.prepare(`DELETE FROM ${table} WHERE messaging_group_id IN (${placeholders})`).run(...oldIds);
-        }
-      }
-      if (hasTable('pending_approvals')) {
-        db.prepare(
-          `DELETE FROM pending_approvals
-           WHERE agent_group_id = ? AND channel_type = ?`,
-        ).run(args.agentGroup.id, fromChannel);
-      }
-      db.prepare(
-        `DELETE FROM messaging_group_agents
-         WHERE agent_group_id = ? AND messaging_group_id IN (${placeholders})`,
-      ).run(args.agentGroup.id, ...oldIds);
-      db.prepare(
-        `DELETE FROM messaging_groups
-         WHERE id IN (${placeholders})
-           AND NOT EXISTS (
-             SELECT 1 FROM messaging_group_agents w
-             WHERE w.messaging_group_id = messaging_groups.id
-           )`,
-      ).run(...oldIds);
-    }
+  applyChannelMigration({
+    agentGroup: args.agentGroup,
+    fromChannel,
+    newMessagingGroup: args.newMessagingGroup,
   });
-  tx();
-
-  logger.info(
-    {
-      agent_group_id: args.agentGroup.id,
-      folder: args.agentGroup.folder,
-      fromChannel,
-      toChannel: args.newMessagingGroup.channel_type,
-      oldMessagingGroups: oldIds.length,
-    },
-    'migrate_channel pairing consumed; old channel bindings removed',
-  );
-}
-
-function hasTable(name: string): boolean {
-  const row = getDb()
-    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
-    .get(name) as { name: string } | undefined;
-  return !!row;
 }
 
 function resolveAgentGroupForIntent(intent: PairingIntent): AgentGroup {
@@ -619,14 +570,22 @@ function resolveAgentGroupForIntent(intent: PairingIntent): AgentGroup {
   if (intent && typeof intent === 'object') {
     const kind = (intent as { kind?: unknown }).kind;
     const target = (intent as { target?: unknown }).target;
-    if (kind === 'agent_group' && typeof target === 'string' && target.length > 0) {
+    if (
+      kind === 'agent_group' &&
+      typeof target === 'string' &&
+      target.length > 0
+    ) {
       const ag = getAgentGroupById(target);
       if (!ag) {
         throw new Error(`agent group not found: ${target}`);
       }
       return ag;
     }
-    if (kind === 'migrate_channel' && typeof target === 'string' && target.length > 0) {
+    if (
+      kind === 'migrate_channel' &&
+      typeof target === 'string' &&
+      target.length > 0
+    ) {
       const ag = getAgentGroupById(target);
       if (!ag) {
         throw new Error(`agent group not found: ${target}`);

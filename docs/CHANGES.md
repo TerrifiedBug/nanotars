@@ -1088,3 +1088,21 @@ WARN: env-scope drift: secret in root .env is declared only by a group-scoped pl
 ```
 
 Operator sees the suggestion, moves the line, restart goes silent again.
+
+---
+
+## 24. Binary-First Channel Migration
+
+`nanotars migrate-channel <folder> --from-channel <source> --to-channel <destination>` now owns the group-to-channel migration workflow. It is a dry-run by default and allocates a destination-channel pairing code only with `--apply`.
+
+On claim from the destination chat, NanoTars keeps the same agent group folder and moves only the channel binding:
+
+- creates or reuses the destination `messaging_groups` + `messaging_group_agents` wiring
+- moves scheduled tasks from the old source chat id to the new destination chat id
+- removes the old source-channel wiring and orphaned source `messaging_groups` rows
+- cleans stale approvals, pending questions, and old-channel `user_dms` rows
+- rewrites safe single-group plugin channel scopes from source to destination
+
+Plugin manifests that cover multiple groups are reported for manual review instead of rewritten, because one manifest cannot safely express "this group moved to Telegram, other groups stay on WhatsApp." Message history remains out of scope.
+
+The new `/nanotars-migrate-channel` core skill is a thin wrapper over the CLI and explicitly forbids manual SQLite/plugin edits.

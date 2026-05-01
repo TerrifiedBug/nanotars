@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 import {
+  planChannelMigration,
+  type ChannelMigrationPlan,
+} from '../../channel-migration.js';
+import {
   createAgentGroup,
   getAllAgentGroups,
   getAllSynthesizedGroupRows,
@@ -12,7 +16,12 @@ import { initGroupFilesystem } from '../../group-init.js';
 import { createPendingCode } from '../../pending-codes.js';
 import { grantRole, revokeRole } from '../../permissions/user-roles.js';
 import { ScheduledTask } from '../../types.js';
-import { hasFlag, initCliDatabase, parseGlobalFlags, printJson } from './common.js';
+import {
+  hasFlag,
+  initCliDatabase,
+  parseGlobalFlags,
+  printJson,
+} from './common.js';
 
 export async function groupsCommand(args: string[]): Promise<number> {
   const { json, rest } = parseGlobalFlags(args);
@@ -27,7 +36,7 @@ export async function groupsCommand(args: string[]): Promise<number> {
     case 'register-code':
       return registerCode(subArgs);
     case 'migrate-code':
-      return migrateCode(subArgs);
+      return migrateCode(subArgs, json);
     case 'delete':
       return deleteGroup(subArgs);
     case '-h':
@@ -42,7 +51,10 @@ export async function groupsCommand(args: string[]): Promise<number> {
   }
 }
 
-export async function channelsCommand(args: string[], projectRoot: string): Promise<number> {
+export async function channelsCommand(
+  args: string[],
+  projectRoot: string,
+): Promise<number> {
   const { json, rest } = parseGlobalFlags(args);
   const [subcommand, ...subArgs] = rest;
 
@@ -66,7 +78,10 @@ export async function channelsCommand(args: string[], projectRoot: string): Prom
   }
 }
 
-export async function pluginsCommand(args: string[], projectRoot: string): Promise<number> {
+export async function pluginsCommand(
+  args: string[],
+  projectRoot: string,
+): Promise<number> {
   const { json, rest } = parseGlobalFlags(args);
   const [subcommand, ...subArgs] = rest;
   switch (subcommand ?? 'list') {
@@ -86,7 +101,10 @@ export async function pluginsCommand(args: string[], projectRoot: string): Promi
   }
 }
 
-export async function agentsCommand(args: string[], projectRoot: string): Promise<number> {
+export async function agentsCommand(
+  args: string[],
+  projectRoot: string,
+): Promise<number> {
   const { json, rest } = parseGlobalFlags(args);
   const [subcommand, ...subArgs] = rest;
   initCliDatabase();
@@ -206,12 +224,19 @@ function showGroup(args: string[], json: boolean): number {
     process.stderr.write(`groups show: group not found: ${folder}\n`);
     return 1;
   }
-  const wirings = getAllSynthesizedGroupRows().filter((w) => w.agent_group_id === group.id);
+  const wirings = getAllSynthesizedGroupRows().filter(
+    (w) => w.agent_group_id === group.id,
+  );
   const tasks = getTasksForGroup(folder);
   const agentsDir = path.join(process.cwd(), 'groups', folder, 'agents');
   const agents = fs.existsSync(agentsDir)
-    ? fs.readdirSync(agentsDir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(agentsDir, entry.name, 'agent.json')))
+    ? fs
+        .readdirSync(agentsDir, { withFileTypes: true })
+        .filter(
+          (entry) =>
+            entry.isDirectory() &&
+            fs.existsSync(path.join(agentsDir, entry.name, 'agent.json')),
+        )
         .map((entry) => entry.name)
     : [];
   const result = { group, wirings, tasks, agents };
@@ -221,9 +246,12 @@ function showGroup(args: string[], json: boolean): number {
   }
   process.stdout.write(`${group.folder} (${group.name}) id=${group.id}\n`);
   process.stdout.write(`wirings: ${wirings.length}\n`);
-  for (const w of wirings) process.stdout.write(`  ${w.channel_type} ${w.platform_id}\n`);
+  for (const w of wirings)
+    process.stdout.write(`  ${w.channel_type} ${w.platform_id}\n`);
   process.stdout.write(`tasks: ${tasks.length}\n`);
-  process.stdout.write(`agents: ${agents.length ? agents.join(', ') : '(none)'}\n`);
+  process.stdout.write(
+    `agents: ${agents.length ? agents.join(', ') : '(none)'}\n`,
+  );
   return 0;
 }
 
@@ -240,7 +268,9 @@ async function registerCode(args: string[]): Promise<number> {
       initGroupFilesystem(group, {});
       process.stdout.write(`Created agent group: ${folder}\n`);
     } catch (err) {
-      process.stderr.write(`groups register-code: failed to create group '${folder}': ${err instanceof Error ? err.message : String(err)}\n`);
+      process.stderr.write(
+        `groups register-code: failed to create group '${folder}': ${err instanceof Error ? err.message : String(err)}\n`,
+      );
       return 1;
     }
   }
@@ -249,12 +279,14 @@ async function registerCode(args: string[]): Promise<number> {
     intent: { kind: 'agent_group', target: group.id },
   });
   process.stdout.write(`Pairing code: ${result.code}\n`);
-  process.stdout.write(`Send these 4 digits from the chat to wire to group '${folder}'.\n`);
+  process.stdout.write(
+    `Send these 4 digits from the chat to wire to group '${folder}'.\n`,
+  );
   process.stdout.write(`Code expires: ${result.expires_at ?? 'never'}\n`);
   return 0;
 }
 
-async function migrateCode(args: string[]): Promise<number> {
+async function migrateCode(args: string[], json: boolean): Promise<number> {
   const folder = args[0];
   if (!folder) {
     process.stderr.write('groups migrate-code: missing folder\n');
@@ -263,35 +295,52 @@ async function migrateCode(args: string[]): Promise<number> {
   const fromChannel = readOption(args, '--from-channel');
   const toChannel = readOption(args, '--to-channel');
   if (!fromChannel || !toChannel) {
-    process.stderr.write('groups migrate-code: usage: nanotars groups migrate-code <folder> --from-channel <name> --to-channel <name>\n');
+    process.stderr.write(
+      'groups migrate-code: usage: nanotars groups migrate-code <folder> --from-channel <name> --to-channel <name>\n',
+    );
     return 64;
   }
   if (fromChannel === toChannel) {
-    process.stderr.write('groups migrate-code: source and destination channels must differ\n');
+    process.stderr.write(
+      'groups migrate-code: source and destination channels must differ\n',
+    );
     return 64;
+  }
+  if (!channelPluginExists(process.cwd(), toChannel)) {
+    process.stderr.write(
+      `groups migrate-code: destination channel plugin not installed: ${toChannel}\n`,
+    );
+    return 1;
   }
   const group = getAllAgentGroups().find((g) => g.folder === folder);
   if (!group) {
     process.stderr.write(`groups migrate-code: group not found: ${folder}\n`);
     return 1;
   }
-  const existing = getAllSynthesizedGroupRows().filter(
-    (row) => row.agent_group_id === group.id && row.channel_type === fromChannel,
-  );
-  if (existing.length === 0) {
-    process.stderr.write(`groups migrate-code: group '${folder}' has no wiring on channel '${fromChannel}'\n`);
+  const plan = planChannelMigration({
+    agentGroup: group,
+    fromChannel,
+    toChannel,
+    projectRoot: process.cwd(),
+  });
+  if (plan.sourceWirings.length === 0) {
+    process.stderr.write(
+      `groups migrate-code: group '${folder}' has no wiring on channel '${fromChannel}'\n`,
+    );
     return 1;
   }
-  process.stdout.write(`group: ${folder} (${group.name})\n`);
-  process.stdout.write(`source channel: ${fromChannel}\n`);
-  process.stdout.write(`destination channel: ${toChannel}\n`);
-  process.stdout.write(`source wirings to remove after destination claim: ${existing.length}\n`);
-  for (const row of existing) process.stdout.write(`  ${row.platform_id}\n`);
-  process.stdout.write('scheduled tasks for the source chat ids will be moved to the destination chat id when the code is claimed\n');
-  if (!hasFlag(args, '--apply')) {
-    process.stdout.write('dry-run: pass --apply to allocate a destination-channel migration pairing code\n');
+  if (json && !hasFlag(args, '--apply')) {
+    printJson(plan);
     return 0;
   }
+  if (!json) printChannelMigrationPlan(plan);
+  if (!hasFlag(args, '--apply')) {
+    process.stdout.write(
+      'dry-run: pass --apply to allocate a destination-channel migration pairing code\n',
+    );
+    return 0;
+  }
+  backupDatabase(process.cwd());
   const result = await createPendingCode({
     channel: toChannel,
     intent: {
@@ -300,11 +349,62 @@ async function migrateCode(args: string[]): Promise<number> {
       from_channel: fromChannel,
     },
   });
+  if (json) {
+    printJson({ code: result.code, expires_at: result.expires_at, plan });
+    return 0;
+  }
   process.stdout.write(`Migration pairing code: ${result.code}\n`);
-  process.stdout.write(`Send these 4 digits from the destination ${toChannel} chat to move '${folder}' off ${fromChannel}.\n`);
-  process.stdout.write('When claimed, NanoTars will wire the existing group folder to the new chat, move scheduled tasks to the new chat id, and remove old source-channel bindings.\n');
+  process.stdout.write(
+    `Send these 4 digits from the destination ${toChannel} chat to move '${folder}' off ${fromChannel}.\n`,
+  );
+  process.stdout.write(
+    'When claimed, NanoTars will wire the existing group folder to the new chat, move scheduled tasks to the new chat id, update safe plugin channel scopes, and remove old source-channel bindings.\n',
+  );
   process.stdout.write(`Code expires: ${result.expires_at ?? 'never'}\n`);
   return 0;
+}
+
+function printChannelMigrationPlan(plan: ChannelMigrationPlan): void {
+  process.stdout.write(`group: ${plan.group.folder} (${plan.group.name})\n`);
+  process.stdout.write(`source channel: ${plan.fromChannel}\n`);
+  process.stdout.write(`destination channel: ${plan.toChannel}\n`);
+  process.stdout.write(
+    `source wirings to remove after destination claim: ${plan.sourceWirings.length}\n`,
+  );
+  for (const row of plan.sourceWirings) {
+    process.stdout.write(
+      `  ${row.platform_id}${row.name ? ` (${row.name})` : ''}\n`,
+    );
+  }
+  process.stdout.write(`scheduled tasks to move: ${plan.tasksToMove}\n`);
+  process.stdout.write(
+    `pending approvals to delete: ${plan.pendingApprovalsToDelete}\n`,
+  );
+  process.stdout.write(
+    `pending questions to delete: ${plan.pendingQuestionsToDelete}\n`,
+  );
+  process.stdout.write(
+    `old-channel user DM bindings to delete: ${plan.userDmsToDelete}\n`,
+  );
+  process.stdout.write(
+    `group env file preserved: ${plan.groupEnvExists ? plan.groupEnvFile : '(none)'}\n`,
+  );
+  process.stdout.write(
+    `plugin channel scopes to update on claim: ${plan.pluginScopeUpdates.length}\n`,
+  );
+  for (const update of plan.pluginScopeUpdates) {
+    process.stdout.write(
+      `  ${update.name}: channels ${update.fromChannels.join(',')} -> ${update.toChannels.join(',')}\n`,
+    );
+  }
+  if (plan.pluginScopeWarnings.length > 0) {
+    process.stdout.write('plugin scopes needing manual review:\n');
+    for (const warning of plan.pluginScopeWarnings) {
+      process.stdout.write(
+        `  ${warning.name}: channels=${warning.channels.join(',')} groups=${warning.groups.join(',')} - ${warning.reason}\n`,
+      );
+    }
+  }
 }
 
 function deleteGroup(args: string[]): number {
@@ -328,25 +428,43 @@ function deleteGroup(args: string[]): number {
       WHERE w.agent_group_id = ?
       `,
     )
-    .all(group.id) as Array<{ id: string; channel_type: string; platform_id: string }>;
+    .all(group.id) as Array<{
+    id: string;
+    channel_type: string;
+    platform_id: string;
+  }>;
   const tasks = getTasksForGroup(folder);
-  const scopedRoles = scalarCount('SELECT COUNT(*) FROM user_roles WHERE agent_group_id = ?', group.id);
-  const members = scalarCount('SELECT COUNT(*) FROM agent_group_members WHERE agent_group_id = ?', group.id);
+  const scopedRoles = scalarCount(
+    'SELECT COUNT(*) FROM user_roles WHERE agent_group_id = ?',
+    group.id,
+  );
+  const members = scalarCount(
+    'SELECT COUNT(*) FROM agent_group_members WHERE agent_group_id = ?',
+    group.id,
+  );
   const approvals = tableExists('pending_approvals')
-    ? scalarCount('SELECT COUNT(*) FROM pending_approvals WHERE agent_group_id = ?', group.id)
+    ? scalarCount(
+        'SELECT COUNT(*) FROM pending_approvals WHERE agent_group_id = ?',
+        group.id,
+      )
     : 0;
 
   process.stdout.write(`group: ${folder} (${group.name})\n`);
   process.stdout.write(`wirings to remove: ${messagingGroups.length}\n`);
-  for (const row of messagingGroups) process.stdout.write(`  ${row.channel_type} ${row.platform_id}\n`);
+  for (const row of messagingGroups)
+    process.stdout.write(`  ${row.channel_type} ${row.platform_id}\n`);
   process.stdout.write(`scheduled tasks to delete: ${tasks.length}\n`);
   process.stdout.write(`scoped roles to delete: ${scopedRoles}\n`);
   process.stdout.write(`memberships to delete: ${members}\n`);
   process.stdout.write(`pending approvals to delete: ${approvals}\n`);
-  process.stdout.write(`preserved directory: ${path.join(process.cwd(), 'groups', folder)}\n`);
+  process.stdout.write(
+    `preserved directory: ${path.join(process.cwd(), 'groups', folder)}\n`,
+  );
 
   if (!hasFlag(args, '--apply')) {
-    process.stdout.write('dry-run: pass --apply to delete database rows. Group files are preserved.\n');
+    process.stdout.write(
+      'dry-run: pass --apply to delete database rows. Group files are preserved.\n',
+    );
     return 0;
   }
 
@@ -354,16 +472,33 @@ function deleteGroup(args: string[]): number {
   const ids = messagingGroups.map((row) => row.id);
   const tx = db.transaction(() => {
     if (tableExists('task_run_logs')) {
-      db.prepare(`DELETE FROM task_run_logs WHERE task_id IN (SELECT id FROM scheduled_tasks WHERE group_folder = ?)`).run(folder);
+      db.prepare(
+        `DELETE FROM task_run_logs WHERE task_id IN (SELECT id FROM scheduled_tasks WHERE group_folder = ?)`,
+      ).run(folder);
     }
-    db.prepare('DELETE FROM scheduled_tasks WHERE group_folder = ?').run(folder);
+    db.prepare('DELETE FROM scheduled_tasks WHERE group_folder = ?').run(
+      folder,
+    );
     db.prepare('DELETE FROM sessions WHERE group_folder = ?').run(folder);
     db.prepare('DELETE FROM user_roles WHERE agent_group_id = ?').run(group.id);
-    db.prepare('DELETE FROM agent_group_members WHERE agent_group_id = ?').run(group.id);
-    if (tableExists('pending_approvals')) db.prepare('DELETE FROM pending_approvals WHERE agent_group_id = ?').run(group.id);
-    if (tableExists('pending_sender_approvals')) db.prepare('DELETE FROM pending_sender_approvals WHERE agent_group_id = ?').run(group.id);
-    if (tableExists('pending_channel_approvals')) db.prepare('DELETE FROM pending_channel_approvals WHERE agent_group_id = ?').run(group.id);
-    db.prepare('DELETE FROM messaging_group_agents WHERE agent_group_id = ?').run(group.id);
+    db.prepare('DELETE FROM agent_group_members WHERE agent_group_id = ?').run(
+      group.id,
+    );
+    if (tableExists('pending_approvals'))
+      db.prepare('DELETE FROM pending_approvals WHERE agent_group_id = ?').run(
+        group.id,
+      );
+    if (tableExists('pending_sender_approvals'))
+      db.prepare(
+        'DELETE FROM pending_sender_approvals WHERE agent_group_id = ?',
+      ).run(group.id);
+    if (tableExists('pending_channel_approvals'))
+      db.prepare(
+        'DELETE FROM pending_channel_approvals WHERE agent_group_id = ?',
+      ).run(group.id);
+    db.prepare(
+      'DELETE FROM messaging_group_agents WHERE agent_group_id = ?',
+    ).run(group.id);
     if (ids.length > 0) {
       const placeholders = ids.map(() => '?').join(',');
       db.prepare(
@@ -392,7 +527,9 @@ function listChannels(projectRoot: string, json: boolean): number {
     hasAuthScript: fs.existsSync(path.join(plugin.dir, 'auth.js')),
     authStatus: channelAuthStatus(projectRoot, plugin.name),
     registeredChats: getDb()
-      .prepare('SELECT COUNT(*) AS count FROM messaging_groups WHERE channel_type = ?')
+      .prepare(
+        'SELECT COUNT(*) AS count FROM messaging_groups WHERE channel_type = ?',
+      )
       .get(plugin.name) as { count: number },
   }));
   if (json) {
@@ -408,17 +545,39 @@ function listChannels(projectRoot: string, json: boolean): number {
   return 0;
 }
 
+function channelPluginExists(projectRoot: string, channel: string): boolean {
+  const manifestPath = path.join(
+    projectRoot,
+    'plugins',
+    'channels',
+    channel,
+    'plugin.json',
+  );
+  if (!fs.existsSync(manifestPath)) return false;
+  const manifest = readJson(manifestPath);
+  return manifest.channelPlugin === true || manifest.type === 'channel';
+}
+
 function listPlugins(projectRoot: string, json: boolean): number {
-  const skillPlugins = readPluginManifests(path.join(projectRoot, 'plugins'), false)
-    .filter((plugin) => !plugin.dir.includes(`${path.sep}channels${path.sep}`));
-  const channelPlugins = readPluginManifests(path.join(projectRoot, 'plugins', 'channels'), true);
+  const skillPlugins = readPluginManifests(
+    path.join(projectRoot, 'plugins'),
+    false,
+  ).filter((plugin) => !plugin.dir.includes(`${path.sep}channels${path.sep}`));
+  const channelPlugins = readPluginManifests(
+    path.join(projectRoot, 'plugins', 'channels'),
+    true,
+  );
   const rows = [...skillPlugins, ...channelPlugins].map((plugin) => ({
     ...plugin,
     channels: plugin.manifest.channels ?? ['*'],
     groups: plugin.manifest.groups ?? ['*'],
-    hasDockerfilePartial: fs.existsSync(path.join(plugin.dir, 'Dockerfile.partial')),
+    hasDockerfilePartial: fs.existsSync(
+      path.join(plugin.dir, 'Dockerfile.partial'),
+    ),
     hasMcp: fs.existsSync(path.join(plugin.dir, 'mcp.json')),
-    hasContainerSkills: fs.existsSync(path.join(plugin.dir, 'container-skills')),
+    hasContainerSkills: fs.existsSync(
+      path.join(plugin.dir, 'container-skills'),
+    ),
     envVars: plugin.manifest.containerEnvVars ?? [],
   }));
   if (json) {
@@ -438,47 +597,85 @@ function removePlugin(args: string[], projectRoot: string): number {
   const name = args.find((arg) => !arg.startsWith('-'));
   const channelOnly = hasFlag(args, '--channel');
   if (!name) {
-    process.stderr.write(channelOnly ? 'channels remove: missing channel name\n' : 'plugins remove: missing plugin name\n');
+    process.stderr.write(
+      channelOnly
+        ? 'channels remove: missing channel name\n'
+        : 'plugins remove: missing plugin name\n',
+    );
     return 64;
   }
   const resolved = resolvePlugin(projectRoot, name, channelOnly);
   if (!resolved) {
-    process.stderr.write(`${channelOnly ? 'channels' : 'plugins'} remove: plugin not found: ${name}\n`);
+    process.stderr.write(
+      `${channelOnly ? 'channels' : 'plugins'} remove: plugin not found: ${name}\n`,
+    );
     return 1;
   }
 
-  const allOther = allPluginManifests(projectRoot).filter((plugin) => plugin.dir !== resolved.dir);
+  const allOther = allPluginManifests(projectRoot).filter(
+    (plugin) => plugin.dir !== resolved.dir,
+  );
   const envVars = uniqueStrings(resolved.manifest.containerEnvVars);
   const exclusiveEnvVars = envVars.filter(
-    (envVar) => !allOther.some((plugin) => uniqueStrings(plugin.manifest.containerEnvVars).includes(envVar)),
+    (envVar) =>
+      !allOther.some((plugin) =>
+        uniqueStrings(plugin.manifest.containerEnvVars).includes(envVar),
+      ),
   );
-  const sharedEnvVars = envVars.filter((envVar) => !exclusiveEnvVars.includes(envVar));
-  const hasDockerfilePartial = fs.existsSync(path.join(resolved.dir, 'Dockerfile.partial'));
-  const envFiles = envFilesForProject(projectRoot).filter((file) => fs.existsSync(file));
+  const sharedEnvVars = envVars.filter(
+    (envVar) => !exclusiveEnvVars.includes(envVar),
+  );
+  const hasDockerfilePartial = fs.existsSync(
+    path.join(resolved.dir, 'Dockerfile.partial'),
+  );
+  const envFiles = envFilesForProject(projectRoot).filter((file) =>
+    fs.existsSync(file),
+  );
 
   process.stdout.write(`plugin: ${resolved.name} (${resolved.type})\n`);
   process.stdout.write(`directory: ${resolved.dir}\n`);
-  process.stdout.write(`exclusive env vars to remove: ${exclusiveEnvVars.length ? exclusiveEnvVars.join(', ') : '(none)'}\n`);
-  process.stdout.write(`shared env vars to preserve: ${sharedEnvVars.length ? sharedEnvVars.join(', ') : '(none)'}\n`);
-  process.stdout.write(`env files to scan: ${envFiles.length ? envFiles.join(', ') : '(none)'}\n`);
-  process.stdout.write(`Dockerfile.partial: ${hasDockerfilePartial ? 'yes - rebuild container image after removal' : 'no'}\n`);
-  const mounts = Array.isArray(resolved.manifest.containerMounts) ? resolved.manifest.containerMounts : [];
+  process.stdout.write(
+    `exclusive env vars to remove: ${exclusiveEnvVars.length ? exclusiveEnvVars.join(', ') : '(none)'}\n`,
+  );
+  process.stdout.write(
+    `shared env vars to preserve: ${sharedEnvVars.length ? sharedEnvVars.join(', ') : '(none)'}\n`,
+  );
+  process.stdout.write(
+    `env files to scan: ${envFiles.length ? envFiles.join(', ') : '(none)'}\n`,
+  );
+  process.stdout.write(
+    `Dockerfile.partial: ${hasDockerfilePartial ? 'yes - rebuild container image after removal' : 'no'}\n`,
+  );
+  const mounts = Array.isArray(resolved.manifest.containerMounts)
+    ? resolved.manifest.containerMounts
+    : [];
   if (mounts.length > 0) {
     process.stdout.write('declared container mounts preserved on disk:\n');
-    for (const mount of mounts) process.stdout.write(`  ${JSON.stringify(mount)}\n`);
+    for (const mount of mounts)
+      process.stdout.write(`  ${JSON.stringify(mount)}\n`);
   }
 
-  let channelPlan: { messagingGroups: Array<{ id: string; platform_id: string }>; taskCount: number } | null = null;
+  let channelPlan: {
+    messagingGroups: Array<{ id: string; platform_id: string }>;
+    taskCount: number;
+  } | null = null;
   if (resolved.type === 'channel') {
     initCliDatabase();
     channelPlan = channelRemovalPlan(resolved.name);
-    process.stdout.write(`channel chats to remove: ${channelPlan.messagingGroups.length}\n`);
-    for (const row of channelPlan.messagingGroups) process.stdout.write(`  ${row.platform_id}\n`);
-    process.stdout.write(`scheduled tasks to cancel for channel chats: ${channelPlan.taskCount}\n`);
+    process.stdout.write(
+      `channel chats to remove: ${channelPlan.messagingGroups.length}\n`,
+    );
+    for (const row of channelPlan.messagingGroups)
+      process.stdout.write(`  ${row.platform_id}\n`);
+    process.stdout.write(
+      `scheduled tasks to cancel for channel chats: ${channelPlan.taskCount}\n`,
+    );
   }
 
   if (!hasFlag(args, '--apply')) {
-    process.stdout.write('dry-run: pass --apply to remove plugin files and cleanup metadata\n');
+    process.stdout.write(
+      'dry-run: pass --apply to remove plugin files and cleanup metadata\n',
+    );
     return 0;
   }
 
@@ -492,16 +689,25 @@ function removePlugin(args: string[], projectRoot: string): number {
   fs.rmSync(resolved.dir, { recursive: true, force: true });
   process.stdout.write(`removed plugin directory: ${resolved.dir}\n`);
   if (hasDockerfilePartial) {
-    process.stdout.write('container image should be rebuilt because this plugin had Dockerfile.partial\n');
+    process.stdout.write(
+      'container image should be rebuilt because this plugin had Dockerfile.partial\n',
+    );
   }
-  process.stdout.write('run `npm run build` and `nanotars restart` to refresh the running service\n');
+  process.stdout.write(
+    'run `npm run build` and `nanotars restart` to refresh the running service\n',
+  );
   return 0;
 }
 
-function channelRemovalPlan(channel: string): { messagingGroups: Array<{ id: string; platform_id: string }>; taskCount: number } {
+function channelRemovalPlan(channel: string): {
+  messagingGroups: Array<{ id: string; platform_id: string }>;
+  taskCount: number;
+} {
   const db = getDb();
   const messagingGroups = db
-    .prepare('SELECT id, platform_id FROM messaging_groups WHERE channel_type = ? ORDER BY platform_id')
+    .prepare(
+      'SELECT id, platform_id FROM messaging_groups WHERE channel_type = ? ORDER BY platform_id',
+    )
     .all(channel) as Array<{ id: string; platform_id: string }>;
   const taskCount = messagingGroups.length
     ? scalarCount(
@@ -519,18 +725,33 @@ function applyChannelRemoval(channel: string): void {
   const db = getDb();
   const tx = db.transaction(() => {
     if (platformIds.length > 0) {
-      db.prepare(`UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (${platformIds.map(() => '?').join(',')})`).run(...platformIds);
+      db.prepare(
+        `UPDATE scheduled_tasks SET status = 'completed' WHERE chat_jid IN (${platformIds.map(() => '?').join(',')})`,
+      ).run(...platformIds);
     }
     if (ids.length > 0) {
       const placeholders = ids.map(() => '?').join(',');
-      for (const table of ['pending_channel_approvals', 'pending_sender_approvals', 'user_dms']) {
-        if (tableExists(table)) db.prepare(`DELETE FROM ${table} WHERE messaging_group_id IN (${placeholders})`).run(...ids);
+      for (const table of [
+        'pending_channel_approvals',
+        'pending_sender_approvals',
+        'user_dms',
+      ]) {
+        if (tableExists(table))
+          db.prepare(
+            `DELETE FROM ${table} WHERE messaging_group_id IN (${placeholders})`,
+          ).run(...ids);
       }
       if (tableExists('pending_approvals')) {
-        db.prepare('DELETE FROM pending_approvals WHERE channel_type = ?').run(channel);
+        db.prepare('DELETE FROM pending_approvals WHERE channel_type = ?').run(
+          channel,
+        );
       }
-      db.prepare(`DELETE FROM messaging_group_agents WHERE messaging_group_id IN (${placeholders})`).run(...ids);
-      db.prepare(`DELETE FROM messaging_groups WHERE id IN (${placeholders})`).run(...ids);
+      db.prepare(
+        `DELETE FROM messaging_group_agents WHERE messaging_group_id IN (${placeholders})`,
+      ).run(...ids);
+      db.prepare(
+        `DELETE FROM messaging_groups WHERE id IN (${placeholders})`,
+      ).run(...ids);
     }
   });
   tx();
@@ -564,11 +785,15 @@ function cancelTask(args: string[]): number {
     return 1;
   }
   if (!hasFlag(args, '--apply')) {
-    process.stdout.write(`dry-run: would cancel task ${id} (${task.prompt.slice(0, 70)})\n`);
+    process.stdout.write(
+      `dry-run: would cancel task ${id} (${task.prompt.slice(0, 70)})\n`,
+    );
     process.stdout.write('pass --apply to update status\n');
     return 0;
   }
-  getDb().prepare(`UPDATE scheduled_tasks SET status = 'cancelled' WHERE id = ?`).run(id);
+  getDb()
+    .prepare(`UPDATE scheduled_tasks SET status = 'cancelled' WHERE id = ?`)
+    .run(id);
   process.stdout.write(`cancelled task: ${id}\n`);
   return 0;
 }
@@ -594,7 +819,10 @@ function listUsers(args: string[], json: boolean): number {
     ? rows.filter((row) => {
         const group = groups.find((g) => g.folder === groupFolder);
         if (!group) return false;
-        return String(row.roles ?? '').includes(group.id) || String(row.member_groups ?? '').includes(group.id);
+        return (
+          String(row.roles ?? '').includes(group.id) ||
+          String(row.member_groups ?? '').includes(group.id)
+        );
       })
     : rows;
   if (json) {
@@ -613,17 +841,23 @@ function listUsers(args: string[], json: boolean): number {
 function grantOrRevokeUser(action: 'grant' | 'revoke', args: string[]): number {
   const [userId, role] = args;
   if (!userId || (role !== 'owner' && role !== 'admin')) {
-    process.stderr.write(`users ${action}: usage: nanotars users ${action} <user_id> <owner|admin> [--group <folder>] --apply\n`);
+    process.stderr.write(
+      `users ${action}: usage: nanotars users ${action} <user_id> <owner|admin> [--group <folder>] --apply\n`,
+    );
     return 64;
   }
   const groupFolder = readOption(args, '--group');
-  const group = groupFolder ? getAllAgentGroups().find((g) => g.folder === groupFolder) : undefined;
+  const group = groupFolder
+    ? getAllAgentGroups().find((g) => g.folder === groupFolder)
+    : undefined;
   if (groupFolder && !group) {
     process.stderr.write(`users ${action}: group not found: ${groupFolder}\n`);
     return 1;
   }
   if (!hasFlag(args, '--apply')) {
-    process.stdout.write(`dry-run: would ${action} ${role} for ${userId}${group ? ` scoped to ${group.folder}` : ' globally'}\n`);
+    process.stdout.write(
+      `dry-run: would ${action} ${role} for ${userId}${group ? ` scoped to ${group.folder}` : ' globally'}\n`,
+    );
     process.stdout.write('pass --apply to update roles\n');
     return 0;
   }
@@ -632,14 +866,27 @@ function grantOrRevokeUser(action: 'grant' | 'revoke', args: string[]): number {
   } else {
     revokeRole({ user_id: userId, role, agent_group_id: group?.id ?? null });
   }
-  process.stdout.write(`${action === 'grant' ? 'granted' : 'revoked'} ${role}: ${userId}\n`);
+  process.stdout.write(
+    `${action === 'grant' ? 'granted' : 'revoked'} ${role}: ${userId}\n`,
+  );
   return 0;
 }
 
-function listAgents(args: string[], projectRoot: string, json: boolean): number {
+function listAgents(
+  args: string[],
+  projectRoot: string,
+  json: boolean,
+): number {
   const groupFilter = readOption(args, '--group');
-  const rows: Array<{ group: string; name: string; dir: string; config: Record<string, unknown> }> = [];
-  const groups = groupFilter ? [groupFilter] : getAllAgentGroups().map((group) => group.folder);
+  const rows: Array<{
+    group: string;
+    name: string;
+    dir: string;
+    config: Record<string, unknown>;
+  }> = [];
+  const groups = groupFilter
+    ? [groupFilter]
+    : getAllAgentGroups().map((group) => group.folder);
   for (const folder of groups) {
     const agentsDir = path.join(projectRoot, 'groups', folder, 'agents');
     if (!fs.existsSync(agentsDir)) continue;
@@ -660,7 +907,9 @@ function listAgents(args: string[], projectRoot: string, json: boolean): number 
     return 0;
   }
   for (const row of rows) {
-    process.stdout.write(`${row.group}/${row.name}: ${String(row.config.description ?? 'No description')}\n`);
+    process.stdout.write(
+      `${row.group}/${row.name}: ${String(row.config.description ?? 'No description')}\n`,
+    );
   }
   if (rows.length === 0) process.stdout.write('(none)\n');
   return 0;
@@ -673,7 +922,9 @@ function listAgentTemplates(projectRoot: string, json: boolean): number {
     return 0;
   }
   for (const row of rows) {
-    process.stdout.write(`${row.name}: ${String(row.config.description ?? 'No description')}\n`);
+    process.stdout.write(
+      `${row.name}: ${String(row.config.description ?? 'No description')}\n`,
+    );
   }
   if (rows.length === 0) process.stdout.write('(none)\n');
   return 0;
@@ -683,7 +934,9 @@ function addAgent(args: string[], projectRoot: string): number {
   const groupFolder = args[0];
   const name = args[1];
   if (!groupFolder || !name) {
-    process.stderr.write('agents add: usage: nanotars agents add <group> <name> [--template <template>|--description <text>] --apply\n');
+    process.stderr.write(
+      'agents add: usage: nanotars agents add <group> <name> [--template <template>|--description <text>] --apply\n',
+    );
     return 64;
   }
   const group = getAllAgentGroups().find((g) => g.folder === groupFolder);
@@ -695,9 +948,17 @@ function addAgent(args: string[], projectRoot: string): number {
     process.stderr.write(`agents add: invalid agent name: ${name}\n`);
     return 64;
   }
-  const targetDir = path.join(projectRoot, 'groups', groupFolder, 'agents', name);
+  const targetDir = path.join(
+    projectRoot,
+    'groups',
+    groupFolder,
+    'agents',
+    name,
+  );
   if (fs.existsSync(targetDir) && !hasFlag(args, '--replace')) {
-    process.stderr.write(`agents add: agent already exists: ${groupFolder}/${name} (pass --replace to overwrite)\n`);
+    process.stderr.write(
+      `agents add: agent already exists: ${groupFolder}/${name} (pass --replace to overwrite)\n`,
+    );
     return 1;
   }
 
@@ -711,25 +972,33 @@ function addAgent(args: string[], projectRoot: string): number {
   process.stdout.write(`agent: ${groupFolder}/${name}\n`);
   process.stdout.write(`target: ${targetDir}\n`);
   if (templateName) {
-    const template = readAgentTemplates(projectRoot).find((row) => row.name === templateName);
+    const template = readAgentTemplates(projectRoot).find(
+      (row) => row.name === templateName,
+    );
     if (!template) {
       process.stderr.write(`agents add: template not found: ${templateName}\n`);
       return 1;
     }
     process.stdout.write(`template: ${templateName}\n`);
-    process.stdout.write(`description: ${String(template.config.description ?? 'No description')}\n`);
+    process.stdout.write(
+      `description: ${String(template.config.description ?? 'No description')}\n`,
+    );
     if (!hasFlag(args, '--apply')) {
       process.stdout.write('dry-run: pass --apply to copy template files\n');
       return 0;
     }
     fs.rmSync(targetDir, { recursive: true, force: true });
     copyDir(template.dir, targetDir);
-    process.stdout.write(`created agent from template: ${groupFolder}/${name}\n`);
+    process.stdout.write(
+      `created agent from template: ${groupFolder}/${name}\n`,
+    );
     return 0;
   }
 
   if (!description) {
-    process.stderr.write('agents add: custom agents require --description or --template\n');
+    process.stderr.write(
+      'agents add: custom agents require --description or --template\n',
+    );
     return 64;
   }
   const config = {
@@ -745,8 +1014,14 @@ function addAgent(args: string[], projectRoot: string): number {
   }
   fs.rmSync(targetDir, { recursive: true, force: true });
   fs.mkdirSync(targetDir, { recursive: true });
-  writeFileAtomic(path.join(targetDir, 'agent.json'), `${JSON.stringify(config, null, 2)}\n`);
-  writeFileAtomic(path.join(targetDir, 'IDENTITY.md'), `${identity ?? description}\n`);
+  writeFileAtomic(
+    path.join(targetDir, 'agent.json'),
+    `${JSON.stringify(config, null, 2)}\n`,
+  );
+  writeFileAtomic(
+    path.join(targetDir, 'IDENTITY.md'),
+    `${identity ?? description}\n`,
+  );
   writeFileAtomic(
     path.join(targetDir, 'CLAUDE.md'),
     [
@@ -768,18 +1043,30 @@ function removeAgent(args: string[], projectRoot: string): number {
   const groupFolder = args[0];
   const name = args[1];
   if (!groupFolder || !name) {
-    process.stderr.write('agents remove: usage: nanotars agents remove <group> <name> --apply\n');
+    process.stderr.write(
+      'agents remove: usage: nanotars agents remove <group> <name> --apply\n',
+    );
     return 64;
   }
-  const targetDir = path.join(projectRoot, 'groups', groupFolder, 'agents', name);
+  const targetDir = path.join(
+    projectRoot,
+    'groups',
+    groupFolder,
+    'agents',
+    name,
+  );
   if (!fs.existsSync(path.join(targetDir, 'agent.json'))) {
-    process.stderr.write(`agents remove: agent not found: ${groupFolder}/${name}\n`);
+    process.stderr.write(
+      `agents remove: agent not found: ${groupFolder}/${name}\n`,
+    );
     return 1;
   }
   process.stdout.write(`agent: ${groupFolder}/${name}\n`);
   process.stdout.write(`directory: ${targetDir}\n`);
   if (!hasFlag(args, '--apply')) {
-    process.stdout.write('dry-run: pass --apply to remove this agent directory\n');
+    process.stdout.write(
+      'dry-run: pass --apply to remove this agent directory\n',
+    );
     return 0;
   }
   fs.rmSync(targetDir, { recursive: true, force: true });
@@ -787,7 +1074,10 @@ function removeAgent(args: string[], projectRoot: string): number {
   return 0;
 }
 
-function readPluginManifests(dir: string, channelOnly: boolean): Array<{
+function readPluginManifests(
+  dir: string,
+  channelOnly: boolean,
+): Array<{
   name: string;
   type: 'channel' | 'plugin';
   dir: string;
@@ -795,7 +1085,13 @@ function readPluginManifests(dir: string, channelOnly: boolean): Array<{
   manifest: Record<string, any>;
 }> {
   if (!fs.existsSync(dir)) return [];
-  const out: Array<{ name: string; type: 'channel' | 'plugin'; dir: string; version: string | null; manifest: Record<string, any> }> = [];
+  const out: Array<{
+    name: string;
+    type: 'channel' | 'plugin';
+    dir: string;
+    version: string | null;
+    manifest: Record<string, any>;
+  }> = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     if (entry.name === 'channels' && !channelOnly) continue;
@@ -803,8 +1099,11 @@ function readPluginManifests(dir: string, channelOnly: boolean): Array<{
     const manifestPath = path.join(pluginDir, 'plugin.json');
     if (!fs.existsSync(manifestPath)) continue;
     try {
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, any>;
-      const isChannel = manifest.channelPlugin === true || manifest.type === 'channel';
+      const manifest = JSON.parse(
+        fs.readFileSync(manifestPath, 'utf8'),
+      ) as Record<string, any>;
+      const isChannel =
+        manifest.channelPlugin === true || manifest.type === 'channel';
       if (channelOnly && !isChannel) continue;
       out.push({
         name: typeof manifest.name === 'string' ? manifest.name : entry.name,
@@ -835,15 +1134,24 @@ function allPluginManifests(projectRoot: string): Array<{
   ];
 }
 
-function resolvePlugin(projectRoot: string, name: string, channelOnly: boolean): ReturnType<typeof allPluginManifests>[number] | undefined {
+function resolvePlugin(
+  projectRoot: string,
+  name: string,
+  channelOnly: boolean,
+): ReturnType<typeof allPluginManifests>[number] | undefined {
   return allPluginManifests(projectRoot).find(
-    (plugin) => plugin.name === name && (!channelOnly || plugin.type === 'channel'),
+    (plugin) =>
+      plugin.name === name && (!channelOnly || plugin.type === 'channel'),
   );
 }
 
 function uniqueStrings(value: unknown): string[] {
   return Array.isArray(value)
-    ? [...new Set(value.filter((item): item is string => typeof item === 'string'))].sort()
+    ? [
+        ...new Set(
+          value.filter((item): item is string => typeof item === 'string'),
+        ),
+      ].sort()
     : [];
 }
 
@@ -852,7 +1160,8 @@ function envFilesForProject(projectRoot: string): string[] {
   const groupsDir = path.join(projectRoot, 'groups');
   if (fs.existsSync(groupsDir)) {
     for (const entry of fs.readdirSync(groupsDir, { withFileTypes: true })) {
-      if (entry.isDirectory()) files.push(path.join(groupsDir, entry.name, '.env'));
+      if (entry.isDirectory())
+        files.push(path.join(groupsDir, entry.name, '.env'));
     }
   }
   return files;
@@ -874,7 +1183,11 @@ function backupDatabase(projectRoot: string): void {
   if (!fs.existsSync(dbPath)) return;
   const backupDir = path.join(projectRoot, 'store', 'backups');
   fs.mkdirSync(backupDir, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\..+$/, '')
+    .replace('T', '-');
   fs.copyFileSync(dbPath, path.join(backupDir, `messages-cli-${stamp}.db`));
 }
 
@@ -886,7 +1199,9 @@ function tableExists(name: string): boolean {
 }
 
 function scalarCount(sql: string, ...args: unknown[]): number {
-  const row = getDb().prepare(sql).get(...args) as Record<string, number> | undefined;
+  const row = getDb()
+    .prepare(sql)
+    .get(...args) as Record<string, number> | undefined;
   return row ? Number(Object.values(row)[0] ?? 0) : 0;
 }
 
@@ -898,15 +1213,31 @@ function readJson(file: string): Record<string, unknown> {
   }
 }
 
-function readAgentTemplates(projectRoot: string): Array<{ name: string; dir: string; config: Record<string, unknown> }> {
-  const templatesDir = path.join(projectRoot, '.claude', 'skills', 'nanotars-add-agent', 'agents');
+function readAgentTemplates(
+  projectRoot: string,
+): Array<{ name: string; dir: string; config: Record<string, unknown> }> {
+  const templatesDir = path.join(
+    projectRoot,
+    '.claude',
+    'skills',
+    'nanotars-add-agent',
+    'agents',
+  );
   if (!fs.existsSync(templatesDir)) return [];
   return fs
     .readdirSync(templatesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(templatesDir, entry.name, 'agent.json')))
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        fs.existsSync(path.join(templatesDir, entry.name, 'agent.json')),
+    )
     .map((entry) => {
       const dir = path.join(templatesDir, entry.name);
-      return { name: entry.name, dir, config: readJson(path.join(dir, 'agent.json')) };
+      return {
+        name: entry.name,
+        dir,
+        config: readJson(path.join(dir, 'agent.json')),
+      };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -935,9 +1266,13 @@ function capitalise(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function channelAuthStatus(projectRoot: string, channel: string): 'authenticated' | 'present' | 'missing' {
+function channelAuthStatus(
+  projectRoot: string,
+  channel: string,
+): 'authenticated' | 'present' | 'missing' {
   const base = path.join(projectRoot, 'data', 'channels', channel);
-  if (fs.existsSync(path.join(base, 'auth', 'creds.json'))) return 'authenticated';
+  if (fs.existsSync(path.join(base, 'auth', 'creds.json')))
+    return 'authenticated';
   if (fs.existsSync(path.join(base, 'auth-status.txt'))) return 'present';
   return 'missing';
 }
@@ -953,7 +1288,9 @@ function dryRunOnly(command: string, message: string): number {
 }
 
 function groupsHelp(stream: NodeJS.WritableStream = process.stdout): void {
-  stream.write('Usage: nanotars groups <list|show|register-code|migrate-code|delete> [--json]\n');
+  stream.write(
+    'Usage: nanotars groups <list|show|register-code|migrate-code|delete> [--json]\n',
+  );
 }
 
 function channelsHelp(stream: NodeJS.WritableStream = process.stdout): void {
@@ -965,13 +1302,19 @@ function pluginsHelp(stream: NodeJS.WritableStream = process.stdout): void {
 }
 
 function agentsHelp(stream: NodeJS.WritableStream = process.stdout): void {
-  stream.write('Usage: nanotars agents <list|templates|add|remove> [--group <folder>] [--json]\n');
+  stream.write(
+    'Usage: nanotars agents <list|templates|add|remove> [--group <folder>] [--json]\n',
+  );
 }
 
 function tasksHelp(stream: NodeJS.WritableStream = process.stdout): void {
-  stream.write('Usage: nanotars tasks <list|cancel> [--group <folder>] [--json]\n');
+  stream.write(
+    'Usage: nanotars tasks <list|cancel> [--group <folder>] [--json]\n',
+  );
 }
 
 function usersHelp(stream: NodeJS.WritableStream = process.stdout): void {
-  stream.write('Usage: nanotars users <list|grant|revoke> [--group <folder>] [--json]\n');
+  stream.write(
+    'Usage: nanotars users <list|grant|revoke> [--group <folder>] [--json]\n',
+  );
 }

@@ -53,11 +53,20 @@ For the main control chat, use:
 nanotars pair-main [--channel <name>]
 ```
 
-## Delete Or Migrate Groups
+## Delete Groups
 
 `nanotars groups delete` is intentionally not mutating yet. Use the existing chat admin `/delete-group <folder>` command for deletion until the TS CLI has a transactional dry-run/apply implementation.
 
-Group-to-channel migration is not shipped yet. Do not migrate by editing database rows manually. Track this under the binary-first migrate-channel work.
+## Migrate A Group To Another Channel
+
+Use `/nanotars-migrate-channel` for the guided workflow, or the low-level CLI directly:
+
+```bash
+nanotars migrate-channel <folder> --from-channel <source> --to-channel <destination>
+nanotars migrate-channel <folder> --from-channel <source> --to-channel <destination> --apply
+```
+
+Do not migrate by editing database rows manually.
 
 ## Related Commands
 
